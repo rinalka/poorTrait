@@ -25,9 +25,9 @@
 // "blobs" cuts the photo into blobs of a single colour exactly as blobsCompare does (see the Blobs
 // tab), with its sliders down the right: how many blobs, joining neighbours, smoothing the edges
 // and how many paints. While blobs are showing:
-//   v                 blobs / flat paints / paints with texture
-//   n                 new textures for the paints
+//   v                 blobs (each its own colour) / flat paints (the limited palette)
 //   o                 outlines on / off
+// Everything is solid colour - blobsCompare's "paints with texture" look is left out here.
 
 // ---- settings ----
 float ui = 2;                 // size of the text (1 = small)
@@ -59,6 +59,8 @@ void setup() {
   // near the top left instead
   surface.setLocation(40, 80);
   surface.setTitle("faceRelief");
+
+  viewMode = 1;       // flat paints: solid colour, no texture (the Paints tab starts on textured)
 
   faces = findFaces();
   if (faces.length == 0) {
@@ -258,8 +260,7 @@ void keyPressed() {
     if (textureMode == BLOBS) makeBlobs(textures[0]);
     if (textureMode != 1) textured.setTexture(currentTexture());
   }
-  else if (textureMode == BLOBS && key == 'v') { viewMode = (viewMode + 1) % 3; paintPicture(); updateBlobTexture(); }
-  else if (textureMode == BLOBS && key == 'n') { textureSeed = random(1000); paintPicture(); updateBlobTexture(); }
+  else if (textureMode == BLOBS && key == 'v') { viewMode = viewMode == 0 ? 1 : 0; paintPicture(); updateBlobTexture(); }
   else if (textureMode == BLOBS && key == 'o') { outlines = !outlines; blobbed = fillBlobs(original, smoothed, outlines); updateBlobTexture(); }
   else if (key == ' ') sway = !sway;
   else if (key == 'r') { yaw = 0; pitch = 0; zoom = 1; swayTime = 0; }
