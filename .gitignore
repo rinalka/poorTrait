@@ -10,3 +10,7 @@ strokeField/strokeField-*.png
 
 # pictures saved from faceRelief
 faceRelief/faceRelief-*.png
+knifeField/knifeField-*.png
+
+# installers (too big for GitHub)
+*.msi

@@ -19,8 +19,8 @@
 //   r                 straight on again
 //   s                 save a picture (faceRelief-####.png in the sketch folder)
 //
-// The painting is the newest strokeField-<photo>-####.png in the strokeField folder - press s
-// in strokeField to make one.
+// The painting is the newest strokeField-<photo>-####.png or knifeField-<photo>-####.png in those
+// sketches' folders - press s in strokeField or knifeField to make one.
 //
 // "blobs" cuts the photo into blobs of a single colour exactly as blobsCompare does (see the Blobs
 // tab), with its sliders down the right: how many blobs, joining neighbours, smoothing the edges
@@ -32,7 +32,7 @@
 // ---- settings ----
 float ui = 2;                 // size of the text (1 = small)
 String mapsFolder = "../mapmaker/maps";
-String paintingsFolder = "../strokeField";
+String[] paintingsFolders = { "../strokeField", "../knifeField" };   // where saved paintings are
 color clay = color(205, 198, 188);
 
 // ---- state ----
@@ -101,7 +101,7 @@ void draw() {
     showing = regionsLeft + " blobs,  " + viewNames[viewMode] + (viewMode > 0 ? " (" + paintCount + " paints)" : "");
     drawBlobPanel();
   }
-  if (textureMode == 5) showing = paintingName == null ? "painting (none saved yet - showing the photo)" : "painting: " + paintingName;
+  if (textureMode == 5) showing = paintingName == null ? "painting (none saved yet - showing the photo)" : "painting: " + new java.io.File(paintingName).getName();
   text(faces[current] + "     " + (wholePlate ? "whole photo" : "just the person") + "     " + showing, width / 2, 50 * ui);
 
   String[][] controls = {
@@ -184,7 +184,7 @@ void loadFace(int i) {
   textures[3] = loadOr(dir + "curvature.png", photo);
   textures[4] = loadOr(dir + "parts_preview.png", photo);
   paintingName = newestPainting(faces[i]);
-  textures[5] = paintingName == null ? photo : loadImage(fullPath(paintingsFolder) + "/" + paintingName);
+  textures[5] = paintingName == null ? photo : loadImage(paintingName);
   textures[6] = photo;                                  // not used - blobs come from blobTexture
   blobsStale = true;
   if (textureMode == BLOBS) makeBlobs(photo);
@@ -206,17 +206,20 @@ PImage loadOr(String path, PImage fallback) {
   return new java.io.File(path).exists() ? loadImage(path) : fallback;
 }
 
-// the newest strokeField-<face>-####.png, or null
+// the full path of the newest strokeField-<face>-####.png or knifeField-<face>-####.png, or null
 String newestPainting(String face) {
-  java.io.File[] files = new java.io.File(fullPath(paintingsFolder)).listFiles();
   String best = null;
   long bestTime = 0;
-  if (files == null) return null;
-  for (java.io.File f : files) {
-    String n = f.getName();
-    if (n.startsWith("strokeField-" + face + "-") && n.endsWith(".png") && f.lastModified() > bestTime) {
-      best = n;
-      bestTime = f.lastModified();
+  for (String folder : paintingsFolders) {
+    java.io.File[] files = new java.io.File(fullPath(folder)).listFiles();
+    if (files == null) continue;
+    for (java.io.File f : files) {
+      String n = f.getName();
+      boolean ours = n.startsWith("strokeField-" + face + "-") || n.startsWith("knifeField-" + face + "-");
+      if (ours && n.endsWith(".png") && f.lastModified() > bestTime) {
+        best = f.getAbsolutePath();
+        bestTime = f.lastModified();
+      }
     }
   }
   return best;
