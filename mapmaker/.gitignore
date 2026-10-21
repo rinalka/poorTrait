@@ -1,0 +1,4 @@
+.venv/
+models/
+maps/
+__pycache__/

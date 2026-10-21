@@ -1,0 +1,7 @@
+mediapipe==1.1.1
+numpy==2.5.4
+opencv-python==5.0.0.93
+pillow==13.0.0
+torch==2.14.1+cpu
+torchvision==0.29.1+cpu
+transformers==5.20.2

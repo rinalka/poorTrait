@@ -1,0 +1,9 @@
+# big Photoshop file (over GitHub's 100 MB limit)
+*.psd
+
+# personal photos - kept out of git so they never end up online
+/*.jpg
+/*.png
+
+# paintings saved from strokeField
+strokeField/strokeField-*.png
