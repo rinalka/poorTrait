@@ -17,6 +17,8 @@ procedural painter can use:
     importance.png     how much each area matters for recognising the face (white = keep)
     landmarks.json     478 3D points on each face, plus named groups (eyes, lips, ...)
     landmarks_preview.png
+    mesh_face.obj      3D model of just the person (see mesh.py)
+    mesh_full.obj      3D model of the whole photo as a relief plate
     overview.jpg       contact sheet of everything
 
 Usage (from this folder):
@@ -357,6 +359,10 @@ def process(path, args):
     importance = make_importance(labels, args.softness)
     save_grey(os.path.join(out, "importance.png"), importance)
 
+    print("  3D models ...")
+    from mesh import make_mesh
+    make_mesh(out, depth_scale=args.depth_scale)
+
     to8 = lambda a: (a * 255).astype(np.uint8)
     sheet = make_overview([
         ("photo", np.asarray(img)), ("depth", to8(depth)), ("normal", normal_rgb),
@@ -400,6 +406,8 @@ def main():
                    help="light direction in degrees for light_shaded.png (default 120 45 = upper left)")
     p.add_argument("--curve-scale", type=float, default=4.0,
                    help="feature size for curvature: small = fine detail, large = broad forms (default 4)")
+    p.add_argument("--depth-scale", type=float, default=0.4,
+                   help="how deep the 3D models are, as a fraction of their width (default 0.4)")
     p.add_argument("--softness", type=float, default=8.0,
                    help="how much to blur the importance map edges (default 8, 0 = hard)")
     args = p.parse_args()

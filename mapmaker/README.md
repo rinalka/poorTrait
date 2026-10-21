@@ -27,6 +27,7 @@ The first run downloads about 450 MB of models; after that a photo takes a few s
 | `--relief` | 3 | Exaggerate (higher) or flatten (lower) the 3D shape. Affects normals, curvature and shading |
 | `--light AZ EL` | 120 45 | Light direction for `light_shaded.png`. Azimuth: 0 = right, 90 = above, 180 = left, 270 = below. Elevation: 0 = grazing, 90 = head-on |
 | `--curve-scale` | 4 | Size of forms the curvature map responds to: small = fine detail, large = broad forms |
+| `--depth-scale` | 0.4 | How deep the 3D models are, as a fraction of their width |
 | `--softness` | 8 | Blur on the importance map edges (0 = hard edges) |
 | `--out` | `maps` | Output folder |
 
@@ -44,6 +45,8 @@ Every map is exactly the same size as `photo.png`, so pixel (x, y) means the sam
 | `curvature.png` | Mid-grey = flat, lighter = bumps (nose tip, lips), darker = hollows (eye sockets, creases) |
 | `parts.png` | Each pixel's value (0-18) is a face part. It looks black because the numbers are small; see `parts_preview.png` |
 | `importance.png` | How much each area matters for recognising the face. White = protect, black = free to destroy. Starting point for Stage 6 |
+| `mesh_face.obj` | 3D model of just the person: the depth map pushed out towards you, with the photo as its texture. Opens in Blender (File > Import > Wavefront) and in the `faceRelief` sketch |
+| `mesh_full.obj` | The same for the whole photo, as a relief plate |
 | `landmarks.json` | 478 3D points per face (`[x, y, z]` in pixels), plus `groups` listing which points form the eyes, lips, brows, nose, irises and face outline |
 
 Face part numbers in `parts.png`:
@@ -60,12 +63,22 @@ Face part numbers in `parts.png`:
 | Landmarks | [MediaPipe Face Landmarker](https://ai.google.dev/edge/mediapipe/solutions/vision/face_landmarker) | Apache-2.0 |
 | Face parts | [jonathandinu/face-parsing](https://huggingface.co/jonathandinu/face-parsing) | Not stated; trained on CelebAMask-HQ (non-commercial research data). Fine for personal art; check before selling work made with it |
 
+## Remaking just the 3D models
+
+The models can be remade from existing map folders without running the AI again, e.g. deeper and finer:
+
+```
+.venv\Scripts\python mesh.py maps\* --depth-scale 0.6 --step 3
+```
+
 ## Known limits
 
 - Face parts are found by cropping around the face, so in wide shots the body
   and surroundings far from the face are labelled background.
 - Depth is estimated from a single photo, so faces come out a bit flat.
   `--relief` compensates. Marigold (better normals, needs the GPU) is a possible upgrade.
+- The 3D models are reliefs - the front of the person only, nothing round the back - and their
+  outline is jagged where the person meets the background.
 
 ## Reinstalling from scratch
 

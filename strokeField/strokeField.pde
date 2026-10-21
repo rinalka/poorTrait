@@ -23,7 +23,8 @@
 //   - / +      paint slower / faster
 //   space      pause / carry on
 //   c          clear the canvas and start again
-//   s          save the painting (strokeField-####.png in the sketch folder)
+//   s          save the painting (strokeField-<photo>-####.png in the sketch folder - faceRelief
+//              can show it wrapped round the 3D model)
 
 // ---- settings ----
 float ui = 2;                // size of the text (1 = small)
@@ -272,7 +273,8 @@ void keyPressed() {
   else if (key == ' ') paused = !paused;
   else if (key == 'c') clearCanvas();
   else if (key == 's') {
-    String name = "strokeField-" + nf(frameCount, 4) + ".png";
+    // named after the face, so faceRelief can find it and wrap it round that face's model
+    String name = "strokeField-" + faces[current] + "-" + nf(frameCount, 4) + ".png";
     canvas.save(sketchPath(name));
     println("saved " + name);
   }
