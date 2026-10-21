@@ -14,13 +14,20 @@
 //   wheel             zoom
 //   1 2 3 ...         pick a face (every folder in mapmaker/maps that has a model)
 //   m                 just the person / the whole photo as a relief plate
-//   t                 what's painted on: photo / clay / normal / curvature / parts / painting
+//   t                 what's painted on: photo / clay / normal / curvature / parts / painting / blobs
 //   space             sway gently from side to side, on / off
 //   r                 straight on again
 //   s                 save a picture (faceRelief-####.png in the sketch folder)
 //
 // The painting is the newest strokeField-<photo>-####.png in the strokeField folder - press s
 // in strokeField to make one.
+//
+// "blobs" cuts the photo into blobs of a single colour exactly as blobsCompare does (see the Blobs
+// tab), with its sliders down the right: how many blobs, joining neighbours, smoothing the edges
+// and how many paints. While blobs are showing:
+//   v                 blobs / flat paints / paints with texture
+//   n                 new textures for the paints
+//   o                 outlines on / off
 
 // ---- settings ----
 float ui = 2;                 // size of the text (1 = small)
@@ -34,7 +41,8 @@ int current = 0;
 boolean wholePlate = false;   // false = mesh_face.obj, true = mesh_full.obj
 Mesh mesh;
 PShape textured, plain;       // the model with a picture on it, and in plain clay
-String[] textureNames = { "photo", "clay", "normal", "curvature", "parts", "painting" };
+String[] textureNames = { "photo", "clay", "normal", "curvature", "parts", "painting", "blobs" };
+final int BLOBS = 6;
 PImage[] textures;
 int textureMode = 0;
 String paintingName = null;   // which strokeField painting was found, if any
@@ -87,6 +95,10 @@ void draw() {
   textSize(16 * ui);
   textAlign(CENTER, BASELINE);
   String showing = textureNames[textureMode];
+  if (textureMode == BLOBS) {
+    showing = regionsLeft + " blobs,  " + viewNames[viewMode] + (viewMode > 0 ? " (" + paintCount + " paints)" : "");
+    drawBlobPanel();
+  }
   if (textureMode == 5) showing = paintingName == null ? "painting (none saved yet - showing the photo)" : "painting: " + paintingName;
   text(faces[current] + "     " + (wholePlate ? "whole photo" : "just the person") + "     " + showing, width / 2, 50 * ui);
 
@@ -171,11 +183,21 @@ void loadFace(int i) {
   textures[4] = loadOr(dir + "parts_preview.png", photo);
   paintingName = newestPainting(faces[i]);
   textures[5] = paintingName == null ? photo : loadImage(fullPath(paintingsFolder) + "/" + paintingName);
+  textures[6] = photo;                                  // not used - blobs come from blobTexture
+  blobsStale = true;
+  if (textureMode == BLOBS) makeBlobs(photo);
 
-  textured = mesh.toShape(textures[textureMode == 1 ? 0 : textureMode]);
+  textured = mesh.toShape(currentTexture());
   plain = mesh.toShape(null);
   loadMs = millis() - t0;
   println(faces[i] + ": " + mesh.points + " points, " + mesh.triangles + " triangles in " + loadMs + " ms");
+}
+
+// the picture for the current texture mode
+PImage currentTexture() {
+  if (textureMode == 1) return textures[0];           // clay has no picture
+  if (textureMode == BLOBS) return blobTexture;
+  return textures[textureMode];
 }
 
 PImage loadOr(String path, PImage fallback) {
@@ -201,7 +223,19 @@ String newestPainting(String face) {
 
 // ---------------------------------------------------------------- mouse and keys
 
+void mousePressed() {
+  if (textureMode == BLOBS) blobPanelPressed();
+}
+
+void mouseReleased() {
+  if (blobDragging >= 0) blobSliderReleased();
+}
+
 void mouseDragged() {
+  if (blobDragging >= 0) {
+    blobSlideTo(mouseX);
+    return;
+  }
   float dx = (mouseX - pmouseX) / (float) width, dy = (mouseY - pmouseY) / (float) height;
   if (mouseButton == RIGHT) {
     lightYaw += dx * 4;
@@ -221,8 +255,12 @@ void keyPressed() {
   else if (key == 'm') { wholePlate = !wholePlate; loadFace(current); }
   else if (key == 't') {
     textureMode = (textureMode + 1) % textureNames.length;
-    if (textureMode != 1) textured.setTexture(textures[textureMode]);
+    if (textureMode == BLOBS) makeBlobs(textures[0]);
+    if (textureMode != 1) textured.setTexture(currentTexture());
   }
+  else if (textureMode == BLOBS && key == 'v') { viewMode = (viewMode + 1) % 3; paintPicture(); updateBlobTexture(); }
+  else if (textureMode == BLOBS && key == 'n') { textureSeed = random(1000); paintPicture(); updateBlobTexture(); }
+  else if (textureMode == BLOBS && key == 'o') { outlines = !outlines; blobbed = fillBlobs(original, smoothed, outlines); updateBlobTexture(); }
   else if (key == ' ') sway = !sway;
   else if (key == 'r') { yaw = 0; pitch = 0; zoom = 1; swayTime = 0; }
   else if (key == 's') {
