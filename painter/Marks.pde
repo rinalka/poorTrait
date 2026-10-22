@@ -1,0 +1,166 @@
+// Deciding one mark: where it goes, how big it is, which way the form pulls it, how see-through
+// it is, and what paint it carries - then handing it to a brush (the Strokes or Knife tab).
+//
+// Most amounts can be "modulated": the slider sets the amount, and a map chosen in the "by" list
+// under it (importance, curvature, depth ...) turns it down from place to place - see modulated().
+
+final int ONE = 0, START_END = 1, TWO = 2, CHUNK = 3, COPY = 4;   // the panel's "carry" choices
+int gridI = 0;               // how far the grid start has got
+
+void paintMark(PGraphics g) {
+  float[] s = startPoint();
+  if (s == null) return;
+  float x = s[0], y = s[1];
+  float len = max(3, modulated("markSize", x, y) * random(0.5, 1));
+  float wid = max(1, len * v("markWidth") * random(0.7, 1.3));
+  float follow = modulated("follow", x, y);
+  float alpha = 255 * modulated("opacity", x, y);
+  if (random(1) < v("washes")) alpha *= random(0.28, 0.5);    // a thin, see-through wash
+  Paint p = newPaint(alpha);
+  if (v("brushType") == 0) paintStroke(g, x, y, len, wid, follow, p);
+  else paintKnife(g, x, y, len, wid, follow, p);
+  markCount++;
+}
+
+// a slider's value at (x, y). Its map (if it has one) turns it down where the map is dark - or
+// where it's light, with invert on. "amount" is how far down: at 1, black on the map takes it
+// all the way to 0; at 0 the map does nothing
+float modulated(String name, float x, float y) {
+  float base = v(name);
+  int by = (int) v(name + "_by");
+  if (by <= 0) return base;
+  float m = mapAt(by, x, y);
+  if (v(name + "_inv") > 0.5) m = 1 - m;
+  return base * lerp(1, m, v(name + "_amt"));
+}
+
+// where the next mark starts, or null for no mark this time
+float[] startPoint() {
+  int mode = (int) v("startAt");
+  if (mode == 1) {
+    // weighted by a map: try spots until the map says yes - light places get more marks
+    int by = (int) v("startMap");
+    boolean inv = v("startInv") > 0.5;
+    float x = 0, y = 0;
+    for (int k = 0; k < 40; k++) {
+      x = random(photo.width);
+      y = random(photo.height);
+      float m = by <= 0 ? 1 : mapAt(by, x, y);
+      if (inv) m = 1 - m;
+      if (random(1) < m) break;
+    }
+    return new float[] { x, y };
+  }
+  if (mode == 2) {
+    // a grid, row by row like reading a page, each mark a little off its spot
+    float step = max(3, v("markSize") * 0.35);
+    int cols = ceil(photo.width / step), rows = ceil(photo.height / step);
+    int i = gridI++ % (cols * rows);
+    return new float[] { constrain((i % cols + random(1)) * step, 0, photo.width - 1),
+                         constrain((i / cols + random(1)) * step, 0, photo.height - 1) };
+  }
+  if (mode == 3 && outputMode == 0) {
+    // round the mouse, only while a button is held down in the output window
+    if (!mousePressed) return null;
+    float sc = width / (float) photo.width;
+    return new float[] { constrain(mouseX / sc + randomGaussian() * v("spread"), 0, photo.width - 1),
+                         constrain(mouseY / sc + randomGaussian() * v("spread"), 0, photo.height - 1) };
+  }
+  return new float[] { random(photo.width), random(photo.height) };
+}
+
+Paint newPaint(float alpha) {
+  Paint p = new Paint();
+  p.alpha = alpha;
+  p.carry = (int) v("carry");
+  p.pickup = (int) v("pickup");
+  p.mix = v("mix");
+  if (random(1) < v("accentChance")) {
+    p.accent = true;
+    p.accentColour = accentNow;
+    if (p.textured()) p.carry = ONE;
+  }
+  if (p.textured()) {
+    boolean fromCanvas = p.pickup == 1 || (p.pickup == 2 && random(1) < p.mix);
+    p.tex = fromCanvas && canvasSnap != null ? canvasSnap : photo;
+  }
+  return p;
+}
+
+// What a brush carries, and how it puts it down.
+//   one colour     picked up once
+//   start to end   the colour where the mark starts, sliding into the colour where it ends
+//   two colours    two colours side by side, as if the brush was loaded twice
+//   chunk          a strip of the picture where the brush landed, smeared along the mark
+//   copy           the picture right under the mark, as if seen through a hole in the shape of it
+// The paint is picked up from the photo, from what's already on the canvas (wet paint), or a mix.
+class Paint {
+  int carry, pickup;
+  float mix, alpha;
+  boolean accent;
+  color accentColour;
+  PImage tex;                // chunk and copy: the picture the paint comes from
+  color c0, c1;              // the colours the brush loaded (the brush sets these)
+
+  boolean textured() {
+    return carry == CHUNK || carry == COPY;
+  }
+
+  // the colour at (x, y) where this paint is picked up from
+  color pickRaw(float x, float y) {
+    if (accent) return accentColour;
+    if (pickup == 1) return canvasAt(x, y);
+    if (pickup == 2) return lerpColor(photoAt(x, y), canvasAt(x, y), mix);
+    return photoAt(x, y);
+  }
+
+  color pick(float x, float y) {
+    return jitter(pickRaw(x, y));
+  }
+
+  // one plain colour (the knife's streaks and ridge)
+  Paint flat(color c) {
+    Paint p = new Paint();
+    p.carry = ONE;
+    p.c0 = p.c1 = c;
+    return p;
+  }
+
+  void begin(PGraphics g) {
+    g.noStroke();
+    g.beginShape(TRIANGLE_STRIP);
+    if (textured()) {
+      g.textureMode(IMAGE);
+      g.texture(tex);
+    }
+  }
+
+  // One corner of the mark, at (x, y). t is how far along the mark it is (0 .. 1) and side which
+  // edge (0 = one, 1 = the other). For chunk the paint comes from (pickX, pickY), where the brush
+  // picked it up; for copy from right under the corner.
+  void vertex(PGraphics g, float x, float y, float pickX, float pickY, float t, float side, float a) {
+    if (textured()) {
+      g.tint(255, a);
+      if (carry == CHUNK) g.vertex(x, y, pickX, pickY);
+      else g.vertex(x, y, x, y);
+      return;
+    }
+    color c = carry == START_END ? lerpColor(c0, c1, t) : carry == TWO ? lerpColor(c0, c1, side) : c0;
+    g.fill(c, a);
+    g.vertex(x, y);
+  }
+
+  void end(PGraphics g) {
+    g.endShape();
+    if (textured()) g.noTint();
+  }
+}
+
+// a little lighter or darker, a little off in hue and saturation, as much as the jitter sliders say
+color jitter(color c) {
+  float[] hsb = java.awt.Color.RGBtoHSB(c >> 16 & 255, c >> 8 & 255, c & 255, null);
+  float h = hsb[0] + random(-1, 1) * v("jitterH");
+  float s = constrain(hsb[1] + random(-1, 1) * v("jitterS"), 0, 1);
+  float b = constrain(hsb[2] + random(-1, 1) * v("jitterB"), 0, 1);
+  return java.awt.Color.HSBtoRGB(h - floor(h), s, b) | 0xFF000000;
+}

@@ -14,3 +14,9 @@ knifeField/knifeField-*.png
 
 # installers (too big for GitHub)
 *.msi
+
+# test photos and their maps (personal photos - never online)
+closeTest/
+
+# paintings and settings saved from the painter
+painter/saved/
