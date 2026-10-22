@@ -55,6 +55,9 @@ int loadMs;
 
 void setup() {
   size(3200, 2000, P3D);
+  // Processing 4 doubles the window on a Windows screen scaled to 200%, so 3200 x 2000 would
+  // become 6400 x 4000 - bigger than the screen. Keep it 1:1
+  pixelDensity(1);
   // Processing can't see the screen size here, so it puts the window off the top left - put it
   // near the top left instead
   surface.setLocation(40, 80);

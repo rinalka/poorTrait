@@ -63,6 +63,9 @@ int dragging = -1;           // which slider is being dragged (-1 = none)
 
 void setup() {
   size(3200, 2000, P2D);
+  // Processing 4 doubles everything on a Windows screen scaled to 200% - the window and the
+  // canvas too, so paintings would be painted and saved at twice the photo's size. Keep it 1:1
+  pixelDensity(1);
   // Processing can't see the screen size here, so it puts the window off the top left - put it
   // near the top left instead
   surface.setLocation(40, 80);
