@@ -47,42 +47,51 @@ Press **Ctrl+R** in Processing (or the play button). Two windows open:
 - **The output window**, which is the size of the photo
 - **The control panel**
 
-Work down SETUP 1, 2 and 3 (each box turns green when it's done), then press **RUN**.
+Work down SETUP 1 to 4 (each box turns green when it's done), then press **RUN**.
 
 ## The control panel
 
 The panel has four columns:
 
-1. **SETUP 1–3, VIEW, RUN**: the photo, 2D or a mesh, and the large colour masses the painting
-   can start from; then what you're looking at, and the run.
+1. **SETUP 1–4**: the photo, 2D or a mesh, the large colour masses the painting can start
+   from, and what the canvas starts with.
 2. **The tools**: what does the drawing. These are BRUSH, PALETTE KNIFE, SPLATTER, LINES,
-   FRAGMENTS and SCRAPE. Each box has an on/off tick box, so any mix of tools can paint at once.
+   FRAGMENTS and SCRAPE. Only one tool paints at a time.
 3. **MOVEMENT, COLOUR, APPLY**: how a tool moves and where it lands, where its colour comes from,
-   and how solid it is. These belong to **the tool chosen in column 2**: every tool has its own
-   set.
-4. **ABSTRACTION, LAYERS**: where the face may be broken up, and which layer each tool paints on.
+   and how solid it is. These belong to **the tool that's on in column 2**: every tool has its
+   own set.
+4. **ABSTRACTION, LAYERS, SHADOW BOX**: where the face may be broken up, which layer each tool
+   paints on, and the layers floating apart with light and shadow between them.
 
-**Choosing a tool:** press **SETTINGS** in a tool's box. The box gets a dark frame and opens to
-show the tool's shape settings, and columns 3 and 4 switch to that tool's settings. Their
-headings show which tool that is, for example "MOVEMENT - splatter". Switching a tool on also
-chooses it. The other tools keep their settings while you work on this one.
+Along the bottom of the window are **VIEW** (what you're looking at) and **CAMERA**, under
+column 1, and **RUN**, under column 2.
+
+**Choosing a tool:** click the box beside a tool's name (or the name itself). The box is **red**
+when the tool is off and **green** when it's on. Switching a tool on switches the one that was
+on off, so only one tool paints at a time. The tool that's on gets a dark frame and its box
+opens to show its shape settings, and columns 3 and 4 switch to its settings. Their headings
+show which tool that is, for example "MOVEMENT - splatter". The other tools keep their settings
+while they're off. If you switch every tool off, nothing paints, and columns 3 and 4 keep
+showing the last tool's settings under a grey cover.
 
 Controls that don't apply to your current choices are hidden. For example, the map settings
 under "start at" only appear when "weighted by map" is chosen.
 
 ## Column 1
 
-### SETUP 1, 2 and 3
+### SETUP 1 to 4
 
-The setup is three boxes, done in order. Click a box to set it up. Once it's done it turns green.
-The setup stays fixed for a whole run, so these boxes are locked while a run is going (except the
-palette sliders in SETUP 3). Press STOP to change them.
+The setup is four boxes, done in order. Click a box to set it up. Once it's done it turns green.
+SETUP 1 to 3 stay fixed for a whole run, so they're locked while a run is going (except the
+palette sliders in SETUP 3). Press STOP to change them. SETUP 4 can change during a run: the new
+choice is used at the next CLEAR.
 
 | Box | What it does |
 |---|---|
 | SETUP 1  SOURCE | Click it for a list of the photos, and pick one. Its name shows under the title. |
 | SETUP 2  TARGET | Click it to choose **2D canvas**, **mesh: just the person** (a 3D model of the face) or **mesh: whole photo** (the whole picture as a relief). For 2D canvas, the canvas colour wheel appears under it: the colour the painting starts on. |
 | SETUP 3  MASSES | Click it to open the masses' sliders (below). The output window shows the masses as they are now, with the light off so their colours are true. When they look right, click the box's title: the sliders close, the view goes back to what it was, and the box turns green. |
+| SETUP 4  START | What the canvas, under the four layers, holds at RUN and CLEAR: the **plain** canvas colour, the **masses**, or the **photo**. Starting with the masses and then breaking them up with marks is the idea behind ABSTRACTION. The choices are always showing; the box turns green once you click one. |
 
 Picking a new photo turns SETUP 3 back from green, because the new photo has new masses to look
 at.
@@ -101,13 +110,22 @@ seconds, and the box shows their progress. If you press RUN before they're ready
 | smooth edges | Rounds off the jagged edges between masses |
 | number of colours | How many colours the masses are painted with (2–32) |
 | palette hue / saturation / brightness | Shift the hue and scale the saturation and brightness of every colour in the palette at once. They change instantly, and can be changed during a run. |
-| start the canvas with | What layer 1 holds at RUN and CLEAR: the **plain** canvas colour, the **masses**, or the **photo**. Starting with the masses and then breaking them up with marks is the idea behind ABSTRACTION. |
+
+## Along the bottom
 
 ### VIEW
 
+VIEW has two lists side by side, always open.
+
+| List | What it does |
+|---|---|
+| MAPS | **none** shows the painting. Or show one of the maps in its place: the photo, normal, importance, curvature, depth, light, or the masses. **While a map is showing, nothing paints:** a run pauses, and RUN and CARRY ON are greyed out until you choose **none** again. |
+| LAYERS | The stack, top first, like Photoshop's layers panel, with the **canvas** (what SETUP 4 started it with) always at the bottom. Tick boxes show and hide the layers: any number can be on, but the canvas is always on. **^** and **v** move a layer up or down the stack. A layer takes its paint and its settings with it, and the tools that paint on "layer 2" keep painting on layer 2 wherever it is. SAVE keeps the order, and LOAD SETTINGS puts it back. |
+
+### CAMERA
+
 | Control | What it does |
 |---|---|
-| show | What appears in the window or on the mesh: the painting, the photo, the masses, or one of the maps |
 | direction field over the picture | (2D) Draws the lines the marks follow |
 | direction field smoothing | How smooth the direction field is, for every tool. Changes when you let go of the slider. |
 | mesh background, sway, STRAIGHT ON | (mesh) Background colour, a gentle side-to-side turn, and resetting the view |
@@ -117,19 +135,22 @@ seconds, and the box shows their progress. If you press RUN before they're ready
 
 ### RUN
 
+RUN sits beside VIEW, level with its top.
+
 | Button | What it does |
 |---|---|
-| RUN / STOP | Start a new painting, or end the run. The painting stays on screen after STOP. |
-| PAUSE | Freeze the painting. You can still turn the mesh. |
-| CLEAR | Reset every layer and keep painting |
-| SAVE | Save the painting, each layer (as see-through PNGs you can stack in Photoshop), and every setting to `painter/saved/`. For a mesh it also saves the view as you see it. |
+| RUN / STOP | Start a new painting (green **RUN**), or end the run (red **STOP**). The painting stays on screen after STOP. |
+| PAUSE / CARRY ON | Freeze the painting. You can still turn the mesh. Green **PAUSE** while it's painting, orange **CARRY ON** while it's paused. |
+| CLEAR | Reset the canvas and every layer, and keep painting |
+| SAVE | Save the painting, the canvas and each layer (as see-through PNGs you can stack in Photoshop), and every setting, to `painter/saved/`. For a mesh it also saves the view as you see it. |
 | LOAD SETTINGS | Load the settings from a saved `.json` |
 | NUDGE + how far | Shift every live setting, for every tool, by a random amount. "how far" sets how big the change is. Good for when you're stuck. |
+| PRINT | Save what the output window shows now, at the photo's size, to `painter/saved/` as `...-print.png`. That's whatever VIEW shows (the painting or a map), the mesh as you've turned it, and the direction field or protected parts if they're showing. |
 
 ## Column 2: the tools
 
-Each tool has a tick box (on/off) and a SETTINGS button (see "Choosing a tool" above). The
-settings below are the ones that open in the tool's box. How fast a tool works is set in its box:
+Each tool has a red / green on-off box (see "Choosing a tool" above). The settings below are the
+ones that open in the tool's box while it's on. How fast a tool works is set in its box:
 marks, clusters, lines or fragments **per frame**. Below 1 means not every frame: 0.3 is about 3
 frames in 10.
 
@@ -207,8 +228,9 @@ For fragments, MOVEMENT's "follow the form" is the share turned along the form.
 ### SCRAPE
 
 Takes paint off instead of putting it on. Each scrape removes paint from every layer above its
-"scrape down to" layer (set in LAYERS), so what's on that layer (or under it) shows through: the
-masses, an earlier stage of the painting, or the bare canvas.
+"scrape down to" layer (set in LAYERS), so what's on that layer (or under it) shows through: an
+earlier stage of the painting or, scraping down to the **canvas**, what it started with (the
+masses, the photo or the bare canvas colour).
 
 | Control | What it does |
 |---|---|
@@ -271,18 +293,39 @@ shared by all the tools.
 
 ### LAYERS
 
-The painting is four see-through layers, one on top of another. Layer 1 is at the bottom and
-starts solid: the canvas colour with the masses or the photo on it (see SETUP 3). Layers 2–4
-start empty. What you see, and what the mesh wears, is all of them combined.
+The painting is four see-through layers, one on top of another, on the canvas. The canvas is
+solid: the canvas colour with the masses or the photo on it (see SETUP 4), and it's never painted
+on. The layers start empty, and layer 1 is at the bottom until you change the order in VIEW's
+LAYERS list. What you see, and what the mesh wears,
+is all of them combined. Which ones show is set in VIEW's LAYERS menu.
 
 | Control | What it does |
 |---|---|
-| a row for each layer | **Tick box**: shown or hidden. **Slider**: the layer's opacity. **List**: how it combines with the layers under it (normal, multiply, screen, add, lightest). **CLEAR**: empties that layer. On layer 1, CLEAR puts back its starting picture. |
+| a row for each layer | **Slider**: the layer's opacity. **List**: how it combines with the layers under it (normal, multiply, screen, add, lightest). **CLEAR**: empties that layer. |
 | paints on layer | Which layer each tool paints on. By default brush and knife are on 2, lines and fragments on 3, and splatter on 4. |
-| scrape down to | The layer scraping reveals. Every layer above it is scraped. |
+| scrape down to | What scraping reveals: the **canvas** (every layer is scraped) or a layer (every layer above it in the stack is scraped). |
 
 Hiding, fading or recombining a layer changes the painting immediately, including what's already
-painted on it. The main CLEAR button (in RUN) resets every layer.
+painted on it. The main CLEAR button (in RUN) puts the canvas back to its start and empties every
+layer.
+
+### SHADOW BOX
+
+Makes the layers look as if they float apart, like cut paper in a shadow box, lit from one side.
+Each layer casts a soft shadow on everything under it in the stack, and its edges that face the
+light catch the light. Where an upper layer has no paint you see down to the layers under it, lit,
+with shadow along the edges of the paint above. It changes what you see straight away, including
+what's already painted, and the mesh wears it too. The canvas casts no shadow.
+
+| Control | What it does |
+|---|---|
+| on | Switches the shadow box on. The other controls show once it's on. |
+| light from | Which side the light comes from, in degrees: 0 = right, 90 = above, 180 = left, 270 = below. The default 135 is the upper left, so shadows fall to the lower right. |
+| light height | How high the light is. Low light (10) makes long shadows, high light (80) short ones. |
+| shadow darkness | How dark the shadows are |
+| shadow softness | How blurred the shadows' edges are. They get softer the further a layer floats above what's under it. |
+| lit edges | How bright the edges facing the light are |
+| gap above the layers under it | One slider per layer, in pixels: how far it floats above the stack under it. 0 = flat on it (no shadow). Bigger gaps make longer, softer shadows. The gap belongs to the layer, so it moves with it when you change the order. |
 
 ## Letting the maps decide
 

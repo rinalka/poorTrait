@@ -1,19 +1,23 @@
 // The control panel: a second window, built with controlP5.
 //
 // Four columns:
-//   SETUP 1 - 3, VIEW, RUN        the source picture, the target (2D or a mesh) and the masses,
-//                                 each a box that's clicked and turns green once it's done -
-//                                 locked while a run is going
+//   SETUP 1 - 4                   the source picture, the target (2D or a mesh), the masses and
+//                                 what the canvas starts with, each a box that turns green once
+//                                 it's done - 1 - 3 are locked while a run is going
 //   the tools                     what does the drawing: brush, palette knife, splatter, lines,
-//                                 fragments, scrape - each on or off, with its shape settings
+//                                 fragments, scrape - one at a time, with its shape settings
 //   MOVEMENT, COLOUR, APPLY       how the chosen tool moves, where its colour comes from, and
 //                                 how solid it is
-//   ABSTRACTION, LAYERS           where the face may be broken up, and the four layers
+//   ABSTRACTION, LAYERS,          where the face may be broken up, the four layers, and the
+//   SHADOW BOX                    layers floating apart, lit from one side
+// and along the bottom, VIEW (the MAPS and LAYERS lists) and CAMERA under column 1, and RUN under
+// column 2, level with VIEW.
 //
 // Every tool has its own MOVEMENT, COLOUR and APPLY settings, named with the tool in front
-// ("knife_follow", "splat_opacity" ...). SETTINGS in a tool's box chooses it (`editing`): its
-// box opens and columns 3 - 4 show its settings. The painter reads them with t("follow") while
-// that tool paints (the Marks tab).
+// ("knife_follow", "splat_opacity" ...). Only one tool is on at a time: switching one on (its
+// box turns from red to green) switches the others off and chooses it (`editing`) - its box
+// opens and columns 3 - 4 show its settings. With every tool off, they show the last one's under a
+// grey cover. The painter reads them with t("follow") while that tool paints (the Marks tab).
 //
 // Every control has a name (its first argument below), and the painter asks for values by that
 // name with v("name") - sliders give their value, toggles 0 or 1, lists and radio buttons the
@@ -40,16 +44,27 @@ public class Panel extends PApplet {
   ArrayList<String> liveNames = new ArrayList<String>();    // can change while running
   ArrayList<ScrollableList> lists = new ArrayList<ScrollableList>();
   ArrayList<ArrayList<Row>> columns = new ArrayList<ArrayList<Row>>();
+  IntList colAt = new IntList();       // which column each one is laid out in, counting from 0
+  IntList colBottom = new IntList();   // 1 for the ones along the bottom of the window
+  IntList colLevel = new IntList();    // a bottom column whose top this one's is level with, or -1
+  int topColumns = 0;
   Row cur;                   // the row being built
   boolean live;              // whether the controls being built can change while running
   volatile boolean layoutWanted = true;
   boolean shownRunning = false;
   boolean listOpen = false;  // one of the dropdown lists is open
   Button runButton, pauseButton;
+  Row layerRow;                                   // VIEW's lists, with the layers' tick boxes
+  int[] layerItem = new int[LAYERS];              // each layer's tick box in layerRow's items
+  String shownOrder = "";
+  Toggle canvasShown;                           // LAYERS' canvas: always on
+  int runGreen = 0xFF2E9E48, runGreenHover = 0xFF45B860, runRed = 0xFFCC3B2E, runRedHover = 0xFFE26A5E;
+  int orange = 0xFFE08A1E, orangeHover = 0xFFF0A040;
+  String[] startNames = { "plain", "masses", "photo" };
   // the three setup boxes: their colour blocks, the line under each title, and whether each is done
-  int sourceBox, targetBox, massBox;
+  int sourceBox, targetBox, massBox, startBox;
   Textlabel boxTitle, massTitle, sourceText, targetText, massText;
-  boolean sourceDone, targetDone, massesDone;
+  boolean sourceDone, targetDone, massesDone, startDone;
   volatile boolean massesOpen = false;
   float showBefore, lightBefore;      // put back when the masses box closes
   int pressedIn = -1;                 // the setup box a click started in
@@ -61,9 +76,9 @@ public class Panel extends PApplet {
   int[] blockColour = new int[0];
   float[][] block = new float[0][];   // each section's x, top, bottom as laid out, or null if hidden
   int dark = 0xFF232323;     // text on the coloured blocks (dark grey)
-  volatile String editing = "knife";   // the tool chosen in column 2, whose settings columns 3 - 4 show
+  volatile String editing = "knife";   // the tool switched on in column 2, whose settings columns 3 - 4 show
   String shownEditing = "";
-  Button[] editButtons = new Button[TOOLS.length];
+  int toolOff = 0xFFCC3B2E, toolOffHover = 0xFFE26A5E, toolOn = 0xFF2E9E48;   // a tool's on / off box
   int[] toolSection = new int[TOOLS.length];   // each tool box's colour block
   String curTool;            // the tool whose box is being built
   Textlabel moveHeader, colourHeader, applyHeader;
@@ -93,12 +108,13 @@ public class Panel extends PApplet {
     surface.setLocation(min((int) ((40 + painter.this.width) / scale) + 30, screen.x + screen.width - width - 16), 40);
     textFont(createFont("Arial", 12, true));
     cp5 = new ControlP5(this);
+    cp5.setAutoDraw(false);    // drawn in draw(), so the cover over columns 3 - 4 can go on top
     cp5.setFont(createFont("Arial", 12, true), 12);
     cp5.setColorForeground(color(70, 130, 200));
     cp5.setColorActive(color(110, 170, 240));
     cp5.setColorBackground(color(60));
 
-    // ---------------------------------------------------- column 1: SETUP 1 - 3, VIEW, RUN
+    // ---------------------------------------------------- column 1: SETUP 1 - 4
     // The setup is three boxes, done in order: click one to choose. Each turns green once it's
     // done. They're locked while a run is going (all but the masses' palette sliders)
     column();
@@ -127,11 +143,6 @@ public class Panel extends PApplet {
     massSlider("massHue", "palette hue", -0.5, 0.5, 0);
     massSlider("massSat", "palette saturation", 0, 2, 1);
     massSlider("massBri", "palette brightness", 0, 2, 1);
-    row(20);
-    label("start the canvas with  (at RUN and CLEAR)", 0);
-    onlyWhen("massesOpen");
-    radio("startWith", new String[] { "plain", "masses", "photo" }, 3, 1);
-    onlyWhen("massesOpen");
     row(6);
     onlyWhen("massesOpen");
     // for later: laying the masses on during a run, and textured paint (never shown for now)
@@ -143,11 +154,49 @@ public class Panel extends PApplet {
     toggle("massTexture", "textured paint", false, 0);
     button("massSeed", "NEW TEXTURE", 170, 110);
     onlyWhen("later");
+    // what the canvas starts with at RUN and CLEAR - always open, and green once a choice is
+    // clicked. It can change during a run (it's used at the next CLEAR)
+    startBox = setupBox("SETUP 4   START");
+    boxText("").setText("start the canvas with  (at RUN and CLEAR)");
+    radio("startWith", startNames, 3, 1);
+    row(2);
 
+    // ---------------------------------------------------- along the bottom: VIEW, CAMERA and RUN
+    // VIEW is two lists side by side, always open: MAPS (a map in place of the painting) and
+    // LAYERS (which parts of the painting show)
+    int viewColumn = bottomColumn(0, -1);
     header("VIEW");
-    row(28);
-    label("show", 0);
-    list("showWhat", showNames, 0, 50, 140);
+    row(20);
+    label("MAPS", 0);
+    label("LAYERS", 160);
+    row(showNames.length * 22 + 8);
+    RadioButton r = cp5.addRadioButton("showWhat").setSize(16, 16).setItemsPerRow(1).setSpacingRow(6);
+    for (int i = 0; i < showNames.length; i++) {
+      r.addItem("showWhat " + i, i);
+      r.getItem(i).setCaptionLabel(i == 0 ? "none  (the painting)" : showNames[i]);
+    }
+    r.activate(0);
+    r.setNoneSelectedAllowed(false);
+    register("showWhat", r);
+    put(r, 0, 4);
+    // the stack, top first, as in Photoshop: the four layers, which can be hidden and moved up
+    // and down (layerOrder, the Layers tab), and the canvas (SETUP 4's start) at the bottom, always
+    // shown. A layer's tick box moves to its place in draw(); the up / down buttons stay put
+    layerRow = cur;
+    for (int i = 0; i < LAYERS; i++) {
+      toggle("layerOn" + i, "layer " + (i + 1), true, 160);
+      layerItem[i] = cur.items.size() - 1;
+    }
+    for (int k = 0; k < LAYERS; k++) {
+      int pos = LAYERS - 1 - k;                  // the place in the stack shown on line k
+      if (k > 0) moveButton("layerUp" + pos, "^", 262, 4 + 22 * k);
+      if (k < LAYERS - 1) moveButton("layerDown" + pos, "v", 290, 4 + 22 * k);
+    }
+    canvasShown = cp5.addToggle("canvasShown").setSize(16, 16).setValue(true).lock();
+    canvasShown.getCaptionLabel().align(ControlP5.RIGHT_OUTSIDE, ControlP5.CENTER).setPaddingX(6);
+    put(canvasShown, 160, 4 + 22 * LAYERS);
+
+    header("CAMERA");
     row(26);
     toggle("fieldOverlay", "direction field over the picture", false, 0);
     onlyWhen("2D");
@@ -164,6 +213,9 @@ public class Panel extends PApplet {
     toggle("light", "light on  (off shows the true colours)", true, 0);
     onlyWhen("mesh");
 
+    // RUN's top is level with VIEW's. PRINT saves what the output window shows now, at the
+    // photo's size
+    bottomColumn(1, viewColumn);
     header("RUN");
     row(32);
     runButton = button("runStop", "RUN", 0, 96);
@@ -175,10 +227,12 @@ public class Panel extends PApplet {
     row(36);
     button("nudge", "NUDGE", 0, 96);
     sliderAt("nudgeAmount", "how far", 0, 1, 0.2, 106, 4, 110);
+    row(32);
+    button("printView", "PRINT", 0, 96);
 
     // ---------------------------------------------------- column 2: the tools
-    // Each tool's box: switched on or off, SETTINGS to choose it for columns 3 and 4, and - only
-    // while it's chosen - its shape settings
+    // Each tool's box: switched on or off (only one at a time), and - while it's on - its shape
+    // settings
     column();
     toolBox(0, false);
     toolSlider("perFrame", "marks per frame", 0, 400, 20).setDecimalPrecision(0);
@@ -196,7 +250,7 @@ public class Panel extends PApplet {
     toolSlider("width", "width (share of length)", 0.05, 1, 0.35);
     toolSlider("ragged", "ragged edges", 0, 1, 0.5);
     toolSlider("streaks", "streaks of a second colour", 0, 1, 0.4);
-    onlyWhen("edit knife&knifeFlat");
+    onlyWhen("on knife&knifeFlat");
     toolSlider("leaf", "leaf shapes", 0, 1, 0.35);
     toolSlider("ridge", "ridge along the edge", 0, 1, 0.5);
 
@@ -225,11 +279,11 @@ public class Panel extends PApplet {
     toggle("frag_dashes", "dashes", true, 66);
     toggle("frag_tris", "triangles", true, 146);
     toggle("frag_shards", "shards", true, 236);
-    onlyWhen("edit frag");
+    onlyWhen("on frag");
 
     toolBox(5, false);
     radio("scrape_kind", new String[] { "knife scrape", "scratches" }, 2, 0);
-    onlyWhen("edit scrape");
+    onlyWhen("on scrape");
     toolSlider("rate", "scrapes per frame", 0.05, 20, 1);
     toolSlider("length", "length", 10, 500, 140).setDecimalPrecision(0);
     toolSlider("width", "width", 2, 150, 40).setDecimalPrecision(0);
@@ -322,7 +376,7 @@ public class Panel extends PApplet {
       onlyWhen("edit " + n);
     }
 
-    // ---------------------------------------------------- column 4: ABSTRACTION, LAYERS
+    // ---------------------------------------------------- column 4: ABSTRACTION, LAYERS, SHADOW BOX
     column();
     header("ABSTRACTION");
     row(26);
@@ -343,13 +397,13 @@ public class Panel extends PApplet {
     onlyWhen("2D abstraction");
     row(6);
 
-    // the four layers (the Layers tab), bottom one first: shown, opacity, how it's combined with
-    // the layers under it, and a button to empty it. Then which layer each tool paints on
-    header("LAYERS  (1 = bottom)");
+    // the four layers (the Layers tab), bottom one first: opacity, how it's combined with the
+    // layers under it, and a button to empty it (whether it shows is in VIEW's LAYERS menu). Then
+    // which layer each tool paints on
+    header("LAYERS");
     for (int i = 0; i < 4; i++) {
       row(28);
       label("" + (i + 1), 0);
-      toggle("layerOn" + i, "", true, 16);
       sliderAt("layerOpacity" + i, "", 0, 1, 1, 42, 0, 90);
       list("layerBlend" + i, layerBlendNames, 0, 140, 90);
       button("clearLayer" + i, "CLEAR", 240, 64).setHeight(18);
@@ -364,7 +418,31 @@ public class Panel extends PApplet {
     }
     row(24);
     label("scrape down to", 12);
-    radioAt("scrape_layer", new String[] { "1", "2", "3" }, 0, 130, 44);
+    row(24);
+    radioAt("scrape_layer", new String[] { "canvas", "1", "2", "3" }, 0, 24, 74);
+    row(6);
+
+    // the layers floating apart, lit from one side (the Layers tab's composite)
+    header("SHADOW BOX");
+    row(26);
+    toggle("boxOn", "on  (the layers float apart)", false, 0);
+    slider("lightFrom", "light from  (90 = above)", 0, 360, 135).setDecimalPrecision(0);
+    onlyWhen("box");
+    slider("lightHeight", "light height", 10, 80, 45).setDecimalPrecision(0);
+    onlyWhen("box");
+    slider("boxShadow", "shadow darkness", 0, 1, 0.6);
+    onlyWhen("box");
+    slider("boxSoftness", "shadow softness", 0, 1, 0.4);
+    onlyWhen("box");
+    slider("boxRim", "lit edges", 0, 1, 0.4);
+    onlyWhen("box");
+    row(20);
+    label("gap above the layers under it  (pixels)", 0);
+    onlyWhen("box");
+    for (int i = 0; i < LAYERS; i++) {
+      slider("layerGap" + i, "layer " + (i + 1), 0, 60, 12).setDecimalPrecision(0);
+      onlyWhen("box");
+    }
 
     // the lists open downwards over the controls under them, so draw them last - the higher
     // ones last of all, so an open list is never hidden behind the one below it
@@ -402,18 +480,26 @@ public class Panel extends PApplet {
       picked = null;
       layoutWanted = true;
     }
+    // each layer's tick box on its line in VIEW's LAYERS list, top of the stack first
+    String order = join(str(layerOrder), " ");
+    if (!order.equals(shownOrder)) {
+      shownOrder = order;
+      for (int i = 0; i < LAYERS; i++) layerRow.dy.set(layerItem[i], 4 + 22 * (LAYERS - 1 - layerPosition(i)));
+      layoutWanted = true;
+    }
     if (layoutWanted) layout();
     // the coloured blocks behind the sections (the controls are drawn on top after this)
     noStroke();
     for (int i = 0; i < sections; i++) {
       if (block[i] == null) continue;
-      boolean done = i == sourceBox && sourceDone || i == targetBox && targetDone || i == massBox && massesDone;
+      boolean done = i == sourceBox && sourceDone || i == targetBox && targetDone || i == massBox && massesDone
+        || i == startBox && startDone;
       fill(done ? green : blockColour[i]);
       rect(block[i][0] - 8, block[i][1], colW - 12, block[i][2] - block[i][1], 8);
     }
-    // a frame round the chosen tool's box
+    // a frame round the box of the tool that's on
     int ch = toolSection[max(0, java.util.Arrays.asList(TOOLS).indexOf(editing))];
-    if (block[ch] != null) {
+    if (block[ch] != null && value(editing + "_on") > 0.5) {
       noFill();
       stroke(dark);
       strokeWeight(2);
@@ -435,16 +521,26 @@ public class Panel extends PApplet {
       shownRunning = isRunning;
       lockSetup(shownRunning);
     }
-    runButton.setCaptionLabel(isRunning || runWaiting ? "STOP" : "RUN");
+    // RUN green, STOP red. PAUSE green while painting, CARRY ON orange while paused. While a map
+    // is showing nothing paints (the painter pauses), so RUN and CARRY ON are greyed out and locked
+    boolean going = isRunning || runWaiting;
+    boolean mapShown = value("showWhat") > 0;
+    runButton.setCaptionLabel(going ? "STOP" : "RUN");
+    buttonColour(runButton, going ? runRed : runGreen, going ? runRedHover : runGreenHover, !going && mapShown);
+    pauseButton.setCaptionLabel(isPaused ? "CARRY ON" : "PAUSE");
+    if (!isRunning) buttonColour(pauseButton, color(60), color(70, 130, 200), false);
+    else if (isPaused) buttonColour(pauseButton, orange, orangeHover, mapShown);
+    else buttonColour(pauseButton, runGreen, runGreenHover, false);
+    canvasShown.setCaptionLabel("canvas  (" + startNames[(int) value("startWith")] + ")");
+    canvasShown.setValue(1);
+    canvasShown.setLock(true);
     if (!editing.equals(shownEditing)) {
       shownEditing = editing;
       int e = java.util.Arrays.asList(TOOLS).indexOf(editing);
-      for (int i = 0; i < TOOLS.length; i++) editButtons[i].setCaptionLabel(i == e ? "CHOSEN" : "SETTINGS");
       moveHeader.setText("MOVEMENT  -  " + toolTitles[e].toLowerCase());
       colourHeader.setText("COLOUR  -  " + toolTitles[e].toLowerCase());
       applyHeader.setText("APPLY  -  " + toolTitles[e].toLowerCase());
     }
-    pauseButton.setCaptionLabel(isPaused ? "CARRY ON" : "PAUSE");
     String locked = shownRunning ? "   (locked while running)" : "";
     sourceText.setText(sourceDone ? faces[(int) value("source")] + locked : "click to choose a picture");
     targetText.setText(targetDone ? outputNames[(int) value("output")] + locked : "click to choose 2D or a mesh");
@@ -452,13 +548,23 @@ public class Panel extends PApplet {
     massText.setText(massesOpen ? massStatus : massesDone ? "done  -  " + massStatus.replace("masses: ", "")
       : "click to make the masses");
 
+    cp5.draw();
+    // with every tool off, columns 3 - 4 still show the last tool's settings, under a grey cover
+    boolean anyOn = false;
+    for (String t : TOOLS) anyOn |= value(t + "_on") > 0.5;
+    if (!anyOn) {
+      fill(128, 124);
+      noStroke();
+      rect(16 + 2 * colW - 12, 0, 2 * colW, height - 28);
+    }
+
     // the status line along the bottom
     fill(50);
     noStroke();
     rect(0, height - 28, width, 28);
     fill(220);
     textAlign(LEFT, CENTER);
-    String state = isRunning ? (isPaused ? "paused" : "painting") : runWaiting ? "waiting for the masses" : "stopped";
+    String state = isRunning ? (isPaused ? (value("showWhat") > 0 ? "paused  (showing a map)" : "paused") : "painting") : runWaiting ? "waiting for the masses" : "stopped";
     text(faceName + "   " + photo.width + " x " + photo.height + "      " + state + "      " + markCount + " marks      "
       + round(outputFps) + " fps      " + massStatus, 16, height - 14);
   }
@@ -477,6 +583,7 @@ public class Panel extends PApplet {
       }
     }
     if (listOpen) return;
+    if (inBlock(startBox, 0)) startDone = true;
     for (int b : new int[] { sourceBox, targetBox, massBox }) {
       if (inBlock(b, 0)) {
         pressedIn = b;
@@ -518,6 +625,14 @@ public class Panel extends PApplet {
     }
   }
 
+  // a button's colour, and its hover colour - or grey and locked (and the lists lock everything
+  // while one is open)
+  void buttonColour(Button b, int c, int hover, boolean off) {
+    b.setColorBackground(off ? color(85) : c).setColorForeground(off ? color(85) : hover);
+    b.getCaptionLabel().setColor(off ? color(150) : color(255));
+    b.setLock(off || listOpen);
+  }
+
   // whether the mouse is in section b's colour block - only its top `h` if h > 0
   boolean inBlock(int b, float h) {
     float[] k = block[b];
@@ -530,17 +645,17 @@ public class Panel extends PApplet {
   // closing it puts the view back and marks them done
   void openMasses(boolean open) {
     massesOpen = open;
-    ScrollableList show = (ScrollableList) all.get("showWhat");
+    RadioButton show = (RadioButton) all.get("showWhat");
     Toggle light = (Toggle) all.get("light");
     int masses = java.util.Arrays.asList(showNames).indexOf("masses");
     if (open) {
       showBefore = show.getValue();
       lightBefore = light.getValue();
-      show.setValue(masses);
+      show.activate(masses);
       light.setValue(0);
     } else {
       massesDone = true;
-      if (show.getValue() == masses) show.setValue(showBefore == masses ? 0 : showBefore);
+      if (show.getValue() == masses) show.activate(showBefore == masses ? 0 : (int) showBefore);
       light.setValue(lightBefore);
     }
     layoutWanted = true;
@@ -564,6 +679,7 @@ public class Panel extends PApplet {
     else if (n.equals("pauseRun")) command("pause");
     else if (n.equals("clearCanvas")) command("clear");
     else if (n.equals("saveNow")) command("save");
+    else if (n.equals("printView")) command("print");
     else if (n.equals("loadSettings")) command("load");
     else if (n.equals("nudge")) nudgeAll();
     else if (n.equals("resetView")) command("resetView");
@@ -573,14 +689,21 @@ public class Panel extends PApplet {
       massesDone = false;      // a new picture needs its masses looked at again
     }
     else if (n.equals("output")) targetDone = true;
+    else if (n.equals("startWith")) startDone = true;
     else if (n.equals("smoothing")) command("field");
     else if (n.equals("showWhat")) command("show");
     else if (n.equals("layMasses")) command("layMasses");
     else if (n.equals("massSeed")) command("massSeed");
     else if (n.startsWith("clearLayer")) command(n);
-    else if (n.endsWith("_edit")) editing = n.substring(0, n.length() - 5);
-    // switching a tool on chooses it, so its settings show
-    else if (n.endsWith("_on") && e.getValue() > 0.5) editing = n.substring(0, n.length() - 3);
+    else if (n.startsWith("layerUp")) command("moveLayer " + n.substring(7) + " 1");
+    else if (n.startsWith("layerDown")) command("moveLayer " + n.substring(9) + " -1");
+    // switching a tool on chooses it, so its settings show, and switches the others off
+    else if (n.endsWith("_on") && e.getValue() > 0.5) {
+      editing = n.substring(0, n.length() - 3);
+      for (String t : TOOLS) {
+        if (!t.equals(editing) && value(t + "_on") > 0.5) all.get(t + "_on").setValue(0);
+      }
+    }
   }
 
 
@@ -596,6 +719,7 @@ public class Panel extends PApplet {
       return true;
     }
     if (when.startsWith("edit ")) return editing.equals(when.substring(5));
+    if (when.startsWith("on ")) return value(when.substring(3) + "_on") > 0.5;
     if (when.startsWith("open ")) return ((ScrollableList) all.get(when.substring(5))).isOpen();
     if (when.startsWith("shut ")) return !((ScrollableList) all.get(when.substring(5))).isOpen();
     if (when.equals("massesOpen")) return massesOpen;
@@ -607,6 +731,7 @@ public class Panel extends PApplet {
     if (when.startsWith("weighted ")) return value(when.substring(9) + "_startAt") == 1;
     if (when.startsWith("mouse ")) return value(when.substring(6) + "_startAt") == 3;
     if (when.equals("abstraction")) return value("abstractionOn") > 0.5;
+    if (when.equals("box")) return value("boxOn") > 0.5;
     if (when.equals("careful")) return value("abstractionOn") > 0.5 && value("protectWith") == 1;
     if (when.equals("2D abstraction")) return value("output") == 0 && value("abstractionOn") > 0.5;
     if (when.equals("2D")) return value("output") == 0;
@@ -619,12 +744,21 @@ public class Panel extends PApplet {
     return all.get(name).getValue();
   }
 
-  // put every shown row in place, top to bottom in each column, and hide the rest
+  // put every shown row in place, top to bottom in each column, and hide the rest. The columns
+  // along the bottom end just above the status line
   void layout() {
     layoutWanted = false;
     float[][] b = new float[sections][];
+    float[] top = new float[columns.size()];
     for (int i = 0; i < columns.size(); i++) {
-      float x = 16 + i * colW, y = 8;
+      float x = 16 + colAt.get(i) * colW, y = 8;
+      if (colBottom.get(i) == 1) {
+        float total = 0;
+        for (Row r : columns.get(i)) if (shown(r.when)) total += r.h;
+        y = height - 36 - total;
+        if (colLevel.get(i) >= 0) y = min(y, top[colLevel.get(i)]);
+      }
+      top[i] = y;
       for (Row r : columns.get(i)) {
         boolean rowShown = shown(r.when);
         if (rowShown && r.section >= 0) {
@@ -726,6 +860,19 @@ public class Panel extends PApplet {
 
   void column() {
     columns.add(new ArrayList<Row>());
+    colAt.append(topColumns++);
+    colBottom.append(0);
+    colLevel.append(-1);
+  }
+
+  // a column along the bottom of the window, under top column `at`. Its top is level with column
+  // `level`'s (if that's not -1, and it fits). Returns its number, for `level`
+  int bottomColumn(int at, int level) {
+    columns.add(new ArrayList<Row>());
+    colAt.append(at);
+    colBottom.append(1);
+    colLevel.append(level);
+    return columns.size() - 1;
   }
 
   // start a new row, h high, in the newest column
@@ -757,34 +904,31 @@ public class Panel extends PApplet {
     (live ? liveNames : setupNames).add(name);
   }
 
-  // a tool's box in column 2: its name with an on / off switch, and SETTINGS to choose it. The
-  // rows made after it with toolSlider() etc. are its shape settings, shown while it's chosen
+  // a tool's box in column 2: its name with an on / off box - red off, green on. The rows made
+  // after it with toolSlider() etc. are its shape settings, shown while it's on
   void toolBox(int i, boolean on) {
     curTool = TOOLS[i];
     sections++;
     toolSection[i] = sections - 1;
     row(36);
-    Toggle t = cp5.addToggle(curTool + "_on").setSize(16, 16).setValue(on);
+    Toggle t = cp5.addToggle(curTool + "_on").setSize(20, 20).setValue(on);
+    t.setColorBackground(toolOff).setColorForeground(toolOffHover).setColorActive(toolOn);
     t.setCaptionLabel(toolTitles[i]);
     t.getCaptionLabel().align(ControlP5.RIGHT_OUTSIDE, ControlP5.CENTER).setPaddingX(8);
     register(curTool + "_on", t);
-    put(t, 0, 12);
-    Button b = cp5.addButton(curTool + "_edit").setSize(90, 20);
-    b.setCaptionLabel("SETTINGS");
-    put(b, 226, 10);
-    editButtons[i] = b;
+    put(t, 0, 10);
   }
 
   // a slider on a row of its own in the current tool's box, named "tool_name"
   Slider toolSlider(String name, String caption, float lo, float hi, float value) {
     Slider s = slider(curTool + "_" + name, caption, lo, hi, value);
-    onlyWhen("edit " + curTool);
+    onlyWhen("on " + curTool);
     return s;
   }
 
   void toolModRow(String name, int by, float amount, boolean invert) {
     modRow(curTool + "_" + name, by, amount, invert);
-    onlyWhen("edit " + curTool);
+    onlyWhen("on " + curTool);
   }
 
   // a setup box: a section whose title is clicked (see mouseReleased). Returns its section
@@ -936,6 +1080,13 @@ public class Panel extends PApplet {
     w.setCaptionLabel(caption);
     register(name, w);
     put(w, 0, 0);
+  }
+
+  // a small up or down button in VIEW's LAYERS list
+  void moveButton(String name, String caption, float dx, float dy) {
+    Button b = cp5.addButton(name).setSize(22, 16);
+    b.setCaptionLabel(caption);
+    put(b, dx, dy);
   }
 
   Button button(String name, String caption, float dx, int w) {

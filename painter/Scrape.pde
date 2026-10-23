@@ -1,6 +1,7 @@
 // Scraping (the panel's SCRAPE block): taking paint off, instead of putting it on. Every scrape
 // removes paint from all the layers above the "down to" layer, so whatever is on that layer (or
-// under it) shows through - the masses, an earlier stage of the painting, the bare canvas.
+// under it) shows through - an earlier stage of the painting, or, down to the canvas, what it
+// started with (the masses, the photo or the bare canvas).
 //
 //   knife scrape   a palette knife dragged across wet paint: a broad mark, the same shape as the
 //                  knife's (the Knife tab's Blade), that doesn't take everything - streaks of
@@ -16,9 +17,12 @@ PGraphics scrapeMask;
 
 void paintScrapes() {
   if (t("on") < 0.5) return;
-  int down = (int) t("layer");                // 0 = down to layer 1, so layers 2 - 4 are scraped
+  // 0 = down to the canvas, so every layer is scraped; 1 = down to layer 1, so the layers above
+  // it in the stack are scraped ...
+  int down = (int) t("layer");
+  int from = down == 0 ? 0 : layerPosition(down - 1) + 1;
   int n = countFor(t("rate"));
-  if (n == 0 || down >= LAYERS - 1) return;
+  if (n == 0 || from >= LAYERS) return;
   if (scrapeMask == null || scrapeMask.width != photo.width || scrapeMask.height != photo.height) {
     scrapeMask = createGraphics(photo.width, photo.height, P2D);
   }
@@ -35,7 +39,8 @@ void paintScrapes() {
   }
   scrapeMask.endDraw();
   if (made == 0) return;
-  for (int L = down + 1; L < LAYERS; L++) eraseWith(layers[L], scrapeMask);
+  int[] o = layerOrder;
+  for (int p = from; p < LAYERS; p++) eraseWith(layers[o[p]], scrapeMask);
 }
 
 // the direction a scrape goes: along the form, turned by up to 90 degrees as "follow" drops

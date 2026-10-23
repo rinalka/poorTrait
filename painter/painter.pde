@@ -20,7 +20,7 @@
 // The painting is four see-through layers (the Layers tab), combined into one picture every frame.
 //
 // SAVE writes the painting, each layer, and a .json of every setting on the panel, to the saved
-// folder.
+// folder. PRINT writes what this window shows, at the photo's size.
 // LOAD SETTINGS puts a saved .json's settings back on the panel.
 
 // ---- settings ----
@@ -32,7 +32,7 @@ color clay = color(205, 198, 188);   // the Mesh tab's plain colour
 Panel panel;                 // the control panel window (the Gui tab)
 HashMap<String, Float> params = new HashMap<String, Float>();   // the panel's values, read once a frame
 java.util.concurrent.ConcurrentLinkedQueue<String> commands = new java.util.concurrent.ConcurrentLinkedQueue<String>();
-boolean saveWanted = false;
+boolean saveWanted = false, printWanted = false;
 boolean runWaiting = false;  // RUN was pressed, but the masses aren't made yet
 
 // ---- state ----
@@ -105,6 +105,8 @@ void draw() {
   params = panel.snapshot();
   for (String t : todo) handle(t);
   updateMasses();
+  // nothing paints while a map is showing (VIEW's MAPS) - you couldn't see what it's doing
+  if (isRunning && !isPaused && mapShowing()) isPaused = true;
   if (runWaiting && !massesPending()) {
     runWaiting = false;
     startRun();
@@ -119,6 +121,10 @@ void draw() {
   if (saveWanted) {
     saveAll();
     saveWanted = false;
+  }
+  if (printWanted) {
+    printView();
+    printWanted = false;
   }
   outputFps = frameRate;
 }
@@ -142,19 +148,25 @@ void handle(String c) {
   }
   else if (c.equals("run")) {
     // the masses are part of the setup, so a run waits until they're made
-    if (massesPending()) runWaiting = true;
+    if (mapShowing()) println("a map is showing - choose MAPS: none to paint");
+    else if (massesPending()) runWaiting = true;
     else startRun();
   }
   else if (c.equals("stop")) { isRunning = false; isPaused = false; runWaiting = false; }
-  else if (c.equals("pause")) { if (isRunning) isPaused = !isPaused; }
+  else if (c.equals("pause")) { if (isRunning && !(isPaused && mapShowing())) isPaused = !isPaused; }
   else if (c.equals("clear")) clearCanvas();
   else if (c.equals("save")) saveWanted = true;
+  else if (c.equals("print")) printWanted = true;
   else if (c.equals("load")) selectInput("Choose a settings file (.json)", "settingsChosen", new java.io.File(sketchPath("saved") + "/x.json"));
   else if (c.equals("field")) buildField(normalImg, (int) v("smoothing"));
   else if (c.equals("show")) rebuildShape();
   else if (c.equals("resetView")) { yaw = 0; pitch = 0; zoom = 1; swayTime = 0; }
   else if (c.equals("layMasses")) layMasses(v("layOpacity"));
   else if (c.startsWith("clearLayer")) clearLayer(int(c.substring(10)));
+  else if (c.startsWith("moveLayer")) {
+    String[] a = split(c, ' ');
+    moveLayer(int(a[1]), int(a[2]));
+  }
   else if (c.equals("massSeed")) textureSeed = random(1, 1000);
 }
 
@@ -185,9 +197,10 @@ void startRun() {
   println("run: " + faceName + ", " + (outputMode == 0 ? "2D" : "mesh") + ", seed " + runSeed);
 }
 
-// every layer back to its start (the Layers tab's clearLayer)
+// the canvas back to its start, and every layer empty (the Layers tab)
 void clearCanvas() {
   if (canvas == null) return;
+  clearStart();
   for (int i = 0; i < LAYERS; i++) clearLayer(i);
   composite();
   markCount = 0;
@@ -261,7 +274,12 @@ void useTool(int i) {
 
 // ---------------------------------------------------------------- showing it
 
-// the picture the panel's "show" list has chosen
+// whether VIEW's MAPS has a map showing instead of the painting
+boolean mapShowing() {
+  return v("showWhat") > 0;
+}
+
+// the picture VIEW's MAPS has chosen (0, none: the painting)
 PImage currentView() {
   int s = (int) v("showWhat");
   if (s == 0) return canvas != null ? canvas : photo;
@@ -336,15 +354,15 @@ PImage protectedPicture() {
 
 // the painting (photo size), the window too if it's a mesh, and every setting on the panel
 void saveAll() {
-  String dir = sketchPath("saved");
-  new java.io.File(dir).mkdirs();
-  String base = dir + "/" + faceName + "-" + nf(year(), 4) + nf(month(), 2) + nf(day(), 2) + "-" + nf(hour(), 2) + nf(minute(), 2) + nf(second(), 2);
+  String base = saveName();
   if (canvas != null) {
     canvas.save(base + ".png");
+    startLayer.save(base + "-canvas.png");
     for (int i = 0; i < LAYERS; i++) layerPicture(i).save(base + "-layer" + (i + 1) + ".png");
   }
   if (outputMode > 0 && meshShape != null) save(base + "-view.png");
   JSONObject j = panel.settingsJSON();
+  j.setString("layerOrder", join(str(layerOrder), " "));
   j.setInt("seed", runSeed);
   j.setFloat("textureSeed", textureSeed);
   j.setInt("marks", markCount);
@@ -352,11 +370,32 @@ void saveAll() {
   println("saved " + base + " (.png, each layer, .json)");
 }
 
+// PRINT: what this window shows now - the painting, a map, the mesh as it's turned, with the
+// direction field or protected parts over it if they're on - at the photo's size
+void printView() {
+  PImage v = get();
+  v.resize(photo.width, photo.height);
+  String f = saveName() + "-print.png";
+  v.save(f);
+  println("printed " + f);
+}
+
+// the saved folder, and the picture's name and the time to start a file name with
+String saveName() {
+  String dir = sketchPath("saved");
+  new java.io.File(dir).mkdirs();
+  return dir + "/" + faceName + "-" + nf(year(), 4) + nf(month(), 2) + nf(day(), 2) + "-" + nf(hour(), 2) + nf(minute(), 2) + nf(second(), 2);
+}
+
 void settingsChosen(java.io.File f) {
   if (f == null) return;
   JSONObject j = loadJSONObject(f.getAbsolutePath());
   panel.applySettings(j, !isRunning);
   if (j.hasKey("textureSeed")) textureSeed = j.getFloat("textureSeed");
+  if (j.hasKey("layerOrder")) {
+    int[] o = int(split(j.getString("layerOrder"), ' '));
+    if (o.length == LAYERS) layerOrder = o;
+  }
   println("settings from " + f.getName() + (isRunning ? " (SETUP left as it is while running)" : ""));
 }
 
