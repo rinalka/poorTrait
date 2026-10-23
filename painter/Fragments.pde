@@ -9,13 +9,13 @@
 // All the fragments in a frame are one shape made of triangles.
 
 void paintFragments(PGraphics g) {
-  if (v("fragOn") < 0.5) return;
+  if (t("on") < 0.5) return;
   IntList kinds = new IntList();                 // 0 dots, 1 dashes, 2 triangles, 3 shards
-  if (v("fragDots") > 0.5) kinds.append(0);
-  if (v("fragDashes") > 0.5) kinds.append(1);
-  if (v("fragTris") > 0.5) kinds.append(2);
-  if (v("fragShards") > 0.5) kinds.append(3);
-  int n = countFor(v("fragRate"));
+  if (t("dots") > 0.5) kinds.append(0);
+  if (t("dashes") > 0.5) kinds.append(1);
+  if (t("tris") > 0.5) kinds.append(2);
+  if (t("shards") > 0.5) kinds.append(3);
+  int n = countFor(t("rate"));
   if (kinds.size() == 0 || n == 0) return;
 
   g.noStroke();
@@ -23,10 +23,10 @@ void paintFragments(PGraphics g) {
   float lastX = -1, lastY = -1;
   for (int i = 0; i < n; i++) {
     float x, y;
-    if (lastX >= 0 && random(1) < v("fragClump")) {
+    if (lastX >= 0 && random(1) < t("clump")) {
       // near the last one
-      x = constrain(lastX + randomGaussian() * v("fragSize") * 4, 0, photo.width - 1);
-      y = constrain(lastY + randomGaussian() * v("fragSize") * 4, 0, photo.height - 1);
+      x = constrain(lastX + randomGaussian() * t("size") * 4, 0, photo.width - 1);
+      y = constrain(lastY + randomGaussian() * t("size") * 4, 0, photo.height - 1);
     } else {
       float[] s = startPoint();
       if (s == null) continue;
@@ -42,11 +42,11 @@ void paintFragments(PGraphics g) {
 }
 
 void fragment(PGraphics g, float x, float y, int kind) {
-  float size = v("fragSize") * pow(random(0.2, 1), 1.5);
+  float size = t("size") * pow(random(0.2, 1), 1.5);
   float[] f = fieldAt(x, y);
-  float ang = random(1) < v("fragFollow") && f[2] > 0.05 ? atan2(f[1], f[0]) : random(TWO_PI);
+  float ang = random(1) < t("follow") && f[2] > 0.05 ? atan2(f[1], f[0]) : random(TWO_PI);
   float ca = cos(ang), sa = sin(ang);
-  g.fill(systemColour("frag", x, y), 255 * v("fragOpacity") * random(0.7, 1));
+  g.fill(systemColour(x, y), toolAlpha(x, y) * random(0.7, 1));
 
   if (kind == 0) {                                // a dot
     disc(g, x, y, max(0.6, size * 0.4), 7);

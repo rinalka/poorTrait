@@ -61,7 +61,7 @@ void paintKnife(PGraphics g, float cx, float cy, float len, float wid, float fol
     float side = random(1) < 0.5 ? 1 : -1;
     float[] q = b.at(random(0, 0.3), side * wid * random(0.6, 1.1));
     Paint streak = p.flat(p.pick(q[0], q[1]));
-    int streaks = round(v("streaks") * random(1, 4));
+    int streaks = round(t("streaks") * random(1, 4));
     for (int k = 0; k < streaks; k++) {
       float v0 = random(-1, 0.7), v1 = v0 + random(0.08, 0.4);
       b.band(g, random(0, 0.1), random(0.3, 0.9), v0, v1, streak, alpha * 0.6, 0);
@@ -70,7 +70,7 @@ void paintKnife(PGraphics g, float cx, float cy, float len, float wid, float fol
 
   // the ridge along the knife's edge: a thin strip, lighter if that edge faces the light
   // (from the upper left), darker if it faces away
-  float ridge = v("ridge");
+  float ridge = t("ridge");
   if (ridge > 0) {
     float[] edgeNormal = b.sideNormal(b.ridgeSide);
     boolean lit = edgeNormal[0] * -0.7 + edgeNormal[1] * -0.7 > 0;
@@ -106,9 +106,9 @@ class Blade {
     bend = random(-0.08, 0.08);
     samples = (int) random(8, 16);
     ridgeSide = random(1) < 0.5 ? 1 : -1;
-    leaf = allowLeaf && random(1) < v("leaf");
+    leaf = allowLeaf && random(1) < t("leaf");
 
-    rough = v("ragged") * 1.5;
+    rough = t("ragged") * 1.5;
     float seedA = random(1000), seedB = random(1000);
     // one or two places where an edge suddenly jumps in or out
     float stepAt = random(0.2, 0.8), stepBy = random(-0.25, 0.25) * rough;

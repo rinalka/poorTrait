@@ -48,11 +48,6 @@ void clearLayer(int i) {
   g.endDraw();
 }
 
-// the layer a mark system paints on (its LAYERS "paints on" choice)
-PGraphics layerFor(String choice) {
-  return layers[constrain((int) v(choice), 0, LAYERS - 1)];
-}
-
 // combine the layers into `canvas`, bottom to top
 void composite() {
   if (canvas == null) return;

@@ -11,8 +11,8 @@
 // shape for each.
 
 void paintLines(PGraphics g) {
-  if (v("linesOn") < 0.5) return;
-  int n = countFor(v("lineRate"));
+  if (t("on") < 0.5) return;
+  int n = countFor(t("rate"));
   if (n == 0) return;
   g.noStroke();
   g.beginShape(TRIANGLES);
@@ -24,12 +24,12 @@ void fineLine(PGraphics g) {
   float[] s = startPoint();
   if (s == null) return;
   float x = s[0], y = s[1];
-  boolean follows = random(1) < v("lineFollow");
+  boolean follows = random(1) < t("follow");
   float[] f = fieldAt(x, y);
   float heading = follows && f[2] > 0.05 ? atan2(f[1], f[0]) + (random(1) < 0.5 ? PI : 0) : random(TWO_PI);
-  float len = v("lineLength") * random(0.4, 1.2);
-  float w = v("lineWidth"), wander = v("lineWander"), broken = v("lineBroken");
-  g.fill(systemColour("line", x, y), 255 * v("lineOpacity"));
+  float len = t("length") * random(0.4, 1.2);
+  float w = t("width"), wander = t("wander"), broken = t("broken");
+  g.fill(systemColour(x, y), toolAlpha(x, y));
 
   int steps = max(2, round(len / 3));
   float stepLen = len / steps, turning = 0, seed = random(1000);
@@ -78,19 +78,27 @@ int countFor(float rate) {
   return (int) rate + (random(1) < rate - (int) rate ? 1 : 0);
 }
 
-// the colour for one of the mark systems (prefix "splat", "line" or "frag"): picked up where it
-// lands (as COLOUR's "pick up from" says) or the accent, then pushed away from the photo's
-// lightness there by the system's "contrast" - dark spots get light marks and light spots dark ones
-color systemColour(String prefix, float x, float y) {
+// the colour for a splatter, line or fragment, from the tool's COLOUR settings: the accent now and
+// then (accent chance), otherwise picked up where it lands, jittered - then pushed away from the
+// photo's lightness there by "contrast", so dark spots get light marks and light spots dark ones
+color systemColour(float x, float y) {
   color c;
-  if (v(prefix + "Colour") == 1) c = accentNow;
+  if (random(1) < t("accentChance")) c = accentNow;
   else {
     Paint p = new Paint();
-    p.pickup = (int) v("pickup");
-    p.mix = v("mix");
-    c = p.pickRaw(x, y);
+    p.pickup = (int) t("pickup");
+    p.mix = t("mix");
+    c = jitter(p.pickRaw(x, y));
   }
-  float k = v(prefix + "Contrast");
+  float k = t("contrast");
   if (k > 0) c = lerpColor(c, brightness(photoAt(x, y)) > 128 ? color(0) : color(255), k * 0.85);
   return c;
+}
+
+// how solid a mark at (x, y) is, from the tool's APPLY settings: its opacity (turned up and down
+// by a map if it has one), and now and then a thin see-through wash
+float toolAlpha(float x, float y) {
+  float a = 255 * modulated("opacity", x, y);
+  if (random(1) < t("washes")) a *= random(0.28, 0.5);
+  return a;
 }

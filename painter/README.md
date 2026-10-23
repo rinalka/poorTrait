@@ -47,130 +47,51 @@ Press **Ctrl+R** in Processing (or the play button). Two windows open:
 - **The output window**, which is the size of the photo
 - **The control panel**
 
-Pick a photo under SETUP, then press **RUN**.
+Work down SETUP 1, 2 and 3 (each box turns green when it's done), then press **RUN**.
 
 ## The control panel
 
-Controls that don't apply to your current choices are hidden. For example, the knife
-settings only appear when the palette knife is chosen.
+The panel has four columns:
 
-### SETUP: fixed for a whole run
+1. **SETUP 1–3, VIEW, RUN**: the photo, 2D or a mesh, and the large colour masses the painting
+   can start from; then what you're looking at, and the run.
+2. **The tools**: what does the drawing. These are BRUSH, PALETTE KNIFE, SPLATTER, LINES,
+   FRAGMENTS and SCRAPE. Each box has an on/off tick box, so any mix of tools can paint at once.
+3. **MOVEMENT, COLOUR, APPLY**: how a tool moves and where it lands, where its colour comes from,
+   and how solid it is. These belong to **the tool chosen in column 2**: every tool has its own
+   set.
+4. **ABSTRACTION, LAYERS**: where the face may be broken up, and which layer each tool paints on.
 
-| Control | What it does |
+**Choosing a tool:** press **SETTINGS** in a tool's box. The box gets a dark frame and opens to
+show the tool's shape settings, and columns 3 and 4 switch to that tool's settings. Their
+headings show which tool that is, for example "MOVEMENT - splatter". Switching a tool on also
+chooses it. The other tools keep their settings while you work on this one.
+
+Controls that don't apply to your current choices are hidden. For example, the map settings
+under "start at" only appear when "weighted by map" is chosen.
+
+## Column 1
+
+### SETUP 1, 2 and 3
+
+The setup is three boxes, done in order. Click a box to set it up. Once it's done it turns green.
+The setup stays fixed for a whole run, so these boxes are locked while a run is going (except the
+palette sliders in SETUP 3). Press STOP to change them.
+
+| Box | What it does |
 |---|---|
-| source | Which photo to paint |
-| output | **2D canvas**, **mesh: just the person** (a 3D model of the face), or **mesh: whole photo** (the whole picture as a relief) |
-| canvas colour | The colour the painting starts on |
-| masses: blobs, roundness, join, smooth edges, number of colours | How the photo is cut into the masses. See MASSES below. |
+| SETUP 1  SOURCE | Click it for a list of the photos, and pick one. Its name shows under the title. |
+| SETUP 2  TARGET | Click it to choose **2D canvas**, **mesh: just the person** (a 3D model of the face) or **mesh: whole photo** (the whole picture as a relief). For 2D canvas, the canvas colour wheel appears under it: the colour the painting starts on. |
+| SETUP 3  MASSES | Click it to open the masses' sliders (below). The output window shows the masses as they are now, with the light off so their colours are true. When they look right, click the box's title: the sliders close, the view goes back to what it was, and the box turns green. |
 
-These controls are locked while a run is going. Press STOP to change them.
+Picking a new photo turns SETUP 3 back from green, because the new photo has new masses to look
+at.
 
-### RUN
-
-| Button | What it does |
-|---|---|
-| RUN / STOP | Start a new painting, or end the run. The painting stays on screen after STOP. |
-| PAUSE | Freeze the painting. You can still turn the mesh. |
-| CLEAR | Wipe the canvas and keep painting |
-| SAVE | Save the painting, each layer (as see-through PNGs you can stack in Photoshop), and every setting to `painter/saved/`. For a mesh it also saves the view as you see it. |
-| LOAD SETTINGS | Load the settings from a saved `.json` |
-| NUDGE + how far | Shift every live setting by a random amount. "how far" sets how big the change is. Good for when you're stuck. |
-
-### VIEW
-
-| Control | What it does |
-|---|---|
-| show | What appears in the window or on the mesh: the painting, the photo, the masses, or one of the maps |
-| direction field | (2D) Draws the lines the marks follow over the picture |
-| mesh background, sway, STRAIGHT ON | (mesh) Background colour, a gentle side-to-side turn, and resetting the view |
-| light on | (mesh) Turns the light on or off. With it off, the model shows its picture's true colours with no shading, which helps when judging the masses' colours. The **l** key does the same. |
-
-**Moving the mesh:** drag to turn it, right-drag to move the light, and use the wheel to zoom.
-
-### BRUSH
-
-| Control | What it does |
-|---|---|
-| bristle stroke / palette knife | The kind of mark. Bristle strokes are long, curving ribbons that taper. Knife marks are short, flat slabs with a ridge and a torn end. |
-| marks per frame | How fast it paints. 0 turns the brushes off, for example to paint only splatters. |
-| size | How long each mark is, in pixels |
-| width | Width as a share of the length. Low values make thin lines, 1 makes square dabs. |
-| ragged edges | How rough the edges are |
-| pointed end | (stroke) How much the end tapers |
-| streaks | (knife, flat colours only) Streaks of a second colour dragged through the mark |
-| leaf shapes | (knife) The share of marks pointed at both ends |
-| ridge along the edge | (knife) The piled-up paint along the knife's edge |
-
-### MOVEMENT
-
-| Control | What it does |
-|---|---|
-| follow the form | How closely marks follow the shape of the face. At 1 they lie along the form, at 0 they point anywhere. |
-| around the form / across it | Marks wrap around the face like contour lines, or cross it |
-| field smoothing | How smooth the direction field is. Changes when you let go of the slider. |
-| bend along the form | (stroke) How much a stroke curves as it goes |
-| start at | Where marks land: **random**, **weighted by map** (more marks where the chosen map is light), **grid** (rows across the picture), or **mouse** (2D only; hold a mouse button down in the output window and paint by hand) |
-
-### ABSTRACTION
-
-These controls decide how much of the face the marks may break up. They use the importance map,
-which records how much each part of the picture matters for recognising the face.
-
-| Control | What it does |
-|---|---|
-| on | Switches ABSTRACTION off: nothing is protected, and marks and splatters go anywhere. The other controls show once it's on. |
-| abstraction | At 0, everything that matters is protected and marks stay off the face. At 1, marks go anywhere. In between, the less important parts go first. |
-| anchors | The most important few spots (eyes, nostrils, mouth) are always protected, however high the abstraction is. Raise it to keep more of them. |
-| protected parts get | **no marks**: whatever is underneath (the masses or the photo) stays readable. **careful marks**: small marks that follow the form, in the photo's exact colours, which repair the features as the painting goes on. |
-| careful mark size | (careful marks) How big the careful marks are, compared with the others |
-| show protected parts | (2D) Shows the protected parts in red |
-
-### LAYERS
-
-The painting is four see-through layers, one on top of another. Layer 1 is at the bottom and
-starts solid: the canvas colour with the masses or the photo on it (see MASSES). Layers 2–4
-start empty. What you see, and what the mesh wears, is all of them combined.
-
-| Control | What it does |
-|---|---|
-| a row for each layer | **Tick box**: shown or hidden. **Slider**: the layer's opacity. **List**: how it combines with the layers under it (normal, multiply, screen, add, lightest). **CLEAR**: empties that layer. On layer 1, CLEAR puts back its starting picture. |
-| paints on layer | Which layer the brushes, splatter, lines and fragments each paint on. By default the brushes are on 2, lines and fragments on 3, and splatter on 4. |
-
-Hiding, fading or recombining a layer changes the painting immediately, including what's already
-painted on it. The main CLEAR button (in RUN) resets every layer.
-
-The APPLY "blend" setting works against what's already on that same layer. On an empty layer,
-modes like multiply have nothing to work against, so use the layer's own blend list instead.
-
-### COLOUR
-
-| Control | What it does |
-|---|---|
-| pick up from | Where the paint comes from: **photo**, **canvas (wet)** (what's already painted, so marks smear into each other), a **mix** of the two, or the **masses** (their palette, so the palette sliders below change the marks' colours too) |
-| carry | What the brush holds: **one colour**; **start to end** (fades from one colour to another); **two colours** (one down each side); **chunk** (a piece of the picture, smeared along the mark); **copy** (copies the picture through the mark's shape) |
-| hue / saturation / brightness jitter | Random changes to each mark's colour |
-| accent colour + chance | Now and then a mark is painted in this colour instead |
-
-### APPLY
-
-| Control | What it does |
-|---|---|
-| opacity | How solid each mark is |
-| see-through washes | The share of marks painted thin and see-through |
-| blend | How marks combine with the paint underneath: normal, multiply (darkens), screen (lightens), and so on |
-
-### MASSES
-
-The masses are the photo cut into large patches, each painted one of a few colours. They are
-the painting's large colour regions.
-
-How the photo is cut up is part of SETUP, so it stays fixed for a whole run. The masses are
-worked out in the background when you pick a picture, and again whenever one of SETUP's masses
-sliders changes (once you let go of the slider). They take a few seconds. The status line at the
-bottom of the panel shows their progress. If you press RUN before they're ready, the panel says
+**The masses** are the photo cut into large patches, each painted one of a few colours. They are
+the painting's large colour regions. They're worked out in the background when you pick a photo,
+and again whenever one of the first five sliders changes (once you let go of it). They take a few
+seconds, and the box shows their progress. If you press RUN before they're ready, the panel says
 "waiting for the masses" and the run starts once they are.
-
-In SETUP:
 
 | Control | What it does |
 |---|---|
@@ -179,93 +100,195 @@ In SETUP:
 | join similar neighbours | Joins touching patches that are close in colour. Higher values give fewer, bigger masses. |
 | smooth edges | Rounds off the jagged edges between masses |
 | number of colours | How many colours the masses are painted with (2–32) |
+| palette hue / saturation / brightness | Shift the hue and scale the saturation and brightness of every colour in the palette at once. They change instantly, and can be changed during a run. |
+| start the canvas with | What layer 1 holds at RUN and CLEAR: the **plain** canvas colour, the **masses**, or the **photo**. Starting with the masses and then breaking them up with marks is the idea behind ABSTRACTION. |
 
-In MASSES (these can change during a run):
+### VIEW
 
 | Control | What it does |
 |---|---|
-| start the canvas with | What the canvas holds at RUN and CLEAR: the **plain** canvas colour, the **masses**, or the **photo**. Starting with the masses and then breaking them up with marks is the idea behind ABSTRACTION. |
-| LAY ON NOW + opacity | Lays the masses over the painting as it is now, as see-through as the opacity slider says |
-| textured paint, NEW TEXTURE | Gives each colour a mottled, streaky texture instead of flat colour. NEW TEXTURE picks different textures. |
-| palette hue / saturation / brightness | Shift the hue and scale the saturation and brightness of every colour in the palette at once. They change instantly. |
+| show | What appears in the window or on the mesh: the painting, the photo, the masses, or one of the maps |
+| direction field over the picture | (2D) Draws the lines the marks follow |
+| direction field smoothing | How smooth the direction field is, for every tool. Changes when you let go of the slider. |
+| mesh background, sway, STRAIGHT ON | (mesh) Background colour, a gentle side-to-side turn, and resetting the view |
+| light on | (mesh) Turns the light on or off. With it off, the model shows its picture's true colours with no shading. The **l** key does the same. |
+
+**Moving the mesh:** drag to turn it, right-drag to move the light, and use the wheel to zoom.
+
+### RUN
+
+| Button | What it does |
+|---|---|
+| RUN / STOP | Start a new painting, or end the run. The painting stays on screen after STOP. |
+| PAUSE | Freeze the painting. You can still turn the mesh. |
+| CLEAR | Reset every layer and keep painting |
+| SAVE | Save the painting, each layer (as see-through PNGs you can stack in Photoshop), and every setting to `painter/saved/`. For a mesh it also saves the view as you see it. |
+| LOAD SETTINGS | Load the settings from a saved `.json` |
+| NUDGE + how far | Shift every live setting, for every tool, by a random amount. "how far" sets how big the change is. Good for when you're stuck. |
+
+## Column 2: the tools
+
+Each tool has a tick box (on/off) and a SETTINGS button (see "Choosing a tool" above). The
+settings below are the ones that open in the tool's box. How fast a tool works is set in its box:
+marks, clusters, lines or fragments **per frame**. Below 1 means not every frame: 0.3 is about 3
+frames in 10.
+
+All the tools respect ABSTRACTION: they stay off protected parts. Brush and palette knife can
+make careful marks there instead.
+
+### BRUSH
+
+Long, curving bristle strokes that taper.
+
+| Control | What it does |
+|---|---|
+| marks per frame | How fast it paints |
+| size | How long each mark is, in pixels. It has a "by" row, see "Letting the maps decide". |
+| width | Width as a share of the length. Low values make thin lines, 1 makes square dabs. |
+| ragged edges | How rough the edges are |
+| pointed end | How much the end tapers |
+| bend along the form | How much a stroke curves to follow the form as it goes |
+
+### PALETTE KNIFE
+
+Short, flat slabs of paint with a ridge along one edge and a torn end.
+
+| Control | What it does |
+|---|---|
+| marks per frame, size, width, ragged edges | As for BRUSH |
+| streaks of a second colour | Streaks dragged through the mark. Only for flat colours, so hidden when COLOUR's carry is chunk or copy. |
+| leaf shapes | The share of marks pointed at both ends |
+| ridge along the edge | The piled-up paint along the knife's edge |
 
 ### SPLATTER
 
-Splatters are a separate mark system, painted alongside the brushes. Each splatter is a
-cluster: usually a big splat in the middle, with drops scattered round it. Most drops land near
-the middle and a few fly far. Most are tiny, a few are big, and the big ones have little satellite
-droplets. Some clusters fling long, thin trails outwards that end in a drop.
-
-Clusters are placed by MOVEMENT's "start at", like brush marks, so "mouse" lets you splatter by
-hand. They respect ABSTRACTION: no drop lands on a protected part.
+Each splatter is a cluster: usually a big splat in the middle, with drops scattered round it.
+Most drops land near the middle and a few fly far. Most are tiny, a few are big, and the big ones
+have little satellite droplets. Some clusters fling long, thin trails outwards that end in a drop.
 
 | Control | What it does |
 |---|---|
-| splatter | Turns splatters on. The other controls show once it's on. |
-| clusters per frame | How often. Below 1 means not every frame: 0.3 is about 3 frames in 10. |
+| clusters per frame | How often |
 | drops per cluster | How many drops are scattered round each splat |
 | size | The size of the biggest splat |
 | how many big drops | At 0 nearly every drop is tiny. Higher values give more big drops. |
-| spread | How far the drops scatter |
+| scatter | How far the drops scatter |
 | flung trails | How many clusters throw long, thin trails, and how many |
-| opacity | How solid the drops are |
-| colour | **picked up** (as COLOUR's "pick up from" says, where the cluster lands) or the **accent colour** |
-| contrast with the photo | Pushes the colour away from the photo's lightness where it lands: light drops on dark parts, dark drops on light parts |
-| colour variation | How much each drop's colour varies from the cluster's |
+| drop colour variation | How much each drop's colour varies from the cluster's |
 
 ### LINES
 
 Fine lines that wander like a pen drawn loosely across the picture. Each line curves one way and
-then another, and its width changes along it like pen pressure, thin at both ends. Some lines
-follow the form and the rest ignore it. They respect ABSTRACTION.
+then another, and its width changes along it like pen pressure, thin at both ends.
 
 | Control | What it does |
 |---|---|
-| fine lines | Turns lines on. The other controls show once it's on. |
-| lines per frame | How often. Below 1 means not every frame. |
+| lines per frame | How often |
 | length, width | How long and how thick the lines are |
 | wander | How much a line curves about. At 0 lines go nearly straight. |
-| share following the form | The share of lines pulled along the form, like contour lines. The rest ignore it. |
 | broken | How often a line skips, leaving gaps |
-| opacity | How solid the lines are |
-| colour, contrast with the photo | As for SPLATTER |
+
+For lines, MOVEMENT's "follow the form" is the share of lines pulled along the form, like
+contour lines. The rest ignore it.
 
 ### FRAGMENTS
 
-Tiny dots, dashes, triangles and shards, for surface complexity. They respect ABSTRACTION.
+Tiny dots, dashes, triangles and shards, for surface complexity.
 
 | Control | What it does |
 |---|---|
-| fragments | Turns fragments on. The other controls show once it's on. |
 | fragments per frame | How many |
 | size | The size of the biggest ones. Most are smaller. |
 | clumping | The share that land near the one before, so they gather in little drifts instead of spreading evenly |
-| lined up with the form | The share turned along the form. The rest point anywhere. |
-| opacity | How solid they are |
 | dots, dashes, triangles, shards | Which kinds to make |
-| colour, contrast with the photo | As for SPLATTER |
+
+For fragments, MOVEMENT's "follow the form" is the share turned along the form.
 
 ### SCRAPE
 
-Takes paint off instead of putting it on. Each scrape removes paint from every layer above the
-"down to" layer, so what's on that layer (or under it) shows through: the masses, an earlier
-stage of the painting, or the bare canvas. Scrapes are placed by "start at" like other marks, and
-respect ABSTRACTION.
+Takes paint off instead of putting it on. Each scrape removes paint from every layer above its
+"scrape down to" layer (set in LAYERS), so what's on that layer (or under it) shows through: the
+masses, an earlier stage of the painting, or the bare canvas.
 
 | Control | What it does |
 |---|---|
-| scrape | Turns scraping on. The other controls show once it's on. |
 | knife scrape / scratches | **Knife scrape**: a broad palette-knife mark that leaves streaks of paint behind where it didn't quite catch. **Scratches**: short, thin, wandering lines scored through. |
-| down to layer | The layer that shows through. Everything above it is scraped. |
 | scrapes per frame | How often |
 | length, width | Their size. Scratches are much thinner than the width says. |
+| ragged edges | How rough a knife scrape's edges are |
 | how much comes off | At 1 a scrape takes nearly everything. Lower values leave more behind. |
-| follow the form | At 1 scrapes run along the form. At 0 they point anywhere. |
+
+Scrape has MOVEMENT settings but no COLOUR or APPLY.
+
+## Column 3: the chosen tool's movement, colour and opacity
+
+### MOVEMENT
+
+| Control | What it does |
+|---|---|
+| follow the form | How closely marks follow the shape of the face. At 1 they lie along the form, at 0 they point anywhere. Splatter has no direction, so it doesn't have this. Brush and knife have a "by" row for it. |
+| around the form / across it | Marks wrap around the face like contour lines, or cross it |
+| start at | Where marks land: **random**, **weighted by map** (more marks where the chosen map is light), **grid** (rows across the picture), or **mouse** (2D only; hold a mouse button down in the output window and paint by hand) |
+
+### COLOUR
+
+| Control | What it does |
+|---|---|
+| pick up from | Where the paint comes from: **photo**, **canvas (wet)** (what's already painted, so marks smear into each other), a **mix** of the two, or the **masses** (their palette, so the SETUP 3 palette sliders change the tool's colours too) |
+| carry | (brush and knife) What the brush holds: **one colour**; **start to end** (fades from one colour to another); **two colours** (one down each side); **chunk** (a piece of the picture, smeared along the mark); **copy** (copies the picture through the mark's shape) |
+| contrast with the photo | (splatter, lines, fragments) Pushes the colour away from the photo's lightness where it lands: light marks on dark parts, dark marks on light parts |
+| hue / saturation / brightness jitter | Random changes to each mark's colour |
+| accent chance | How often a mark is painted in the accent colour instead. At 1, every mark is. |
+| accent colour | The accent colour, shared by all the tools |
+
+### APPLY
+
+| Control | What it does |
+|---|---|
+| opacity | How solid each mark is. It has a "by" row. |
+| see-through washes | The share of marks painted thin and see-through |
+| blend | How marks combine with the paint already on their layer: normal, multiply (darkens), screen (lightens), and so on |
+
+The blend works against what's already on the same layer. On an empty layer, modes like multiply
+have nothing to work against, so use the layer's own blend in LAYERS instead.
+
+## Column 4
+
+### ABSTRACTION
+
+These controls decide how much of the face the tools may break up. They use the importance map,
+which records how much each part of the picture matters for recognising the face. ABSTRACTION is
+shared by all the tools.
+
+| Control | What it does |
+|---|---|
+| on | Switches ABSTRACTION off: nothing is protected, and every tool goes anywhere. The other controls show once it's on. |
+| abstraction | At 0, everything that matters is protected and marks stay off the face. At 1, marks go anywhere. In between, the less important parts go first. |
+| anchors | The most important few spots (eyes, nostrils, mouth) are always protected, however high the abstraction is. Raise it to keep more of them. |
+| protected parts get | **no marks**: whatever is underneath (the masses or the photo) stays readable. **careful marks**: the brush and knife paint small marks that follow the form, in the photo's exact colours, which repair the features as the painting goes on. The other tools always stay off protected parts. |
+| careful mark size | (careful marks) How big the careful marks are, compared with the others |
+| show protected parts | (2D) Shows the protected parts in red |
+
+### LAYERS
+
+The painting is four see-through layers, one on top of another. Layer 1 is at the bottom and
+starts solid: the canvas colour with the masses or the photo on it (see SETUP 3). Layers 2–4
+start empty. What you see, and what the mesh wears, is all of them combined.
+
+| Control | What it does |
+|---|---|
+| a row for each layer | **Tick box**: shown or hidden. **Slider**: the layer's opacity. **List**: how it combines with the layers under it (normal, multiply, screen, add, lightest). **CLEAR**: empties that layer. On layer 1, CLEAR puts back its starting picture. |
+| paints on layer | Which layer each tool paints on. By default brush and knife are on 2, lines and fragments on 3, and splatter on 4. |
+| scrape down to | The layer scraping reveals. Every layer above it is scraped. |
+
+Hiding, fading or recombining a layer changes the painting immediately, including what's already
+painted on it. The main CLEAR button (in RUN) resets every layer.
 
 ## Letting the maps decide
 
-Size, follow the form and opacity each have a **by** list underneath them. Choose a map there
-and the setting changes from place to place across the picture:
+Some settings have a **by** row underneath them: size (brush and knife), follow the form (brush
+and knife) and opacity (every tool except scrape). Choose a map there and the setting changes
+from place to place across the picture:
 
 - **by**: which map to use
   - **importance**: the parts that make the face recognisable (eyes, nose, mouth)

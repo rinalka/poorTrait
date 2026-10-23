@@ -14,33 +14,42 @@
 final int ONE = 0, START_END = 1, TWO = 2, CHUNK = 3, COPY = 4;   // the panel's "carry" choices
 int gridI = 0;               // how far the grid start has got
 
+// The tools (the panel's column 2), in the order they paint. Each has its own settings - its
+// shape in its box, and its MOVEMENT, COLOUR and APPLY - named with the tool's name in front:
+// "knife_size", "splat_drops" ... `tool` is the one painting now, and t("size") reads its setting.
+String[] TOOLS = { "brush", "knife", "splat", "line", "frag", "scrape" };
+String[] toolTitles = { "BRUSH", "PALETTE KNIFE", "SPLATTER", "LINES", "FRAGMENTS", "SCRAPE" };
+String tool = "brush";
+
+float t(String name) {
+  return v(tool + "_" + name);
+}
+
 void paintMark(PGraphics g) {
   float[] s = startPoint();
   if (s == null) return;
   float x = s[0], y = s[1];
   boolean careful = random(1) < protection(x, y);
   if (careful && v("protectWith") == 0) return;               // protected spots get no marks
-  float len = max(3, modulated("markSize", x, y) * random(0.5, 1) * (careful ? v("carefulSize") : 1));
-  float wid = max(1, len * v("markWidth") * random(0.7, 1.3));
+  float len = max(3, modulated("size", x, y) * random(0.5, 1) * (careful ? v("carefulSize") : 1));
+  float wid = max(1, len * t("width") * random(0.7, 1.3));
   float follow = careful ? max(0.9, modulated("follow", x, y)) : modulated("follow", x, y);
-  float alpha = 255 * modulated("opacity", x, y);
-  if (random(1) < v("washes")) alpha *= random(0.28, 0.5);    // a thin, see-through wash
-  Paint p = careful ? carefulPaint(alpha) : newPaint(alpha);
-  if (v("brushType") == 0) paintStroke(g, x, y, len, wid, follow, p);
+  Paint p = careful ? carefulPaint(toolAlpha(x, y)) : newPaint(toolAlpha(x, y));
+  if (tool.equals("brush")) paintStroke(g, x, y, len, wid, follow, p);
   else paintKnife(g, x, y, len, wid, follow, p);
   markCount++;
 }
 
-// a slider's value at (x, y). Its map (if it has one) turns it down where the map is dark - or
-// where it's light, with invert on. "amount" is how far down: at 1, black on the map takes it
+// the tool's slider `name` at (x, y). Its map (if it has one) turns it down where the map is dark -
+// or where it's light, with invert on. "amount" is how far down: at 1, black on the map takes it
 // all the way to 0; at 0 the map does nothing
 float modulated(String name, float x, float y) {
-  float base = v(name);
-  int by = (int) v(name + "_by");
+  float base = t(name);
+  int by = (int) t(name + "_by");
   if (by <= 0) return base;
   float m = mapAt(by, x, y);
-  if (v(name + "_inv") > 0.5) m = 1 - m;
-  return base * lerp(1, m, v(name + "_amt"));
+  if (t(name + "_inv") > 0.5) m = 1 - m;
+  return base * lerp(1, m, t(name + "_amt"));
 }
 
 // how protected (x, y) is from being broken up, 0 .. 1: spots more important than the abstraction
@@ -63,11 +72,11 @@ float smoothstep(float e0, float e1, float x) {
 
 // where the next mark starts, or null for no mark this time
 float[] startPoint() {
-  int mode = (int) v("startAt");
+  int mode = (int) t("startAt");
   if (mode == 1) {
     // weighted by a map: try spots until the map says yes - light places get more marks
-    int by = (int) v("startMap");
-    boolean inv = v("startInv") > 0.5;
+    int by = (int) t("startMap");
+    boolean inv = t("startInv") > 0.5;
     float x = 0, y = 0;
     for (int k = 0; k < 40; k++) {
       x = random(photo.width);
@@ -80,7 +89,7 @@ float[] startPoint() {
   }
   if (mode == 2) {
     // a grid, row by row like reading a page, each mark a little off its spot
-    float step = max(3, v("markSize") * 0.35);
+    float step = max(3, max(t("size"), 30) * 0.35);
     int cols = ceil(photo.width / step), rows = ceil(photo.height / step);
     int i = gridI++ % (cols * rows);
     return new float[] { constrain((i % cols + random(1)) * step, 0, photo.width - 1),
@@ -90,8 +99,8 @@ float[] startPoint() {
     // round the mouse, only while a button is held down in the output window
     if (!mousePressed) return null;
     float sc = width / (float) photo.width;
-    return new float[] { constrain(mouseX / sc + randomGaussian() * v("spread"), 0, photo.width - 1),
-                         constrain(mouseY / sc + randomGaussian() * v("spread"), 0, photo.height - 1) };
+    return new float[] { constrain(mouseX / sc + randomGaussian() * t("spread"), 0, photo.width - 1),
+                         constrain(mouseY / sc + randomGaussian() * t("spread"), 0, photo.height - 1) };
   }
   return new float[] { random(photo.width), random(photo.height) };
 }
@@ -99,10 +108,10 @@ float[] startPoint() {
 Paint newPaint(float alpha) {
   Paint p = new Paint();
   p.alpha = alpha;
-  p.carry = (int) v("carry");
-  p.pickup = (int) v("pickup");
-  p.mix = v("mix");
-  if (random(1) < v("accentChance")) {
+  p.carry = (int) t("carry");
+  p.pickup = (int) t("pickup");
+  p.mix = t("mix");
+  if (random(1) < t("accentChance")) {
     p.accent = true;
     p.accentColour = accentNow;
     if (p.textured()) p.carry = ONE;
@@ -119,7 +128,7 @@ Paint newPaint(float alpha) {
 Paint carefulPaint(float alpha) {
   Paint p = new Paint();
   p.alpha = alpha;
-  p.carry = (int) v("carry") == CHUNK ? COPY : (int) v("carry");
+  p.carry = (int) t("carry") == CHUNK ? COPY : (int) t("carry");
   p.pickup = 0;
   p.exact = true;
   p.tex = photo;
@@ -205,8 +214,8 @@ class Paint {
 // a little lighter or darker, a little off in hue and saturation, as much as the jitter sliders say
 color jitter(color c) {
   float[] hsb = java.awt.Color.RGBtoHSB(c >> 16 & 255, c >> 8 & 255, c & 255, null);
-  float h = hsb[0] + random(-1, 1) * v("jitterH");
-  float s = constrain(hsb[1] + random(-1, 1) * v("jitterS"), 0, 1);
-  float b = constrain(hsb[2] + random(-1, 1) * v("jitterB"), 0, 1);
+  float h = hsb[0] + random(-1, 1) * t("jitterH");
+  float s = constrain(hsb[1] + random(-1, 1) * t("jitterS"), 0, 1);
+  float b = constrain(hsb[2] + random(-1, 1) * t("jitterB"), 0, 1);
   return java.awt.Color.HSBtoRGB(h - floor(h), s, b) | 0xFF000000;
 }

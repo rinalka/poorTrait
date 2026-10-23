@@ -103,7 +103,6 @@ void draw() {
   String c;
   while ((c = commands.poll()) != null) todo.add(c);
   params = panel.snapshot();
-  around = v("around") == 0;
   for (String t : todo) handle(t);
   updateMasses();
   if (runWaiting && !massesPending()) {
@@ -195,11 +194,23 @@ void clearCanvas() {
   gridI = 0;
 }
 
+// whether tool number i is switched on
+boolean toolOn(int i) {
+  return v(TOOLS[i] + "_on") > 0.5;
+}
+
 void paintFrame() {
-  // brushes that pick up wet paint need to see the canvas - read it once a frame
-  int pickup = (int) v("pickup");
-  boolean textured = v("carry") >= CHUNK;
-  if (pickup == 1 || pickup == 2) {
+  // tools that pick up wet paint need to see the canvas - read it once a frame
+  boolean wet = false, textured = false;
+  for (int i = 0; i < TOOLS.length; i++) {
+    if (!toolOn(i)) continue;
+    int pickup = (int) v(TOOLS[i] + "_pickup");
+    if (pickup == 1 || pickup == 2) {
+      wet = true;
+      textured |= v(TOOLS[i] + "_carry") >= CHUNK;
+    }
+  }
+  if (wet) {
     canvas.loadPixels();
     canvasPix = canvas.pixels;
     if (textured) {
@@ -213,27 +224,38 @@ void paintFrame() {
   }
   accentNow = panel.colour("accent");
 
-  // each mark system paints on the layer LAYERS says, in this order
-  String[] layerChoice = { "layerBrush", "layerSplat", "layerLines", "layerFrag" };
-  int blend = blendModes[constrain((int) v("blendType"), 0, blendModes.length - 1)];
+  // each tool that's on paints on its layer (LAYERS), with its own blend (APPLY), layer by layer
+  // and in the TOOLS order within a layer. Scrape (the last tool) takes paint off afterwards
   for (int L = 0; L < LAYERS; L++) {
-    boolean used = false;
-    for (String ch : layerChoice) used |= (int) v(ch) == L;
-    if (!used) continue;
-    PGraphics g = layers[L];
-    g.beginDraw();
-    g.blendMode(blend);
-    if ((int) v("layerBrush") == L) {
-      int n = (int) v("perFrame");
-      for (int i = 0; i < n; i++) paintMark(g);
+    PGraphics g = null;
+    for (int i = 0; i < TOOLS.length - 1; i++) {
+      if (!toolOn(i) || (int) v(TOOLS[i] + "_layer") != L) continue;
+      if (g == null) {
+        g = layers[L];
+        g.beginDraw();
+      }
+      useTool(i);
+      g.blendMode(blendModes[constrain((int) t("blend"), 0, blendModes.length - 1)]);
+      if (i <= 1) {
+        int n = (int) t("perFrame");
+        for (int k = 0; k < n; k++) paintMark(g);
+      }
+      else if (TOOLS[i].equals("splat")) paintSplatters(g);
+      else if (TOOLS[i].equals("line")) paintLines(g);
+      else paintFragments(g);
+      g.blendMode(BLEND);
     }
-    if ((int) v("layerSplat") == L) paintSplatters(g);
-    if ((int) v("layerLines") == L) paintLines(g);
-    if ((int) v("layerFrag") == L) paintFragments(g);
-    g.blendMode(BLEND);
-    g.endDraw();
+    if (g != null) g.endDraw();
   }
+  useTool(TOOLS.length - 1);
   paintScrapes();
+}
+
+// make tool i the one painting: t() reads its settings, and the direction field goes around or
+// across the form as its MOVEMENT says
+void useTool(int i) {
+  tool = TOOLS[i];
+  around = t("around") == 0;
 }
 
 

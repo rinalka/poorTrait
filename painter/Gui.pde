@@ -1,13 +1,19 @@
 // The control panel: a second window, built with controlP5.
 //
-// Three columns:
-//   SETUP, RUN, VIEW              what to paint and where - SETUP is locked while a run is going
-//   BRUSH, MOVEMENT, ABSTRACTION  the kind of mark, its size and shape, how it travels,
-//   LAYERS                        where the face may be broken up, and the four layers
-//   COLOUR, APPLY, MASSES         what paint it picks up and carries, how it goes onto the
-//                                 canvas, and the large colour masses underneath
-//   SPLATTER, LINES, FRAGMENTS,   mark systems of their own (design doc Stage 5), painted
-//   SCRAPE                        alongside the brushes - and scraping paint off
+// Four columns:
+//   SETUP 1 - 3, VIEW, RUN        the source picture, the target (2D or a mesh) and the masses,
+//                                 each a box that's clicked and turns green once it's done -
+//                                 locked while a run is going
+//   the tools                     what does the drawing: brush, palette knife, splatter, lines,
+//                                 fragments, scrape - each on or off, with its shape settings
+//   MOVEMENT, COLOUR, APPLY       how the chosen tool moves, where its colour comes from, and
+//                                 how solid it is
+//   ABSTRACTION, LAYERS           where the face may be broken up, and the four layers
+//
+// Every tool has its own MOVEMENT, COLOUR and APPLY settings, named with the tool in front
+// ("knife_follow", "splat_opacity" ...). SETTINGS in a tool's box chooses it (`editing`): its
+// box opens and columns 3 - 4 show its settings. The painter reads them with t("follow") while
+// that tool paints (the Marks tab).
 //
 // Every control has a name (its first argument below), and the painter asks for values by that
 // name with v("name") - sliders give their value, toggles 0 or 1, lists and radio buttons the
@@ -15,8 +21,8 @@
 // turned up and down by a map: see modulated() in the Marks tab.
 //
 // The controls are laid out in rows, and a row (or one control in it) can be shown only when
-// it means something - the knife's controls only when the knife is chosen, and so on: see
-// onlyWhen() and shown(). Hidden rows take no space; the rows under them move up.
+// it means something - the chosen tool's settings, the map row only for "weighted by map", and
+// so on: see onlyWhen() and shown(). Hidden rows take no space; the rows under them move up.
 //
 // The panel runs in its own window and thread. It never touches the canvas itself: buttons
 // send a command() to the painter, which does it at the start of its next frame.
@@ -40,12 +46,27 @@ public class Panel extends PApplet {
   boolean shownRunning = false;
   boolean listOpen = false;  // one of the dropdown lists is open
   Button runButton, pauseButton;
-  Textlabel setupLabel;
+  // the three setup boxes: their colour blocks, the line under each title, and whether each is done
+  int sourceBox, targetBox, massBox;
+  Textlabel boxTitle, massTitle, sourceText, targetText, massText;
+  boolean sourceDone, targetDone, massesDone;
+  volatile boolean massesOpen = false;
+  float showBefore, lightBefore;      // put back when the masses box closes
+  int pressedIn = -1;                 // the setup box a click started in
+  ScrollableList picked;              // a setup list an item was just picked from
+  int green = 0xFFA6DA9C;             // a setup box that's done
+  String[] outputNames = { "2D canvas", "mesh: just the person", "mesh: whole photo" };
   int colW = 340;            // width of a column
   int sections = 0;          // SETUP, RUN, VIEW ... each gets a block of colour behind it
   int[] blockColour = new int[0];
   float[][] block = new float[0][];   // each section's x, top, bottom as laid out, or null if hidden
   int dark = 0xFF232323;     // text on the coloured blocks (dark grey)
+  volatile String editing = "knife";   // the tool chosen in column 2, whose settings columns 3 - 4 show
+  String shownEditing = "";
+  Button[] editButtons = new Button[TOOLS.length];
+  int[] toolSection = new int[TOOLS.length];   // each tool box's colour block
+  String curTool;            // the tool whose box is being built
+  Textlabel moveHeader, colourHeader, applyHeader;
 
   // one row of controls, and when it's shown (see shown())
   class Row {
@@ -58,7 +79,7 @@ public class Panel extends PApplet {
   }
 
   public void settings() {
-    size(1400, 1200);
+    size(1400, 1000);
   }
 
   public void setup() {
@@ -77,31 +98,72 @@ public class Panel extends PApplet {
     cp5.setColorActive(color(110, 170, 240));
     cp5.setColorBackground(color(60));
 
-    // ---------------------------------------------------- column 1: SETUP, RUN, VIEW
+    // ---------------------------------------------------- column 1: SETUP 1 - 3, VIEW, RUN
+    // The setup is three boxes, done in order: click one to choose. Each turns green once it's
+    // done. They're locked while a run is going (all but the masses' palette sliders)
     column();
     live = false;
-    setupLabel = header("SETUP  (fixed for a run)");
-    row(20 * (faces.length + 1) + 12);
-    ScrollableList src = cp5.addScrollableList("source").setSize(300, 20 * (faces.length + 1))
-      .setBarHeight(20).setItemHeight(20).addItems(java.util.Arrays.asList(faces)).setType(ScrollableList.LIST);
-    src.setCaptionLabel("source picture");
-    src.setValue(0);
-    register("source", src);
-    put(src, 0, 0);
-    radio("output", new String[] { "2D canvas", "mesh: just the person", "mesh: whole photo" }, 1, 0);
+    sourceBox = setupBox("SETUP 1   SOURCE");
+    sourceText = boxText("source");
+    setupList("source", faces);
+    targetBox = setupBox("SETUP 2   TARGET");
+    targetText = boxText("output");
+    setupList("output", outputNames);
     colourWheel("ground", "canvas colour", color(222, 214, 200));
-    // the masses (the Masses tab) are part of the setup: made again when one of these is let go,
-    // and RUN waits for them
-    row(22);
-    label("masses: how the photo is cut up", 0);
-    slider("massBlobs", "blobs", 200, 6000, 1500).setDecimalPrecision(0);
-    slider("massRound", "roundness", 1, 40, 10).setDecimalPrecision(1);
-    slider("massJoin", "join similar neighbours", 0, 40, 8).setDecimalPrecision(1);
-    slider("massSmooth", "smooth edges", 0, 16, 3).setDecimalPrecision(1);
-    Slider mp = slider("massPaints", "number of colours", 2, 32, 12).setDecimalPrecision(0);
+    onlyWhen("ground");
+    // the masses (the Masses tab): clicking the box opens these and shows the masses; clicking
+    // its title again closes them. They're made again when one of the sliders is let go, and RUN
+    // waits for them
+    massBox = setupBox("SETUP 3   MASSES");
+    massTitle = boxTitle;
+    massText = boxText("");
+    massSlider("massBlobs", "blobs", 200, 6000, 1500).setDecimalPrecision(0);
+    massSlider("massRound", "roundness", 1, 40, 10).setDecimalPrecision(1);
+    massSlider("massJoin", "join similar neighbours", 0, 40, 8).setDecimalPrecision(1);
+    massSlider("massSmooth", "smooth edges", 0, 16, 3).setDecimalPrecision(1);
+    Slider mp = massSlider("massPaints", "number of colours", 2, 32, 12).setDecimalPrecision(0);
     mp.setNumberOfTickMarks(31).snapToTickMarks(true).showTickMarks(false);
-
     live = true;
+    massSlider("massHue", "palette hue", -0.5, 0.5, 0);
+    massSlider("massSat", "palette saturation", 0, 2, 1);
+    massSlider("massBri", "palette brightness", 0, 2, 1);
+    row(20);
+    label("start the canvas with  (at RUN and CLEAR)", 0);
+    onlyWhen("massesOpen");
+    radio("startWith", new String[] { "plain", "masses", "photo" }, 3, 1);
+    onlyWhen("massesOpen");
+    row(6);
+    onlyWhen("massesOpen");
+    // for later: laying the masses on during a run, and textured paint (never shown for now)
+    row(32);
+    button("layMasses", "LAY ON NOW", 0, 110);
+    sliderAt("layOpacity", "opacity", 0, 1, 0.5, 120, 5, 110);
+    onlyWhen("later");
+    row(30);
+    toggle("massTexture", "textured paint", false, 0);
+    button("massSeed", "NEW TEXTURE", 170, 110);
+    onlyWhen("later");
+
+    header("VIEW");
+    row(28);
+    label("show", 0);
+    list("showWhat", showNames, 0, 50, 140);
+    row(26);
+    toggle("fieldOverlay", "direction field over the picture", false, 0);
+    onlyWhen("2D");
+    Slider sm = slider("smoothing", "direction field smoothing", 0, 24, 4);
+    sm.setNumberOfTickMarks(13).snapToTickMarks(true).showTickMarks(false);
+    sm.setTriggerEvent(Slider.RELEASE);          // rebuilding the field takes a moment - only on letting go
+    colourWheel("meshBg", "mesh background", color(30));
+    onlyWhen("mesh");
+    row(30);
+    toggle("sway", "sway", false, 0);
+    button("resetView", "STRAIGHT ON", 160, 120);
+    onlyWhen("mesh");
+    row(26);
+    toggle("light", "light on  (off shows the true colours)", true, 0);
+    onlyWhen("mesh");
+
     header("RUN");
     row(32);
     runButton = button("runStop", "RUN", 0, 96);
@@ -114,63 +176,154 @@ public class Panel extends PApplet {
     button("nudge", "NUDGE", 0, 96);
     sliderAt("nudgeAmount", "how far", 0, 1, 0.2, 106, 4, 110);
 
-    header("VIEW");
-    row(28);
-    label("show", 0);
-    list("showWhat", showNames, 0, 50, 140);
-    row(26);
-    toggle("fieldOverlay", "direction field over the picture", false, 0);
-    onlyWhen("2D");
-    colourWheel("meshBg", "mesh background", color(30));
-    onlyWhen("mesh");
-    row(30);
-    toggle("sway", "sway", false, 0);
-    button("resetView", "STRAIGHT ON", 160, 120);
-    onlyWhen("mesh");
-    row(26);
-    toggle("light", "light on  (off shows the true colours)", true, 0);
-    onlyWhen("mesh");
-
-    // ---------------------------------------------------- column 2: BRUSH, MOVEMENT
+    // ---------------------------------------------------- column 2: the tools
+    // Each tool's box: switched on or off, SETTINGS to choose it for columns 3 and 4, and - only
+    // while it's chosen - its shape settings
     column();
-    header("BRUSH");
-    radio("brushType", new String[] { "bristle stroke", "palette knife" }, 2, 1);
-    slider("perFrame", "marks per frame", 0, 400, 20).setDecimalPrecision(0);
-    slider("markSize", "size (pixels, longest)", 4, 400, 110).setDecimalPrecision(0);
-    modRow("markSize", 1, 0.8, true);
-    slider("markWidth", "width (share of length)", 0.05, 1, 0.35);
-    slider("ragged", "ragged edges", 0, 1, 0.5);
-    slider("taper", "pointed end", 0, 1, 1);
-    onlyWhen("stroke");
-    slider("streaks", "streaks of a second colour", 0, 1, 0.4);
-    onlyWhen("knifeFlat");
-    slider("leaf", "leaf shapes", 0, 1, 0.35);
-    onlyWhen("knife");
-    slider("ridge", "ridge along the edge", 0, 1, 0.5);
-    onlyWhen("knife");
-    row(10);
+    toolBox(0, false);
+    toolSlider("perFrame", "marks per frame", 0, 400, 20).setDecimalPrecision(0);
+    toolSlider("size", "size (pixels, longest)", 4, 400, 110).setDecimalPrecision(0);
+    toolModRow("size", 1, 0.8, true);
+    toolSlider("width", "width (share of length)", 0.05, 1, 0.35);
+    toolSlider("ragged", "ragged edges", 0, 1, 0.5);
+    toolSlider("taper", "pointed end", 0, 1, 1);
+    toolSlider("curving", "bend along the form", 0, 1, 0.5);
 
-    header("MOVEMENT");
-    slider("follow", "follow the form", 0, 1, 0.6);
-    modRow("follow", 0, 0.5, false);
-    radio("around", new String[] { "around the form", "across it" }, 2, 0);
-    Slider sm = slider("smoothing", "field smoothing", 0, 24, 4);
-    sm.setNumberOfTickMarks(13).snapToTickMarks(true).showTickMarks(false);
-    sm.setTriggerEvent(Slider.RELEASE);          // rebuilding the field takes a moment - only on letting go
-    slider("curving", "bend along the form", 0, 1, 0.5);
-    onlyWhen("stroke");
-    row(20);
-    label("start at", 0);
-    radio("startAt", new String[] { "random", "weighted by map", "grid", "mouse (2D, hold button)" }, 2, 0);
-    row(28);
-    label("map", 12);
-    list("startMap", mapNames, 1, 50, 120);
-    toggle("startInv", "invert", false, 182);
-    onlyWhen("weighted");
-    slider("spread", "spread round the mouse", 0, 300, 60).setDecimalPrecision(0);
-    onlyWhen("mouse");
-    row(10);
+    toolBox(1, true);
+    toolSlider("perFrame", "marks per frame", 0, 400, 20).setDecimalPrecision(0);
+    toolSlider("size", "size (pixels, longest)", 4, 400, 110).setDecimalPrecision(0);
+    toolModRow("size", 1, 0.8, true);
+    toolSlider("width", "width (share of length)", 0.05, 1, 0.35);
+    toolSlider("ragged", "ragged edges", 0, 1, 0.5);
+    toolSlider("streaks", "streaks of a second colour", 0, 1, 0.4);
+    onlyWhen("edit knife&knifeFlat");
+    toolSlider("leaf", "leaf shapes", 0, 1, 0.35);
+    toolSlider("ridge", "ridge along the edge", 0, 1, 0.5);
 
+    toolBox(2, false);
+    toolSlider("rate", "clusters per frame", 0.05, 10, 0.5);
+    toolSlider("drops", "drops per cluster", 0, 200, 40).setDecimalPrecision(0);
+    toolSlider("size", "size (biggest splat)", 2, 120, 24).setDecimalPrecision(0);
+    toolSlider("big", "how many big drops", 0, 1, 0.3);
+    toolSlider("scatter", "scatter", 5, 400, 60).setDecimalPrecision(0);
+    toolSlider("trails", "flung trails", 0, 1, 0.3);
+    toolSlider("vary", "drop colour variation", 0, 0.5, 0.1);
+
+    toolBox(3, false);
+    toolSlider("rate", "lines per frame", 0.05, 20, 1);
+    toolSlider("length", "length", 10, 800, 200).setDecimalPrecision(0);
+    toolSlider("width", "width", 0.3, 8, 1.2);
+    toolSlider("wander", "wander", 0, 1, 0.4);
+    toolSlider("broken", "broken", 0, 1, 0.2);
+
+    toolBox(4, false);
+    toolSlider("rate", "fragments per frame", 0.1, 100, 10).setDecimalPrecision(1);
+    toolSlider("size", "size", 1, 60, 8).setDecimalPrecision(1);
+    toolSlider("clump", "clumping", 0, 1, 0.5);
+    row(26);
+    toggle("frag_dots", "dots", true, 0);
+    toggle("frag_dashes", "dashes", true, 66);
+    toggle("frag_tris", "triangles", true, 146);
+    toggle("frag_shards", "shards", true, 236);
+    onlyWhen("edit frag");
+
+    toolBox(5, false);
+    radio("scrape_kind", new String[] { "knife scrape", "scratches" }, 2, 0);
+    onlyWhen("edit scrape");
+    toolSlider("rate", "scrapes per frame", 0.05, 20, 1);
+    toolSlider("length", "length", 10, 500, 140).setDecimalPrecision(0);
+    toolSlider("width", "width", 2, 150, 40).setDecimalPrecision(0);
+    toolSlider("ragged", "ragged edges", 0, 1, 0.5);
+    toolSlider("strength", "how much comes off", 0, 1, 0.8);
+
+    // ---------------------------------------------------- column 3: MOVEMENT, COLOUR, APPLY
+    // ... of the tool chosen in column 2. Every tool has its own set; only the chosen one's shows
+    column();
+    float[] followDefault = { 0.6, 0.6, 0, 0.5, 0.3, 0.5 };
+    moveHeader = header("MOVEMENT");
+    for (int i = 0; i < TOOLS.length; i++) {
+      String n = TOOLS[i];
+      if (!n.equals("splat")) {
+        slider(n + "_follow", "follow the form", 0, 1, followDefault[i]);
+        onlyWhen("edit " + n);
+        if (i <= 1) {
+          modRow(n + "_follow", 0, 0.5, false);
+          onlyWhen("edit " + n);
+        }
+        radio(n + "_around", new String[] { "around the form", "across it" }, 2, 0);
+        onlyWhen("edit " + n);
+      }
+      row(20);
+      label("start at", 0);
+      onlyWhen("edit " + n);
+      radio(n + "_startAt", new String[] { "random", "weighted by map", "grid", "mouse (2D, hold button)" }, 2, 0);
+      onlyWhen("edit " + n);
+      row(28);
+      label("map", 12);
+      list(n + "_startMap", mapNames, 1, 50, 120);
+      toggle(n + "_startInv", "invert", false, 182);
+      onlyWhen("edit " + n + "&weighted " + n);
+      slider(n + "_spread", "spread round the mouse", 0, 300, 60).setDecimalPrecision(0);
+      onlyWhen("edit " + n + "&mouse " + n);
+    }
+    row(6);
+
+    colourHeader = header("COLOUR");
+    onlyWhen("notScrape");
+    float[] contrastDefault = { 0, 0, 0.5, 0.6, 0.5 };
+    for (int i = 0; i < TOOLS.length - 1; i++) {
+      String n = TOOLS[i];
+      row(20);
+      label("pick up from", 0);
+      onlyWhen("edit " + n);
+      radio(n + "_pickup", new String[] { "photo", "canvas (wet)", "mix", "masses" }, 2, 0);
+      onlyWhen("edit " + n);
+      slider(n + "_mix", "mix: share from the canvas", 0, 1, 0.5);
+      onlyWhen("edit " + n + "&mix " + n);
+      if (i <= 1) {
+        row(20);
+        label("carry", 0);
+        onlyWhen("edit " + n);
+        radio(n + "_carry", new String[] { "one colour", "start to end", "two colours", "chunk (dipped)", "copy" }, 2, 1);
+        onlyWhen("edit " + n);
+      } else {
+        slider(n + "_contrast", "contrast with the photo", 0, 1, contrastDefault[i]);
+        onlyWhen("edit " + n);
+      }
+      slider(n + "_jitterH", "hue jitter", 0, 0.2, 0.02);
+      onlyWhen("edit " + n);
+      slider(n + "_jitterS", "saturation jitter", 0, 0.5, 0.06);
+      onlyWhen("edit " + n);
+      slider(n + "_jitterB", "brightness jitter", 0, 0.5, 0.08);
+      onlyWhen("edit " + n);
+      slider(n + "_accentChance", "accent chance", 0, 1, 0);
+      onlyWhen("edit " + n);
+    }
+    colourWheel("accent", "accent colour  (all tools)", color(200, 60, 30));
+    onlyWhen("notScrape");
+    row(6);
+    onlyWhen("notScrape");
+
+    applyHeader = header("APPLY");
+    onlyWhen("notScrape");
+    float[] opacityDefault = { 0.9, 0.9, 0.9, 0.8, 0.9 };
+    float[] washesDefault = { 0.15, 0.15, 0, 0, 0 };
+    for (int i = 0; i < TOOLS.length - 1; i++) {
+      String n = TOOLS[i];
+      slider(n + "_opacity", "opacity", 0, 1, opacityDefault[i]);
+      onlyWhen("edit " + n);
+      modRow(n + "_opacity", 0, 0.5, false);
+      onlyWhen("edit " + n);
+      slider(n + "_washes", "see-through washes", 0, 1, washesDefault[i]);
+      onlyWhen("edit " + n);
+      row(28);
+      label("blend", 0);
+      list(n + "_blend", blendNames, 0, 50, 140);
+      onlyWhen("edit " + n);
+    }
+
+    // ---------------------------------------------------- column 4: ABSTRACTION, LAYERS
+    column();
     header("ABSTRACTION");
     row(26);
     toggle("abstractionOn", "on  (off: nothing is protected)", true, 0);
@@ -191,7 +344,7 @@ public class Panel extends PApplet {
     row(6);
 
     // the four layers (the Layers tab), bottom one first: shown, opacity, how it's combined with
-    // the layers under it, and a button to empty it. Then which layer each mark system paints on
+    // the layers under it, and a button to empty it. Then which layer each tool paints on
     header("LAYERS  (1 = bottom)");
     for (int i = 0; i < 4; i++) {
       row(28);
@@ -203,156 +356,15 @@ public class Panel extends PApplet {
     }
     row(22);
     label("paints on layer", 0);
-    layerChoice("layerBrush", "brushes", 1);
-    layerChoice("layerSplat", "splatter", 3);
-    layerChoice("layerLines", "lines", 2);
-    layerChoice("layerFrag", "fragments", 2);
-
-    // ---------------------------------------------------- column 3: COLOUR, APPLY
-    column();
-    header("COLOUR");
-    row(20);
-    label("pick up from", 0);
-    radio("pickup", new String[] { "photo", "canvas (wet)", "mix", "masses" }, 2, 0);
-    slider("mix", "mix: share from the canvas", 0, 1, 0.5);
-    onlyWhen("mix");
-    row(20);
-    label("carry", 0);
-    radio("carry", new String[] { "one colour", "start to end", "two colours", "chunk (dipped)", "copy" }, 2, 1);
-    slider("jitterH", "hue jitter", 0, 0.2, 0.02);
-    slider("jitterS", "saturation jitter", 0, 0.5, 0.06);
-    slider("jitterB", "brightness jitter", 0, 0.5, 0.08);
-    colourWheel("accent", "accent colour", color(200, 60, 30));
-    cur.h += 6;
-    sliderAt("accentChance", "accent chance", 0, 0.2, 0, 120, 40, 90);
-
-    header("APPLY");
-    slider("opacity", "opacity", 0, 1, 0.9);
-    modRow("opacity", 0, 0.5, false);
-    slider("washes", "see-through washes", 0, 1, 0.15);
-    row(28);
-    label("blend", 0);
-    list("blendType", blendNames, 0, 50, 140);
-    row(6);
-
-    // how the masses look and how they're used - how they're cut is in SETUP
-    header("MASSES");
-    row(20);
-    label("start the canvas with  (at RUN and CLEAR)", 0);
-    radio("startWith", new String[] { "plain", "masses", "photo" }, 3, 1);
-    row(32);
-    button("layMasses", "LAY ON NOW", 0, 110);
-    sliderAt("layOpacity", "opacity", 0, 1, 0.5, 120, 5, 110);
-    row(30);
-    toggle("massTexture", "textured paint", false, 0);
-    button("massSeed", "NEW TEXTURE", 170, 110);
-    slider("massHue", "palette hue", -0.5, 0.5, 0);
-    slider("massSat", "palette saturation", 0, 2, 1);
-    slider("massBri", "palette brightness", 0, 2, 1);
-
-    // ---------------------------------------------------- column 4: SPLATTER (Stage 5)
-    column();
-    header("SPLATTER");
-    row(26);
-    toggle("splatterOn", "splatter", false, 0);
-    slider("splatRate", "clusters per frame", 0.05, 10, 0.5);
-    onlyWhen("splatter");
-    slider("splatDrops", "drops per cluster", 0, 200, 40).setDecimalPrecision(0);
-    onlyWhen("splatter");
-    slider("splatSize", "size (biggest splat)", 2, 120, 24).setDecimalPrecision(0);
-    onlyWhen("splatter");
-    slider("splatBig", "how many big drops", 0, 1, 0.3);
-    onlyWhen("splatter");
-    slider("splatSpread", "spread", 5, 400, 60).setDecimalPrecision(0);
-    onlyWhen("splatter");
-    slider("splatTrails", "flung trails", 0, 1, 0.3);
-    onlyWhen("splatter");
-    slider("splatOpacity", "opacity", 0, 1, 0.9);
-    onlyWhen("splatter");
-    row(20);
-    label("colour", 0);
-    onlyWhen("splatter");
-    radio("splatColour", new String[] { "picked up", "accent colour" }, 2, 0);
-    onlyWhen("splatter");
-    slider("splatContrast", "contrast with the photo", 0, 1, 0.5);
-    onlyWhen("splatter");
-    slider("splatVary", "colour variation", 0, 0.5, 0.1);
-    onlyWhen("splatter");
-    row(6);
-
-    header("LINES");
-    row(26);
-    toggle("linesOn", "fine lines", false, 0);
-    slider("lineRate", "lines per frame", 0.05, 20, 1);
-    onlyWhen("lines");
-    slider("lineLength", "length", 10, 800, 200).setDecimalPrecision(0);
-    onlyWhen("lines");
-    slider("lineWidth", "width", 0.3, 8, 1.2);
-    onlyWhen("lines");
-    slider("lineWander", "wander", 0, 1, 0.4);
-    onlyWhen("lines");
-    slider("lineFollow", "share following the form", 0, 1, 0.5);
-    onlyWhen("lines");
-    slider("lineBroken", "broken", 0, 1, 0.2);
-    onlyWhen("lines");
-    slider("lineOpacity", "opacity", 0, 1, 0.8);
-    onlyWhen("lines");
-    row(20);
-    label("colour", 0);
-    onlyWhen("lines");
-    radio("lineColour", new String[] { "picked up", "accent colour" }, 2, 0);
-    onlyWhen("lines");
-    slider("lineContrast", "contrast with the photo", 0, 1, 0.6);
-    onlyWhen("lines");
-    row(6);
-
-    header("FRAGMENTS");
-    row(26);
-    toggle("fragOn", "fragments", false, 0);
-    slider("fragRate", "fragments per frame", 0.1, 100, 10).setDecimalPrecision(1);
-    onlyWhen("fragments");
-    slider("fragSize", "size", 1, 60, 8).setDecimalPrecision(1);
-    onlyWhen("fragments");
-    slider("fragClump", "clumping", 0, 1, 0.5);
-    onlyWhen("fragments");
-    slider("fragFollow", "lined up with the form", 0, 1, 0.3);
-    onlyWhen("fragments");
-    slider("fragOpacity", "opacity", 0, 1, 0.9);
-    onlyWhen("fragments");
-    row(26);
-    toggle("fragDots", "dots", true, 0);
-    toggle("fragDashes", "dashes", true, 66);
-    toggle("fragTris", "triangles", true, 146);
-    toggle("fragShards", "shards", true, 236);
-    onlyWhen("fragments");
-    row(20);
-    label("colour", 0);
-    onlyWhen("fragments");
-    radio("fragColour", new String[] { "picked up", "accent colour" }, 2, 0);
-    onlyWhen("fragments");
-    slider("fragContrast", "contrast with the photo", 0, 1, 0.5);
-    onlyWhen("fragments");
-    row(6);
-
-    header("SCRAPE");
-    row(26);
-    toggle("scrapeOn", "scrape  (takes paint off)", false, 0);
-    radio("scrapeKind", new String[] { "knife scrape", "scratches" }, 2, 0);
-    onlyWhen("scrape");
-    row(26);
-    label("down to layer", 0);
-    radioAt("scrapeTo", new String[] { "1", "2", "3" }, 0, 110, 34);
-    onlyWhen("scrape");
-    slider("scrapeRate", "scrapes per frame", 0.05, 20, 1);
-    onlyWhen("scrape");
-    slider("scrapeSize", "length", 10, 500, 140).setDecimalPrecision(0);
-    onlyWhen("scrape");
-    slider("scrapeWidth", "width", 2, 150, 40).setDecimalPrecision(0);
-    onlyWhen("scrape");
-    slider("scrapeStrength", "how much comes off", 0, 1, 0.8);
-    onlyWhen("scrape");
-    slider("scrapeFollow", "follow the form", 0, 1, 0.5);
-    onlyWhen("scrape");
+    int[] layerDefault = { 1, 1, 3, 2, 2 };
+    for (int i = 0; i < TOOLS.length - 1; i++) {
+      row(24);
+      label(toolTitles[i].toLowerCase(), 12);
+      radioAt(TOOLS[i] + "_layer", new String[] { "1", "2", "3", "4" }, layerDefault[i], 130, 44);
+    }
+    row(24);
+    label("scrape down to", 12);
+    radioAt("scrape_layer", new String[] { "1", "2", "3" }, 0, 130, 44);
 
     // the lists open downwards over the controls under them, so draw them last - the higher
     // ones last of all, so an open list is never hidden behind the one below it
@@ -385,13 +397,28 @@ public class Panel extends PApplet {
 
   public void draw() {
     background(38);
+    if (picked != null) {
+      picked.close();
+      picked = null;
+      layoutWanted = true;
+    }
     if (layoutWanted) layout();
     // the coloured blocks behind the sections (the controls are drawn on top after this)
     noStroke();
     for (int i = 0; i < sections; i++) {
       if (block[i] == null) continue;
-      fill(blockColour[i]);
+      boolean done = i == sourceBox && sourceDone || i == targetBox && targetDone || i == massBox && massesDone;
+      fill(done ? green : blockColour[i]);
       rect(block[i][0] - 8, block[i][1], colW - 12, block[i][2] - block[i][1], 8);
+    }
+    // a frame round the chosen tool's box
+    int ch = toolSection[max(0, java.util.Arrays.asList(TOOLS).indexOf(editing))];
+    if (block[ch] != null) {
+      noFill();
+      stroke(dark);
+      strokeWeight(2);
+      rect(block[ch][0] - 8, block[ch][1], colW - 12, block[ch][2] - block[ch][1], 8);
+      noStroke();
     }
     // while a list is open it covers the controls under it - lock them so a click on the list
     // can't move a slider underneath as well
@@ -409,7 +436,21 @@ public class Panel extends PApplet {
       lockSetup(shownRunning);
     }
     runButton.setCaptionLabel(isRunning || runWaiting ? "STOP" : "RUN");
+    if (!editing.equals(shownEditing)) {
+      shownEditing = editing;
+      int e = java.util.Arrays.asList(TOOLS).indexOf(editing);
+      for (int i = 0; i < TOOLS.length; i++) editButtons[i].setCaptionLabel(i == e ? "CHOSEN" : "SETTINGS");
+      moveHeader.setText("MOVEMENT  -  " + toolTitles[e].toLowerCase());
+      colourHeader.setText("COLOUR  -  " + toolTitles[e].toLowerCase());
+      applyHeader.setText("APPLY  -  " + toolTitles[e].toLowerCase());
+    }
     pauseButton.setCaptionLabel(isPaused ? "CARRY ON" : "PAUSE");
+    String locked = shownRunning ? "   (locked while running)" : "";
+    sourceText.setText(sourceDone ? faces[(int) value("source")] + locked : "click to choose a picture");
+    targetText.setText(targetDone ? outputNames[(int) value("output")] + locked : "click to choose 2D or a mesh");
+    massTitle.setText(massesOpen ? "SETUP 3   MASSES     click here when they look right" : "SETUP 3   MASSES");
+    massText.setText(massesOpen ? massStatus : massesDone ? "done  -  " + massStatus.replace("masses: ", "")
+      : "click to make the masses");
 
     // the status line along the bottom
     fill(50);
@@ -425,7 +466,23 @@ public class Panel extends PApplet {
   // controlP5 only counts a click on a radio button's or toggle's little square - make a click on
   // the words beside it count too
   public void mousePressed() {
+    pressedIn = -1;
+    // a click off an open setup list closes it
+    for (String n : new String[] { "source", "output" }) {
+      ScrollableList l = (ScrollableList) all.get(n);
+      if (l.isOpen() && !l.isMouseOver()) {
+        l.close();
+        layoutWanted = true;
+        return;
+      }
+    }
     if (listOpen) return;
+    for (int b : new int[] { sourceBox, targetBox, massBox }) {
+      if (inBlock(b, 0)) {
+        pressedIn = b;
+        return;
+      }
+    }
     for (ControllerInterface c : all.values()) {
       if (!c.isVisible()) continue;
       if (c instanceof RadioButton) {
@@ -442,6 +499,51 @@ public class Panel extends PApplet {
         return;
       }
     }
+  }
+
+  // a click on a setup box: opens its list, or opens and closes the masses. Done when the button
+  // is let go - the list opens under the mouse, and controlP5 picks a list item on letting go
+  public void mouseReleased() {
+    int b = pressedIn;
+    pressedIn = -1;
+    if (b < 0 || !inBlock(b, 0)) return;
+    if (b == massBox) {
+      if (!massesOpen) openMasses(true);
+      else if (inBlock(b, 34)) openMasses(false);    // only the title closes it
+    } else if (!isRunning) {
+      ScrollableList l = (ScrollableList) all.get(b == sourceBox ? "source" : "output");
+      l.open();
+      l.show();
+      layoutWanted = true;
+    }
+  }
+
+  // whether the mouse is in section b's colour block - only its top `h` if h > 0
+  boolean inBlock(int b, float h) {
+    float[] k = block[b];
+    if (k == null) return false;
+    float bottom = h > 0 ? k[1] + h : k[2];
+    return mouseX >= k[0] - 8 && mouseX <= k[0] - 20 + colW && mouseY >= k[1] && mouseY <= bottom;
+  }
+
+  // opening the masses box shows the masses (with the light off, so their colours are true);
+  // closing it puts the view back and marks them done
+  void openMasses(boolean open) {
+    massesOpen = open;
+    ScrollableList show = (ScrollableList) all.get("showWhat");
+    Toggle light = (Toggle) all.get("light");
+    int masses = java.util.Arrays.asList(showNames).indexOf("masses");
+    if (open) {
+      showBefore = show.getValue();
+      lightBefore = light.getValue();
+      show.setValue(masses);
+      light.setValue(0);
+    } else {
+      massesDone = true;
+      if (show.getValue() == masses) show.setValue(showBefore == masses ? 0 : showBefore);
+      light.setValue(lightBefore);
+    }
+    layoutWanted = true;
   }
 
   // whether the mouse is on the caption to the right of this toggle (and it isn't locked). A radio
@@ -465,33 +567,48 @@ public class Panel extends PApplet {
     else if (n.equals("loadSettings")) command("load");
     else if (n.equals("nudge")) nudgeAll();
     else if (n.equals("resetView")) command("resetView");
-    else if (n.equals("source")) command("source");
+    else if (n.equals("source")) {
+      command("source");
+      sourceDone = true;
+      massesDone = false;      // a new picture needs its masses looked at again
+    }
+    else if (n.equals("output")) targetDone = true;
     else if (n.equals("smoothing")) command("field");
     else if (n.equals("showWhat")) command("show");
     else if (n.equals("layMasses")) command("layMasses");
     else if (n.equals("massSeed")) command("massSeed");
     else if (n.startsWith("clearLayer")) command(n);
+    else if (n.endsWith("_edit")) editing = n.substring(0, n.length() - 5);
+    // switching a tool on chooses it, so its settings show
+    else if (n.endsWith("_on") && e.getValue() > 0.5) editing = n.substring(0, n.length() - 3);
   }
 
 
   // ---------------------------------------------------- showing and hiding
 
   // whether a row marked `when` means anything with the choices as they are now
+  // Several conditions can be joined with &, e.g. "edit knife&mix knife": all must be true.
+  // Most take a tool's name: "edit knife" is true while the knife is chosen in column 2
   boolean shown(String when) {
     if (when.equals("")) return true;
-    if (when.equals("stroke")) return value("brushType") == 0;
-    if (when.equals("knife")) return value("brushType") == 1;
-    if (when.equals("knifeFlat")) return value("brushType") == 1 && value("carry") < CHUNK;   // chunk and copy have no streaks
-    if (when.equals("mix")) return value("pickup") == 2;
+    if (when.contains("&")) {
+      for (String w : when.split("&")) if (!shown(w)) return false;
+      return true;
+    }
+    if (when.startsWith("edit ")) return editing.equals(when.substring(5));
+    if (when.startsWith("open ")) return ((ScrollableList) all.get(when.substring(5))).isOpen();
+    if (when.startsWith("shut ")) return !((ScrollableList) all.get(when.substring(5))).isOpen();
+    if (when.equals("massesOpen")) return massesOpen;
+    if (when.equals("ground")) return targetDone && value("output") == 0;
+    if (when.equals("later")) return false;
+    if (when.equals("notScrape")) return !editing.equals("scrape");
+    if (when.equals("knifeFlat")) return value("knife_carry") < CHUNK;   // chunk and copy have no streaks
+    if (when.startsWith("mix ")) return value(when.substring(4) + "_pickup") == 2;
+    if (when.startsWith("weighted ")) return value(when.substring(9) + "_startAt") == 1;
+    if (when.startsWith("mouse ")) return value(when.substring(6) + "_startAt") == 3;
     if (when.equals("abstraction")) return value("abstractionOn") > 0.5;
     if (when.equals("careful")) return value("abstractionOn") > 0.5 && value("protectWith") == 1;
     if (when.equals("2D abstraction")) return value("output") == 0 && value("abstractionOn") > 0.5;
-    if (when.equals("splatter")) return value("splatterOn") > 0.5;
-    if (when.equals("lines")) return value("linesOn") > 0.5;
-    if (when.equals("fragments")) return value("fragOn") > 0.5;
-    if (when.equals("scrape")) return value("scrapeOn") > 0.5;
-    if (when.equals("weighted")) return value("startAt") == 1;
-    if (when.equals("mouse")) return value("startAt") == 3;
     if (when.equals("2D")) return value("output") == 0;
     if (when.equals("mesh")) return value("output") > 0;
     if (when.startsWith("map ")) return value(when.substring(4) + "_by") > 0;   // a "by" row with a map chosen
@@ -579,7 +696,7 @@ public class Panel extends PApplet {
     float amount = all.get("nudgeAmount").getValue();
     for (String n : liveNames) {
       ControllerInterface c = all.get(n);
-      if (!(c instanceof Slider) || n.equals("nudgeAmount") || n.equals("perFrame")) continue;
+      if (!(c instanceof Slider) || n.equals("nudgeAmount") || n.endsWith("perFrame") || n.endsWith("_rate")) continue;
       Slider s = (Slider) c;
       float range = s.getMax() - s.getMin();
       s.setValue(constrain(s.getValue() + random(-0.5, 0.5) * range * amount, s.getMin(), s.getMax()));
@@ -601,7 +718,6 @@ public class Panel extends PApplet {
         ((Controller) c).setLock(on);
       }
     }
-    setupLabel.setText(on ? "SETUP  (locked while running)" : "SETUP  (fixed for a run)");
   }
 
 
@@ -639,6 +755,80 @@ public class Panel extends PApplet {
   void register(String name, ControllerInterface c) {
     all.put(name, c);
     (live ? liveNames : setupNames).add(name);
+  }
+
+  // a tool's box in column 2: its name with an on / off switch, and SETTINGS to choose it. The
+  // rows made after it with toolSlider() etc. are its shape settings, shown while it's chosen
+  void toolBox(int i, boolean on) {
+    curTool = TOOLS[i];
+    sections++;
+    toolSection[i] = sections - 1;
+    row(36);
+    Toggle t = cp5.addToggle(curTool + "_on").setSize(16, 16).setValue(on);
+    t.setCaptionLabel(toolTitles[i]);
+    t.getCaptionLabel().align(ControlP5.RIGHT_OUTSIDE, ControlP5.CENTER).setPaddingX(8);
+    register(curTool + "_on", t);
+    put(t, 0, 12);
+    Button b = cp5.addButton(curTool + "_edit").setSize(90, 20);
+    b.setCaptionLabel("SETTINGS");
+    put(b, 226, 10);
+    editButtons[i] = b;
+  }
+
+  // a slider on a row of its own in the current tool's box, named "tool_name"
+  Slider toolSlider(String name, String caption, float lo, float hi, float value) {
+    Slider s = slider(curTool + "_" + name, caption, lo, hi, value);
+    onlyWhen("edit " + curTool);
+    return s;
+  }
+
+  void toolModRow(String name, int by, float amount, boolean invert) {
+    modRow(curTool + "_" + name, by, amount, invert);
+    onlyWhen("edit " + curTool);
+  }
+
+  // a setup box: a section whose title is clicked (see mouseReleased). Returns its section
+  int setupBox(String title) {
+    boxTitle = header(title);
+    return sections - 1;
+  }
+
+  // the line under a setup box's title, set in draw(). It's hidden while the box's list is open -
+  // the list covers it, and it would take the list's clicks
+  Textlabel boxText(String list) {
+    row(24);
+    Textlabel t = cp5.addTextlabel("text " + sections).setText("").setColorValue(dark);
+    put(t, -4, 0, list.equals("") ? "" : "shut " + list);
+    return t;
+  }
+
+  // a setup box's list: no bar of its own - clicking the box opens it, over the box's other rows
+  void setupList(String name, String[] items) {
+    ScrollableList l = cp5.addScrollableList(name).setSize(colW - 30, 20 * items.length)
+      .setBarHeight(0).setItemHeight(20).addItems(java.util.Arrays.asList(items)).setType(ScrollableList.DROPDOWN);
+    l.setBarVisible(false);
+    // picking an item marks the box done - even the one already chosen, which sends no event
+    l.addCallback(new CallbackListener() {
+      public void controlEvent(CallbackEvent e) {
+        if (e.getAction() != ControlP5.ACTION_RELEASE) return;
+            if (name.equals("source")) sourceDone = true;
+        else targetDone = true;
+        picked = (ScrollableList) e.getController();   // closed in draw(), after controlP5 has used the click
+      }
+    });
+    l.setValue(0);
+    l.close();
+    register(name, l);
+    lists.add(l);
+    // only there while it's open: closed, controlP5 still counts clicks on the space it would cover
+    put(l, -4, -2, "open " + name);
+  }
+
+  // a slider in the masses box, shown while it's open
+  Slider massSlider(String name, String caption, float lo, float hi, float value) {
+    Slider s = slider(name, caption, lo, hi, value);
+    onlyWhen("massesOpen");
+    return s;
   }
 
   // a section's title - it starts a new section, with its own colour block

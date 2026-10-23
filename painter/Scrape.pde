@@ -15,9 +15,9 @@
 PGraphics scrapeMask;
 
 void paintScrapes() {
-  if (v("scrapeOn") < 0.5) return;
-  int down = (int) v("scrapeTo");                // 0 = down to layer 1, so layers 2 - 4 are scraped
-  int n = countFor(v("scrapeRate"));
+  if (t("on") < 0.5) return;
+  int down = (int) t("layer");                // 0 = down to layer 1, so layers 2 - 4 are scraped
+  int n = countFor(t("rate"));
   if (n == 0 || down >= LAYERS - 1) return;
   if (scrapeMask == null || scrapeMask.width != photo.width || scrapeMask.height != photo.height) {
     scrapeMask = createGraphics(photo.width, photo.height, P2D);
@@ -29,7 +29,7 @@ void paintScrapes() {
   for (int i = 0; i < n; i++) {
     float[] s = startPoint();
     if (s == null || random(1) < protection(s[0], s[1])) continue;
-    if (v("scrapeKind") == 0) knifeScrape(scrapeMask, s[0], s[1]);
+    if (t("kind") == 0) knifeScrape(scrapeMask, s[0], s[1]);
     else scratch(scrapeMask, s[0], s[1]);
     made++;
   }
@@ -41,16 +41,16 @@ void paintScrapes() {
 // the direction a scrape goes: along the form, turned by up to 90 degrees as "follow" drops
 float scrapeAngle(float x, float y) {
   float[] f = fieldAt(x, y);
-  float turn = random(-1, 1) * (1 - v("scrapeFollow")) * HALF_PI;
+  float turn = random(-1, 1) * (1 - t("follow")) * HALF_PI;
   float a = f[2] > 0.05 ? atan2(f[1], f[0]) + turn : random(TWO_PI);
   return random(1) < 0.5 ? a : a + PI;
 }
 
 void knifeScrape(PGraphics m, float x, float y) {
-  float len = v("scrapeSize") * random(0.5, 1), wid = v("scrapeWidth") * random(0.7, 1.3);
+  float len = t("length") * random(0.5, 1), wid = t("width") * random(0.7, 1.3);
   Blade b = new Blade(x, y, scrapeAngle(x, y), len, wid, false);
   Paint white = new Paint().flat(color(255));
-  float strength = 255 * v("scrapeStrength"), seed = random(1000);
+  float strength = 255 * t("strength"), seed = random(1000);
   // bands across the knife, each taking a different amount: the streaks it leaves
   int bands = 12;
   float reach = random(0.85, 1.05);
@@ -61,12 +61,12 @@ void knifeScrape(PGraphics m, float x, float y) {
 }
 
 void scratch(PGraphics m, float x, float y) {
-  float len = v("scrapeSize") * random(0.3, 1);
-  float half = max(0.4, v("scrapeWidth") * 0.03 * random(0.5, 1.5));
+  float len = t("length") * random(0.3, 1);
+  float half = max(0.4, t("width") * 0.03 * random(0.5, 1.5));
   float heading = scrapeAngle(x, y), turning = 0;
   int steps = max(2, round(len / 3));
   float stepLen = len / steps;
-  m.fill(255, 255 * v("scrapeStrength"));
+  m.fill(255, 255 * t("strength"));
   m.beginShape(TRIANGLES);
   float pax = 0, pay = 0, pbx = 0, pby = 0;
   for (int st = 0; st <= steps; st++) {

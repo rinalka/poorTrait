@@ -14,7 +14,7 @@ void paintStroke(PGraphics g, float x, float y, float len, float wid, float foll
   // walk along the field
   int steps = max(2, ceil(len / 4));
   float stepLen = len / steps;
-  float bend = v("curving");
+  float bend = t("curving");
   float[] px = new float[steps + 1], py = new float[steps + 1];
   px[0] = x;
   py[0] = y;
@@ -55,7 +55,7 @@ void paintStroke(PGraphics g, float x, float y, float len, float wid, float foll
 
   // draw the ribbon. For chunk, each edge's paint comes from the same distance either side of
   // where the stroke started, so the start gets smeared along the whole stroke
-  float seed = random(1000), taper = v("taper"), rough = v("ragged");
+  float seed = random(1000), taper = t("taper"), rough = t("ragged");
   p.begin(g);
   for (int s = 0; s <= steps; s++) {
     float t = s / (float) steps;

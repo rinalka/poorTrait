@@ -14,9 +14,9 @@
 // triangles - drawing each drop as a shape of its own is several times slower.
 
 void paintSplatters(PGraphics g) {
-  if (v("splatterOn") < 0.5) return;
+  if (t("on") < 0.5) return;
   // clusters per frame can be a fraction: 0.3 means a cluster on about 3 frames in 10
-  int n = countFor(v("splatRate"));
+  int n = countFor(t("rate"));
   for (int i = 0; i < n; i++) splatter(g);
 }
 
@@ -24,10 +24,10 @@ void splatter(PGraphics g) {
   float[] s = startPoint();
   if (s == null) return;
   float cx = s[0], cy = s[1];
-  color c = systemColour("splat", cx, cy);      // (in the Lines tab)
-  float alpha = 255 * v("splatOpacity");
-  float size = v("splatSize"), spread = v("splatSpread");
-  float tail = lerp(7, 1.5, v("splatBig"));        // higher = more of the drops tiny
+  color c = systemColour(cx, cy);      // (in the Lines tab)
+  float alpha = toolAlpha(cx, cy);
+  float size = t("size"), spread = t("scatter");
+  float tail = lerp(7, 1.5, t("big"));        // higher = more of the drops tiny
   g.noStroke();
   g.beginShape(TRIANGLES);
 
@@ -37,7 +37,7 @@ void splatter(PGraphics g) {
   }
 
   // drops round it: nearer the middle they're bigger
-  int drops = round(v("splatDrops") * random(0.4, 1.4));
+  int drops = round(t("drops") * random(0.4, 1.4));
   for (int d = 0; d < drops; d++) {
     float gx = randomGaussian(), gy = randomGaussian();
     float x = cx + gx * spread, y = cy + gy * spread;
@@ -49,7 +49,7 @@ void splatter(PGraphics g) {
   }
 
   // trails flung out from the middle
-  int trails = floor(v("splatTrails") * random(0, 4));
+  int trails = floor(t("trails") * random(0, 4));
   for (int t = 0; t < trails; t++) {
     trail(g, cx, cy, random(TWO_PI), spread * random(1.2, 4), size * random(0.12, 0.35), dropColour(c), alpha);
   }
@@ -127,7 +127,7 @@ void trail(PGraphics g, float x, float y, float ang, float len, float w, color c
 
 // a drop's colour: the cluster's, varied a little in lightness and hue
 color dropColour(color c) {
-  float amt = v("splatVary");
+  float amt = t("vary");
   if (amt <= 0) return c;
   float[] hsb = java.awt.Color.RGBtoHSB(c >> 16 & 255, c >> 8 & 255, c & 255, null);
   float h = hsb[0] + random(-0.3, 0.3) * amt;
