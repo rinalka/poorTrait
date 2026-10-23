@@ -14,13 +14,14 @@
 // lines up with the maps and the 3D models.
 //
 // Showing a mesh:   drag = turn the model   right-drag = move the light   wheel = zoom
-// Keys in this window: space = pause, c = clear, s = save, r = straight on again
+// Keys in this window: space = pause, c = clear, s = save, r = straight on again,
+//                      l = light on / off
 //
 // SAVE writes the painting, and a .json of every setting on the panel, to the saved folder.
 // LOAD SETTINGS puts a saved .json's settings back on the panel.
 
 // ---- settings ----
-float windowScale = 1;       // the output window is the photo's size times this
+float windowScale = 1.5;     // the output window is the photo's size times this
 float ui = 1;                // size of the direction field drawing (used by the Field tab)
 color clay = color(205, 198, 188);   // the Mesh tab's plain colour
 
@@ -29,6 +30,7 @@ Panel panel;                 // the control panel window (the Gui tab)
 HashMap<String, Float> params = new HashMap<String, Float>();   // the panel's values, read once a frame
 java.util.concurrent.ConcurrentLinkedQueue<String> commands = new java.util.concurrent.ConcurrentLinkedQueue<String>();
 boolean saveWanted = false;
+boolean runWaiting = false;  // RUN was pressed, but the masses aren't made yet
 
 // ---- state ----
 String[] faces;              // folder names in mapsFolder
@@ -48,7 +50,7 @@ PShape meshShape;            // the model with the chosen picture (usually the p
 float yaw = 0, pitch = 0, zoom = 1, lightYaw = -0.6, lightPitch = -0.5, swayTime = 0;
 boolean around = true;       // used by the Field tab: marks go around the form, or across it
 
-String[] showNames = { "painting", "photo", "normal", "importance", "curvature", "depth", "light" };
+String[] showNames = { "painting", "photo", "normal", "importance", "curvature", "depth", "light", "masses" };
 String[] blendNames = { "normal", "multiply", "screen", "lightest", "darkest", "add", "subtract" };
 int[] blendModes = { BLEND, MULTIPLY, SCREEN, LIGHTEST, DARKEST, ADD, SUBTRACT };
 
@@ -100,6 +102,11 @@ void draw() {
   params = panel.snapshot();
   around = v("around") == 0;
   for (String t : todo) handle(t);
+  updateMasses();
+  if (runWaiting && !massesPending()) {
+    runWaiting = false;
+    startRun();
+  }
 
   if (isRunning && !isPaused) paintFrame();
 
@@ -130,8 +137,12 @@ void handle(String c) {
     String f = faces[constrain((int) v("source"), 0, faces.length - 1)];
     if (!isRunning && !f.equals(faceName)) loadFace(f, (int) v("smoothing"));
   }
-  else if (c.equals("run")) startRun();
-  else if (c.equals("stop")) { isRunning = false; isPaused = false; }
+  else if (c.equals("run")) {
+    // the masses are part of the setup, so a run waits until they're made
+    if (massesPending()) runWaiting = true;
+    else startRun();
+  }
+  else if (c.equals("stop")) { isRunning = false; isPaused = false; runWaiting = false; }
   else if (c.equals("pause")) { if (isRunning) isPaused = !isPaused; }
   else if (c.equals("clear")) clearCanvas();
   else if (c.equals("save")) saveWanted = true;
@@ -139,6 +150,8 @@ void handle(String c) {
   else if (c.equals("field")) buildField(normalImg, (int) v("smoothing"));
   else if (c.equals("show")) rebuildShape();
   else if (c.equals("resetView")) { yaw = 0; pitch = 0; zoom = 1; swayTime = 0; }
+  else if (c.equals("layMasses")) layMasses(v("layOpacity"));
+  else if (c.equals("massSeed")) textureSeed = random(1, 1000);
 }
 
 
@@ -172,8 +185,13 @@ void startRun() {
 
 void clearCanvas() {
   if (canvas == null) return;
+  // MASSES "start the canvas with": the plain canvas colour, the masses, or the photo
+  int start = (int) v("startWith");
+  PImage under = start == 1 ? massesImg : start == 2 ? photo : null;
+  if (start == 1 && massesImg == null) println("the masses aren't ready yet - starting with the plain canvas colour");
   canvas.beginDraw();
   canvas.background(ground);
+  if (under != null) canvas.image(under, 0, 0);
   canvas.endDraw();
   markCount = 0;
   gridI = 0;
@@ -183,7 +201,7 @@ void paintFrame() {
   // brushes that pick up wet paint need to see the canvas - read it once a frame
   int pickup = (int) v("pickup");
   boolean textured = v("carry") >= CHUNK;
-  if (pickup > 0) {
+  if (pickup == 1 || pickup == 2) {
     canvas.loadPixels();
     canvasPix = canvas.pixels;
     if (textured) {
@@ -199,8 +217,9 @@ void paintFrame() {
 
   canvas.beginDraw();
   canvas.blendMode(blendModes[constrain((int) v("blendType"), 0, blendModes.length - 1)]);
-  int n = max(1, (int) v("perFrame"));
+  int n = (int) v("perFrame");
   for (int i = 0; i < n; i++) paintMark(canvas);
+  paintSplatters(canvas);
   canvas.blendMode(BLEND);
   canvas.endDraw();
 }
@@ -214,6 +233,7 @@ PImage currentView() {
   if (s == 0) return canvas != null ? canvas : photo;
   if (s == 1) return photo;
   if (s == 2) return normalImg;
+  if (s == 7) return massesImg != null ? massesImg : photo;
   return maps[s - 2];        // importance, curvature, depth, light
 }
 
@@ -221,6 +241,7 @@ void draw2D() {
   background(20);
   image(currentView(), 0, 0, width, height);
   if (v("fieldOverlay") > 0.5) drawField(0, 0, width / (float) photo.width);
+  if (v("showProtected") > 0.5 && v("abstractionOn") > 0.5) image(protectedPicture(), 0, 0, width, height);
   if (canvas == null) {
     fill(255, 200);
     textSize(14);
@@ -235,9 +256,12 @@ void rebuildShape() {
 
 void drawMesh() {
   background(panel.colour("meshBg"));
-  // the light stays put while the model turns, so it's set before turning
-  ambientLight(90, 90, 90);
-  directionalLight(200, 196, 190, sin(lightYaw) * cos(lightPitch), -sin(lightPitch), -cos(lightYaw) * cos(lightPitch));
+  // the light stays put while the model turns, so it's set before turning. With it off the
+  // model shows its picture's colours exactly, with no shading
+  if (v("light") > 0.5) {
+    ambientLight(90, 90, 90);
+    directionalLight(200, 196, 190, sin(lightYaw) * cos(lightPitch), -sin(lightPitch), -cos(lightYaw) * cos(lightPitch));
+  }
   pushMatrix();
   translate(width / 2, height / 2, 0);
   boolean sway = v("sway") > 0.5;
@@ -252,6 +276,28 @@ void drawMesh() {
 }
 
 
+// the protected spots in see-through red (ABSTRACTION's "show protected parts"), made again only
+// when the abstraction, the anchors or the picture change
+PImage protectedImg;
+String protectedKey = "";
+
+PImage protectedPicture() {
+  String key = faceName + " " + v("abstraction") + " " + v("anchors");
+  if (!key.equals(protectedKey)) {
+    protectedKey = key;
+    protectedImg = createImage(photo.width, photo.height, ARGB);
+    protectedImg.loadPixels();
+    for (int y = 0; y < photo.height; y++) {
+      for (int x = 0; x < photo.width; x++) {
+        protectedImg.pixels[y * photo.width + x] = color(255, 30, 30, 170 * protection(x, y));
+      }
+    }
+    protectedImg.updatePixels();
+  }
+  return protectedImg;
+}
+
+
 // ---------------------------------------------------------------- saving and loading
 
 // the painting (photo size), the window too if it's a mesh, and every setting on the panel
@@ -263,6 +309,7 @@ void saveAll() {
   if (outputMode > 0 && meshShape != null) save(base + "-view.png");
   JSONObject j = panel.settingsJSON();
   j.setInt("seed", runSeed);
+  j.setFloat("textureSeed", textureSeed);
   j.setInt("marks", markCount);
   saveJSONObject(j, base + ".json");
   println("saved " + base + " (.png, .json)");
@@ -270,7 +317,9 @@ void saveAll() {
 
 void settingsChosen(java.io.File f) {
   if (f == null) return;
-  panel.applySettings(loadJSONObject(f.getAbsolutePath()), !isRunning);
+  JSONObject j = loadJSONObject(f.getAbsolutePath());
+  panel.applySettings(j, !isRunning);
+  if (j.hasKey("textureSeed")) textureSeed = j.getFloat("textureSeed");
   println("settings from " + f.getName() + (isRunning ? " (SETUP left as it is while running)" : ""));
 }
 
@@ -298,4 +347,5 @@ void keyPressed() {
   else if (key == 'c') command("clear");
   else if (key == 's') command("save");
   else if (key == 'r') command("resetView");
+  else if (key == 'l') panel.toggleLight();
 }

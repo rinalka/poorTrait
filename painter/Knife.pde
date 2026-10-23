@@ -183,5 +183,5 @@ color averageUnder(Blade b, Paint p) {
       n++;
     }
   }
-  return jitter(color(r / n, gr / n, bl / n));
+  return p.vary(color(r / n, gr / n, bl / n));
 }

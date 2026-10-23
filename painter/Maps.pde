@@ -49,6 +49,7 @@ void loadFace(String face, int smoothing) {
   buildField(normalImg, smoothing);
   canvas = null;
   meshShape = null;
+  massesImg = null;          // the Masses tab makes this picture's masses next frame
   outputMode = 0;
   int w = round(photo.width * windowScale), h = round(photo.height * windowScale);
   if (w != width || h != height) surface.setSize(w, h);

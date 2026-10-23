@@ -3,6 +3,13 @@
 //
 // Most amounts can be "modulated": the slider sets the amount, and a map chosen in the "by" list
 // under it (importance, curvature, depth ...) turns it down from place to place - see modulated().
+//
+// ABSTRACTION (design doc Stage 6) decides where the picture may be broken up. The importance map
+// says how much each spot matters for recognising the face; spots that matter more than the
+// abstraction slider allows are "protected" - see protection(). A mark landing on a protected
+// spot is either left out, so whatever is underneath (the masses, say) stays readable, or made a
+// careful mark: small, following the form, in the photo's exact colours. Anchors are the most
+// important few spots (eyes, nostrils, mouth), protected however high the abstraction goes.
 
 final int ONE = 0, START_END = 1, TWO = 2, CHUNK = 3, COPY = 4;   // the panel's "carry" choices
 int gridI = 0;               // how far the grid start has got
@@ -11,12 +18,14 @@ void paintMark(PGraphics g) {
   float[] s = startPoint();
   if (s == null) return;
   float x = s[0], y = s[1];
-  float len = max(3, modulated("markSize", x, y) * random(0.5, 1));
+  boolean careful = random(1) < protection(x, y);
+  if (careful && v("protectWith") == 0) return;               // protected spots get no marks
+  float len = max(3, modulated("markSize", x, y) * random(0.5, 1) * (careful ? v("carefulSize") : 1));
   float wid = max(1, len * v("markWidth") * random(0.7, 1.3));
-  float follow = modulated("follow", x, y);
+  float follow = careful ? max(0.9, modulated("follow", x, y)) : modulated("follow", x, y);
   float alpha = 255 * modulated("opacity", x, y);
   if (random(1) < v("washes")) alpha *= random(0.28, 0.5);    // a thin, see-through wash
-  Paint p = newPaint(alpha);
+  Paint p = careful ? carefulPaint(alpha) : newPaint(alpha);
   if (v("brushType") == 0) paintStroke(g, x, y, len, wid, follow, p);
   else paintKnife(g, x, y, len, wid, follow, p);
   markCount++;
@@ -32,6 +41,24 @@ float modulated(String name, float x, float y) {
   float m = mapAt(by, x, y);
   if (v(name + "_inv") > 0.5) m = 1 - m;
   return base * lerp(1, m, v(name + "_amt"));
+}
+
+// how protected (x, y) is from being broken up, 0 .. 1: spots more important than the abstraction
+// slider allows, and the anchors whatever it says. At abstraction 0 everything that matters at all
+// is protected; at 1 only the anchors are
+float protection(float x, float y) {
+  if (v("abstractionOn") < 0.5) return 0;      // ABSTRACTION switched off: nothing is protected
+  float imp = mapAt(1, x, y);                   // the importance map
+  float t = v("abstraction") * 1.2;
+  float p = smoothstep(t - 0.15, t + 0.15, imp);
+  float a = v("anchors");
+  if (a > 0) p = max(p, smoothstep(0.95 - a * 0.6, 1.05 - a * 0.6, imp));
+  return p;
+}
+
+float smoothstep(float e0, float e1, float x) {
+  float t = constrain((x - e0) / (e1 - e0), 0, 1);
+  return t * t * (3 - 2 * t);
 }
 
 // where the next mark starts, or null for no mark this time
@@ -82,8 +109,20 @@ Paint newPaint(float alpha) {
   }
   if (p.textured()) {
     boolean fromCanvas = p.pickup == 1 || (p.pickup == 2 && random(1) < p.mix);
-    p.tex = fromCanvas && canvasSnap != null ? canvasSnap : photo;
+    p.tex = fromCanvas && canvasSnap != null ? canvasSnap : p.pickup == 3 && massesImg != null ? massesImg : photo;
   }
+  return p;
+}
+
+// a careful mark's paint: the photo's own colours, no jitter, no accent. Chunk would smear, so
+// it copies instead
+Paint carefulPaint(float alpha) {
+  Paint p = new Paint();
+  p.alpha = alpha;
+  p.carry = (int) v("carry") == CHUNK ? COPY : (int) v("carry");
+  p.pickup = 0;
+  p.exact = true;
+  p.tex = photo;
   return p;
 }
 
@@ -93,11 +132,13 @@ Paint newPaint(float alpha) {
 //   two colours    two colours side by side, as if the brush was loaded twice
 //   chunk          a strip of the picture where the brush landed, smeared along the mark
 //   copy           the picture right under the mark, as if seen through a hole in the shape of it
-// The paint is picked up from the photo, from what's already on the canvas (wet paint), or a mix.
+// The paint is picked up from the photo, from what's already on the canvas (wet paint), a mix of
+// the two, or from the masses (the Masses tab).
 class Paint {
   int carry, pickup;
   float mix, alpha;
   boolean accent;
+  boolean exact;             // no jitter (careful marks)
   color accentColour;
   PImage tex;                // chunk and copy: the picture the paint comes from
   color c0, c1;              // the colours the brush loaded (the brush sets these)
@@ -111,11 +152,16 @@ class Paint {
     if (accent) return accentColour;
     if (pickup == 1) return canvasAt(x, y);
     if (pickup == 2) return lerpColor(photoAt(x, y), canvasAt(x, y), mix);
+    if (pickup == 3) return massesAt(x, y);
     return photoAt(x, y);
   }
 
   color pick(float x, float y) {
-    return jitter(pickRaw(x, y));
+    return vary(pickRaw(x, y));
+  }
+
+  color vary(color c) {
+    return exact ? c : jitter(c);
   }
 
   // one plain colour (the knife's streaks and ridge)
