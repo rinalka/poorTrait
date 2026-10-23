@@ -17,7 +17,10 @@
 // Keys in this window: space = pause, c = clear, s = save, r = straight on again,
 //                      l = light on / off
 //
-// SAVE writes the painting, and a .json of every setting on the panel, to the saved folder.
+// The painting is four see-through layers (the Layers tab), combined into one picture every frame.
+//
+// SAVE writes the painting, each layer, and a .json of every setting on the panel, to the saved
+// folder.
 // LOAD SETTINGS puts a saved .json's settings back on the panel.
 
 // ---- settings ----
@@ -35,7 +38,7 @@ boolean runWaiting = false;  // RUN was pressed, but the masses aren't made yet
 // ---- state ----
 String[] faces;              // folder names in mapsFolder
 String faceName;
-PGraphics canvas;            // the painting, at the photo's size
+PGraphics canvas;            // the painting as you see it: the layers combined (Layers tab), at the photo's size
 int[] canvasPix;             // the canvas's colours at the start of this frame (for wet paint)
 PImage canvasSnap;           // the same as a picture (for chunk and copy from the canvas)
 volatile boolean isRunning = false, isPaused = false;
@@ -110,6 +113,7 @@ void draw() {
 
   if (isRunning && !isPaused) paintFrame();
 
+  composite();               // the layers into one picture, every frame - layer settings can change any time
   if (outputMode > 0 && meshShape != null) drawMesh();
   else draw2D();
 
@@ -151,6 +155,7 @@ void handle(String c) {
   else if (c.equals("show")) rebuildShape();
   else if (c.equals("resetView")) { yaw = 0; pitch = 0; zoom = 1; swayTime = 0; }
   else if (c.equals("layMasses")) layMasses(v("layOpacity"));
+  else if (c.startsWith("clearLayer")) clearLayer(int(c.substring(10)));
   else if (c.equals("massSeed")) textureSeed = random(1, 1000);
 }
 
@@ -163,9 +168,7 @@ void startRun() {
   runSeed = (int) random(1000000);
   randomSeed(runSeed);
   noiseSeed(runSeed);
-  if (canvas == null || canvas.width != photo.width || canvas.height != photo.height) {
-    canvas = createGraphics(photo.width, photo.height, P2D);
-  }
+  makeLayers();
   clearCanvas();
   mesh = null;
   meshShape = null;
@@ -183,16 +186,11 @@ void startRun() {
   println("run: " + faceName + ", " + (outputMode == 0 ? "2D" : "mesh") + ", seed " + runSeed);
 }
 
+// every layer back to its start (the Layers tab's clearLayer)
 void clearCanvas() {
   if (canvas == null) return;
-  // MASSES "start the canvas with": the plain canvas colour, the masses, or the photo
-  int start = (int) v("startWith");
-  PImage under = start == 1 ? massesImg : start == 2 ? photo : null;
-  if (start == 1 && massesImg == null) println("the masses aren't ready yet - starting with the plain canvas colour");
-  canvas.beginDraw();
-  canvas.background(ground);
-  if (under != null) canvas.image(under, 0, 0);
-  canvas.endDraw();
+  for (int i = 0; i < LAYERS; i++) clearLayer(i);
+  composite();
   markCount = 0;
   gridI = 0;
 }
@@ -215,13 +213,27 @@ void paintFrame() {
   }
   accentNow = panel.colour("accent");
 
-  canvas.beginDraw();
-  canvas.blendMode(blendModes[constrain((int) v("blendType"), 0, blendModes.length - 1)]);
-  int n = (int) v("perFrame");
-  for (int i = 0; i < n; i++) paintMark(canvas);
-  paintSplatters(canvas);
-  canvas.blendMode(BLEND);
-  canvas.endDraw();
+  // each mark system paints on the layer LAYERS says, in this order
+  String[] layerChoice = { "layerBrush", "layerSplat", "layerLines", "layerFrag" };
+  int blend = blendModes[constrain((int) v("blendType"), 0, blendModes.length - 1)];
+  for (int L = 0; L < LAYERS; L++) {
+    boolean used = false;
+    for (String ch : layerChoice) used |= (int) v(ch) == L;
+    if (!used) continue;
+    PGraphics g = layers[L];
+    g.beginDraw();
+    g.blendMode(blend);
+    if ((int) v("layerBrush") == L) {
+      int n = (int) v("perFrame");
+      for (int i = 0; i < n; i++) paintMark(g);
+    }
+    if ((int) v("layerSplat") == L) paintSplatters(g);
+    if ((int) v("layerLines") == L) paintLines(g);
+    if ((int) v("layerFrag") == L) paintFragments(g);
+    g.blendMode(BLEND);
+    g.endDraw();
+  }
+  paintScrapes();
 }
 
 
@@ -305,14 +317,17 @@ void saveAll() {
   String dir = sketchPath("saved");
   new java.io.File(dir).mkdirs();
   String base = dir + "/" + faceName + "-" + nf(year(), 4) + nf(month(), 2) + nf(day(), 2) + "-" + nf(hour(), 2) + nf(minute(), 2) + nf(second(), 2);
-  if (canvas != null) canvas.save(base + ".png");
+  if (canvas != null) {
+    canvas.save(base + ".png");
+    for (int i = 0; i < LAYERS; i++) layerPicture(i).save(base + "-layer" + (i + 1) + ".png");
+  }
   if (outputMode > 0 && meshShape != null) save(base + "-view.png");
   JSONObject j = panel.settingsJSON();
   j.setInt("seed", runSeed);
   j.setFloat("textureSeed", textureSeed);
   j.setInt("marks", markCount);
   saveJSONObject(j, base + ".json");
-  println("saved " + base + " (.png, .json)");
+  println("saved " + base + " (.png, each layer, .json)");
 }
 
 void settingsChosen(java.io.File f) {

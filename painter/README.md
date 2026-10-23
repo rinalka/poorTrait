@@ -72,7 +72,7 @@ These controls are locked while a run is going. Press STOP to change them.
 | RUN / STOP | Start a new painting, or end the run. The painting stays on screen after STOP. |
 | PAUSE | Freeze the painting. You can still turn the mesh. |
 | CLEAR | Wipe the canvas and keep painting |
-| SAVE | Save the painting and every setting to `painter/saved/`. For a mesh it also saves the view as you see it. |
+| SAVE | Save the painting, each layer (as see-through PNGs you can stack in Photoshop), and every setting to `painter/saved/`. For a mesh it also saves the view as you see it. |
 | LOAD SETTINGS | Load the settings from a saved `.json` |
 | NUDGE + how far | Shift every live setting by a random amount. "how far" sets how big the change is. Good for when you're stuck. |
 
@@ -124,6 +124,23 @@ which records how much each part of the picture matters for recognising the face
 | protected parts get | **no marks**: whatever is underneath (the masses or the photo) stays readable. **careful marks**: small marks that follow the form, in the photo's exact colours, which repair the features as the painting goes on. |
 | careful mark size | (careful marks) How big the careful marks are, compared with the others |
 | show protected parts | (2D) Shows the protected parts in red |
+
+### LAYERS
+
+The painting is four see-through layers, one on top of another. Layer 1 is at the bottom and
+starts solid: the canvas colour with the masses or the photo on it (see MASSES). Layers 2–4
+start empty. What you see, and what the mesh wears, is all of them combined.
+
+| Control | What it does |
+|---|---|
+| a row for each layer | **Tick box**: shown or hidden. **Slider**: the layer's opacity. **List**: how it combines with the layers under it (normal, multiply, screen, add, lightest). **CLEAR**: empties that layer. On layer 1, CLEAR puts back its starting picture. |
+| paints on layer | Which layer the brushes, splatter, lines and fragments each paint on. By default the brushes are on 2, lines and fragments on 3, and splatter on 4. |
+
+Hiding, fading or recombining a layer changes the painting immediately, including what's already
+painted on it. The main CLEAR button (in RUN) resets every layer.
+
+The APPLY "blend" setting works against what's already on that same layer. On an empty layer,
+modes like multiply have nothing to work against, so use the layer's own blend list instead.
 
 ### COLOUR
 
@@ -195,6 +212,55 @@ hand. They respect ABSTRACTION: no drop lands on a protected part.
 | colour | **picked up** (as COLOUR's "pick up from" says, where the cluster lands) or the **accent colour** |
 | contrast with the photo | Pushes the colour away from the photo's lightness where it lands: light drops on dark parts, dark drops on light parts |
 | colour variation | How much each drop's colour varies from the cluster's |
+
+### LINES
+
+Fine lines that wander like a pen drawn loosely across the picture. Each line curves one way and
+then another, and its width changes along it like pen pressure, thin at both ends. Some lines
+follow the form and the rest ignore it. They respect ABSTRACTION.
+
+| Control | What it does |
+|---|---|
+| fine lines | Turns lines on. The other controls show once it's on. |
+| lines per frame | How often. Below 1 means not every frame. |
+| length, width | How long and how thick the lines are |
+| wander | How much a line curves about. At 0 lines go nearly straight. |
+| share following the form | The share of lines pulled along the form, like contour lines. The rest ignore it. |
+| broken | How often a line skips, leaving gaps |
+| opacity | How solid the lines are |
+| colour, contrast with the photo | As for SPLATTER |
+
+### FRAGMENTS
+
+Tiny dots, dashes, triangles and shards, for surface complexity. They respect ABSTRACTION.
+
+| Control | What it does |
+|---|---|
+| fragments | Turns fragments on. The other controls show once it's on. |
+| fragments per frame | How many |
+| size | The size of the biggest ones. Most are smaller. |
+| clumping | The share that land near the one before, so they gather in little drifts instead of spreading evenly |
+| lined up with the form | The share turned along the form. The rest point anywhere. |
+| opacity | How solid they are |
+| dots, dashes, triangles, shards | Which kinds to make |
+| colour, contrast with the photo | As for SPLATTER |
+
+### SCRAPE
+
+Takes paint off instead of putting it on. Each scrape removes paint from every layer above the
+"down to" layer, so what's on that layer (or under it) shows through: the masses, an earlier
+stage of the painting, or the bare canvas. Scrapes are placed by "start at" like other marks, and
+respect ABSTRACTION.
+
+| Control | What it does |
+|---|---|
+| scrape | Turns scraping on. The other controls show once it's on. |
+| knife scrape / scratches | **Knife scrape**: a broad palette-knife mark that leaves streaks of paint behind where it didn't quite catch. **Scratches**: short, thin, wandering lines scored through. |
+| down to layer | The layer that shows through. Everything above it is scraped. |
+| scrapes per frame | How often |
+| length, width | Their size. Scratches are much thinner than the width says. |
+| how much comes off | At 1 a scrape takes nearly everything. Lower values leave more behind. |
+| follow the form | At 1 scrapes run along the form. At 0 they point anywhere. |
 
 ## Letting the maps decide
 

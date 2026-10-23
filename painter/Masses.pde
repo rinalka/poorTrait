@@ -302,18 +302,19 @@ color massesAt(float x, float y) {
   return massesImg == null ? photoAt(x, y) : massesImg.pixels[pixelIndex(x, y)];
 }
 
-// lay the masses over the canvas, as see-through as `opacity` says
+// lay the masses on the brushes' layer, as see-through as `opacity` says
 void layMasses(float opacity) {
   if (canvas == null) return;
+  PGraphics g = layerFor("layerBrush");
   if (massesImg == null) {
     println("the masses aren't ready yet");
     return;
   }
-  canvas.beginDraw();
-  canvas.tint(255, 255 * opacity);
-  canvas.image(massesImg, 0, 0);
-  canvas.noTint();
-  canvas.endDraw();
+  g.beginDraw();
+  g.tint(255, 255 * opacity);
+  g.image(massesImg, 0, 0);
+  g.noTint();
+  g.endDraw();
 }
 
 

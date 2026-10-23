@@ -16,8 +16,7 @@
 void paintSplatters(PGraphics g) {
   if (v("splatterOn") < 0.5) return;
   // clusters per frame can be a fraction: 0.3 means a cluster on about 3 frames in 10
-  float rate = v("splatRate");
-  int n = (int) rate + (random(1) < rate - (int) rate ? 1 : 0);
+  int n = countFor(v("splatRate"));
   for (int i = 0; i < n; i++) splatter(g);
 }
 
@@ -25,7 +24,7 @@ void splatter(PGraphics g) {
   float[] s = startPoint();
   if (s == null) return;
   float cx = s[0], cy = s[1];
-  color c = splatColour(cx, cy);
+  color c = systemColour("splat", cx, cy);      // (in the Lines tab)
   float alpha = 255 * v("splatOpacity");
   float size = v("splatSize"), spread = v("splatSpread");
   float tail = lerp(7, 1.5, v("splatBig"));        // higher = more of the drops tiny
@@ -124,23 +123,6 @@ void trail(PGraphics g, float x, float y, float ang, float len, float w, color c
     pax = ax; pay = ay; pbx = bx; pby = by;
   }
   if (random(1) >= protection(x, y)) drop(g, x, y, w * random(0.4, 1), c, a);
-}
-
-// the cluster's colour: picked up where it lands (as COLOUR's "pick up from" says) or the accent,
-// then pushed away from the photo's lightness there by "contrast" - dark spots get light drops
-// and light spots dark ones
-color splatColour(float x, float y) {
-  color c;
-  if (v("splatColour") == 1) c = accentNow;
-  else {
-    Paint p = new Paint();
-    p.pickup = (int) v("pickup");
-    p.mix = v("mix");
-    c = p.pickRaw(x, y);
-  }
-  float k = v("splatContrast");
-  if (k > 0) c = lerpColor(c, brightness(photoAt(x, y)) > 128 ? color(0) : color(255), k * 0.85);
-  return c;
 }
 
 // a drop's colour: the cluster's, varied a little in lightness and hue

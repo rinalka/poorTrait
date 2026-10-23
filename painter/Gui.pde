@@ -2,12 +2,12 @@
 //
 // Three columns:
 //   SETUP, RUN, VIEW              what to paint and where - SETUP is locked while a run is going
-//   BRUSH, MOVEMENT, ABSTRACTION  the kind of mark, its size and shape, how it travels, and
-//                                 where the face may be broken up
+//   BRUSH, MOVEMENT, ABSTRACTION  the kind of mark, its size and shape, how it travels,
+//   LAYERS                        where the face may be broken up, and the four layers
 //   COLOUR, APPLY, MASSES         what paint it picks up and carries, how it goes onto the
 //                                 canvas, and the large colour masses underneath
-//   SPLATTER                      mark systems of their own (design doc Stage 5), painted
-//                                 alongside the brushes
+//   SPLATTER, LINES, FRAGMENTS,   mark systems of their own (design doc Stage 5), painted
+//   SCRAPE                        alongside the brushes - and scraping paint off
 //
 // Every control has a name (its first argument below), and the painter asks for values by that
 // name with v("name") - sliders give their value, toggles 0 or 1, lists and radio buttons the
@@ -58,7 +58,7 @@ public class Panel extends PApplet {
   }
 
   public void settings() {
-    size(1400, 1000);
+    size(1400, 1200);
   }
 
   public void setup() {
@@ -188,6 +188,25 @@ public class Panel extends PApplet {
     row(26);
     toggle("showProtected", "show protected parts (red)", false, 0);
     onlyWhen("2D abstraction");
+    row(6);
+
+    // the four layers (the Layers tab), bottom one first: shown, opacity, how it's combined with
+    // the layers under it, and a button to empty it. Then which layer each mark system paints on
+    header("LAYERS  (1 = bottom)");
+    for (int i = 0; i < 4; i++) {
+      row(28);
+      label("" + (i + 1), 0);
+      toggle("layerOn" + i, "", true, 16);
+      sliderAt("layerOpacity" + i, "", 0, 1, 1, 42, 0, 90);
+      list("layerBlend" + i, layerBlendNames, 0, 140, 90);
+      button("clearLayer" + i, "CLEAR", 240, 64).setHeight(18);
+    }
+    row(22);
+    label("paints on layer", 0);
+    layerChoice("layerBrush", "brushes", 1);
+    layerChoice("layerSplat", "splatter", 3);
+    layerChoice("layerLines", "lines", 2);
+    layerChoice("layerFrag", "fragments", 2);
 
     // ---------------------------------------------------- column 3: COLOUR, APPLY
     column();
@@ -259,6 +278,81 @@ public class Panel extends PApplet {
     onlyWhen("splatter");
     slider("splatVary", "colour variation", 0, 0.5, 0.1);
     onlyWhen("splatter");
+    row(6);
+
+    header("LINES");
+    row(26);
+    toggle("linesOn", "fine lines", false, 0);
+    slider("lineRate", "lines per frame", 0.05, 20, 1);
+    onlyWhen("lines");
+    slider("lineLength", "length", 10, 800, 200).setDecimalPrecision(0);
+    onlyWhen("lines");
+    slider("lineWidth", "width", 0.3, 8, 1.2);
+    onlyWhen("lines");
+    slider("lineWander", "wander", 0, 1, 0.4);
+    onlyWhen("lines");
+    slider("lineFollow", "share following the form", 0, 1, 0.5);
+    onlyWhen("lines");
+    slider("lineBroken", "broken", 0, 1, 0.2);
+    onlyWhen("lines");
+    slider("lineOpacity", "opacity", 0, 1, 0.8);
+    onlyWhen("lines");
+    row(20);
+    label("colour", 0);
+    onlyWhen("lines");
+    radio("lineColour", new String[] { "picked up", "accent colour" }, 2, 0);
+    onlyWhen("lines");
+    slider("lineContrast", "contrast with the photo", 0, 1, 0.6);
+    onlyWhen("lines");
+    row(6);
+
+    header("FRAGMENTS");
+    row(26);
+    toggle("fragOn", "fragments", false, 0);
+    slider("fragRate", "fragments per frame", 0.1, 100, 10).setDecimalPrecision(1);
+    onlyWhen("fragments");
+    slider("fragSize", "size", 1, 60, 8).setDecimalPrecision(1);
+    onlyWhen("fragments");
+    slider("fragClump", "clumping", 0, 1, 0.5);
+    onlyWhen("fragments");
+    slider("fragFollow", "lined up with the form", 0, 1, 0.3);
+    onlyWhen("fragments");
+    slider("fragOpacity", "opacity", 0, 1, 0.9);
+    onlyWhen("fragments");
+    row(26);
+    toggle("fragDots", "dots", true, 0);
+    toggle("fragDashes", "dashes", true, 66);
+    toggle("fragTris", "triangles", true, 146);
+    toggle("fragShards", "shards", true, 236);
+    onlyWhen("fragments");
+    row(20);
+    label("colour", 0);
+    onlyWhen("fragments");
+    radio("fragColour", new String[] { "picked up", "accent colour" }, 2, 0);
+    onlyWhen("fragments");
+    slider("fragContrast", "contrast with the photo", 0, 1, 0.5);
+    onlyWhen("fragments");
+    row(6);
+
+    header("SCRAPE");
+    row(26);
+    toggle("scrapeOn", "scrape  (takes paint off)", false, 0);
+    radio("scrapeKind", new String[] { "knife scrape", "scratches" }, 2, 0);
+    onlyWhen("scrape");
+    row(26);
+    label("down to layer", 0);
+    radioAt("scrapeTo", new String[] { "1", "2", "3" }, 0, 110, 34);
+    onlyWhen("scrape");
+    slider("scrapeRate", "scrapes per frame", 0.05, 20, 1);
+    onlyWhen("scrape");
+    slider("scrapeSize", "length", 10, 500, 140).setDecimalPrecision(0);
+    onlyWhen("scrape");
+    slider("scrapeWidth", "width", 2, 150, 40).setDecimalPrecision(0);
+    onlyWhen("scrape");
+    slider("scrapeStrength", "how much comes off", 0, 1, 0.8);
+    onlyWhen("scrape");
+    slider("scrapeFollow", "follow the form", 0, 1, 0.5);
+    onlyWhen("scrape");
 
     // the lists open downwards over the controls under them, so draw them last - the higher
     // ones last of all, so an open list is never hidden behind the one below it
@@ -376,6 +470,7 @@ public class Panel extends PApplet {
     else if (n.equals("showWhat")) command("show");
     else if (n.equals("layMasses")) command("layMasses");
     else if (n.equals("massSeed")) command("massSeed");
+    else if (n.startsWith("clearLayer")) command(n);
   }
 
 
@@ -392,6 +487,9 @@ public class Panel extends PApplet {
     if (when.equals("careful")) return value("abstractionOn") > 0.5 && value("protectWith") == 1;
     if (when.equals("2D abstraction")) return value("output") == 0 && value("abstractionOn") > 0.5;
     if (when.equals("splatter")) return value("splatterOn") > 0.5;
+    if (when.equals("lines")) return value("linesOn") > 0.5;
+    if (when.equals("fragments")) return value("fragOn") > 0.5;
+    if (when.equals("scrape")) return value("scrapeOn") > 0.5;
     if (when.equals("weighted")) return value("startAt") == 1;
     if (when.equals("mouse")) return value("startAt") == 3;
     if (when.equals("2D")) return value("output") == 0;
@@ -618,6 +716,27 @@ public class Panel extends PApplet {
     r.setNoneSelectedAllowed(false);
     register(name, r);
     put(r, 0, 0);
+  }
+
+  // radio buttons in the current row, at dx, spaced `step` apart (for short items like "1" "2" "3")
+  void radioAt(String name, String[] items, int chosen, float dx, int step) {
+    RadioButton r = cp5.addRadioButton(name).setSize(16, 16).setItemsPerRow(items.length)
+      .setSpacingColumn(step - 16);
+    for (int i = 0; i < items.length; i++) {
+      r.addItem(name + " " + i, i);
+      r.getItem(i).setCaptionLabel(items[i]);
+    }
+    r.activate(chosen);
+    r.setNoneSelectedAllowed(false);
+    register(name, r);
+    put(r, dx, 2);
+  }
+
+  // a row choosing the layer a mark system paints on: its name, then 1 2 3 4
+  void layerChoice(String name, String caption, int chosen) {
+    row(24);
+    label(caption, 12);
+    radioAt(name, new String[] { "1", "2", "3", "4" }, chosen, 110, 44);
   }
 
   // a colour wheel on a row of its own

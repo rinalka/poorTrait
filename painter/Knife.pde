@@ -90,6 +90,11 @@ class Blade {
   boolean leaf;                   // pointed at both ends instead of square-ended
 
   Blade(float cx, float cy, float angle, float len, float wid) {
+    this(cx, cy, angle, len, wid, true);
+  }
+
+  // allowLeaf false: never leaf-shaped (scrapes)
+  Blade(float cx, float cy, float angle, float len, float wid, boolean allowLeaf) {
     this.len = len;
     this.wid = wid;
     dx = cos(angle);
@@ -101,7 +106,7 @@ class Blade {
     bend = random(-0.08, 0.08);
     samples = (int) random(8, 16);
     ridgeSide = random(1) < 0.5 ? 1 : -1;
-    leaf = random(1) < v("leaf");
+    leaf = allowLeaf && random(1) < v("leaf");
 
     rough = v("ragged") * 1.5;
     float seedA = random(1000), seedB = random(1000);
