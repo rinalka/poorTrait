@@ -289,6 +289,10 @@ public class Panel extends PApplet {
     toolSlider("width", "width", 2, 150, 40).setDecimalPrecision(0);
     toolSlider("ragged", "ragged edges", 0, 1, 0.5);
     toolSlider("strength", "how much comes off", 0, 1, 0.8);
+    row(24);
+    label("scrape down to", 0);
+    radioAt("scrape_layer", new String[] { "canvas", "1", "2", "3" }, 0, 100, 54);
+    onlyWhen("on scrape");
 
     // ---------------------------------------------------- column 3: MOVEMENT, COLOUR, APPLY
     // ... of the tool chosen in column 2. Every tool has its own set; only the chosen one's shows
@@ -362,8 +366,13 @@ public class Panel extends PApplet {
     onlyWhen("notScrape");
     float[] opacityDefault = { 0.9, 0.9, 0.9, 0.8, 0.9 };
     float[] washesDefault = { 0.15, 0.15, 0, 0, 0 };
+    int[] layerDefault = { 1, 1, 3, 2, 2 };
     for (int i = 0; i < TOOLS.length - 1; i++) {
       String n = TOOLS[i];
+      row(24);
+      label("paints on layer", 0);
+      radioAt(n + "_layer", new String[] { "1", "2", "3", "4" }, layerDefault[i], 110, 44);
+      onlyWhen("edit " + n);
       slider(n + "_opacity", "opacity", 0, 1, opacityDefault[i]);
       onlyWhen("edit " + n);
       modRow(n + "_opacity", 0, 0.5, false);
@@ -397,29 +406,17 @@ public class Panel extends PApplet {
     onlyWhen("2D abstraction");
     row(6);
 
-    // the four layers (the Layers tab), bottom one first: opacity, how it's combined with the
-    // layers under it, and a button to empty it (whether it shows is in VIEW's LAYERS menu). Then
-    // which layer each tool paints on
+    // the four layers (the Layers tab): how it's combined with the layers under it, a button to
+    // empty it, and how see-through it is (whether it shows is in VIEW's LAYERS list; which layer
+    // each tool paints on is in its APPLY)
     header("LAYERS");
     for (int i = 0; i < 4; i++) {
       row(28);
-      label("" + (i + 1), 0);
-      sliderAt("layerOpacity" + i, "", 0, 1, 1, 42, 0, 90);
-      list("layerBlend" + i, layerBlendNames, 0, 140, 90);
+      label("layer " + (i + 1), 0);
+      list("layerBlend" + i, layerBlendNames, 0, 60, 110);
       button("clearLayer" + i, "CLEAR", 240, 64).setHeight(18);
+      slider("layerSeeThrough" + i, "transparency", 0, 1, 0);
     }
-    row(22);
-    label("paints on layer", 0);
-    int[] layerDefault = { 1, 1, 3, 2, 2 };
-    for (int i = 0; i < TOOLS.length - 1; i++) {
-      row(24);
-      label(toolTitles[i].toLowerCase(), 12);
-      radioAt(TOOLS[i] + "_layer", new String[] { "1", "2", "3", "4" }, layerDefault[i], 130, 44);
-    }
-    row(24);
-    label("scrape down to", 12);
-    row(24);
-    radioAt("scrape_layer", new String[] { "canvas", "1", "2", "3" }, 0, 24, 74);
     row(6);
 
     // the layers floating apart, lit from one side (the Layers tab's composite)

@@ -228,7 +228,7 @@ For fragments, MOVEMENT's "follow the form" is the share turned along the form.
 ### SCRAPE
 
 Takes paint off instead of putting it on. Each scrape removes paint from every layer above its
-"scrape down to" layer (set in LAYERS), so what's on that layer (or under it) shows through: an
+"scrape down to" layer, so what's on that layer (or under it) shows through: an
 earlier stage of the painting or, scraping down to the **canvas**, what it started with (the
 masses, the photo or the bare canvas colour).
 
@@ -239,6 +239,7 @@ masses, the photo or the bare canvas colour).
 | length, width | Their size. Scratches are much thinner than the width says. |
 | ragged edges | How rough a knife scrape's edges are |
 | how much comes off | At 1 a scrape takes nearly everything. Lower values leave more behind. |
+| scrape down to | What scraping reveals: the **canvas** (every layer is scraped) or a layer (every layer above it in the stack is scraped). |
 
 Scrape has MOVEMENT settings but no COLOUR or APPLY.
 
@@ -267,6 +268,7 @@ Scrape has MOVEMENT settings but no COLOUR or APPLY.
 
 | Control | What it does |
 |---|---|
+| paints on layer | Which layer the tool paints on. By default brush and knife are on 2, lines and fragments on 3, and splatter on 4. |
 | opacity | How solid each mark is. It has a "by" row. |
 | see-through washes | The share of marks painted thin and see-through |
 | blend | How marks combine with the paint already on their layer: normal, multiply (darkens), screen (lightens), and so on |
@@ -301,11 +303,12 @@ is all of them combined. Which ones show is set in VIEW's LAYERS menu.
 
 | Control | What it does |
 |---|---|
-| a row for each layer | **Slider**: the layer's opacity. **List**: how it combines with the layers under it (normal, multiply, screen, add, lightest). **CLEAR**: empties that layer. |
-| paints on layer | Which layer each tool paints on. By default brush and knife are on 2, lines and fragments on 3, and splatter on 4. |
-| scrape down to | What scraping reveals: the **canvas** (every layer is scraped) or a layer (every layer above it in the stack is scraped). |
+| a row for each layer | **List**: how it combines with the layers under it (normal, multiply, screen, add, lightest). **CLEAR**: empties that layer. |
+| transparency | Under each layer's row. At 0 the layer is as solid as its paint; at 1 it's invisible. |
 
-Hiding, fading or recombining a layer changes the painting immediately, including what's already
+Which layer each tool paints on is in its APPLY, and what SCRAPE scrapes down to is in its box in column 2.
+
+Hiding, making see-through or recombining a layer changes the painting immediately, including what's already
 painted on it. The main CLEAR button (in RUN) puts the canvas back to its start and empties every
 layer.
 

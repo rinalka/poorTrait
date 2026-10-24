@@ -4,9 +4,9 @@
 // Under them is the canvas (`startLayer`): solid, the canvas colour with the masses or the photo
 // on it (SETUP 4), made at RUN and CLEAR and never painted on. The layers start empty; they're
 // stacked in `layerOrder`, layer 1 at the bottom to start with, and VIEW's LAYERS list can change
-// the order. In the panel's LAYERS block, each mark system chooses the layer it paints on,
-// and each layer can be faded or combined with the ones under it in a different way (multiply,
-// screen ...); VIEW's LAYERS menu hides and shows them (the canvas always shows). SCRAPE takes
+// the order. Each tool chooses the layer it paints on in its APPLY, and in the panel's LAYERS
+// block each layer can be made see-through or combined with the ones under it in a different way
+// (multiply, screen ...); VIEW's LAYERS list hides and shows them (the canvas always shows). SCRAPE takes
 // paint off the layers above a chosen layer, or all of them, showing what's underneath.
 //
 // SHADOW BOX fakes the layers floating apart: each has a gap above the stack under it, and a
@@ -104,13 +104,14 @@ void composite() {
   for (int p = 0; p < LAYERS; p++) {
     int i = o[p];
     if (v("layerOn" + i) < 0.5) continue;
-    float op = 255 * v("layerOpacity" + i);
+    float solid = 1 - v("layerSeeThrough" + i);
+    float op = 255 * solid;
     float gap = box ? v("layerGap" + i) : 0;
     if (gap > 0 && v("boxShadow") > 0) {
       float len = gap * reach;
       boxShadow.set("offset", -lx * len, -ly * len);
       boxShadow.set("radius", 1 + v("boxSoftness") * len);
-      boxShadow.set("strength", v("boxShadow") * v("layerOpacity" + i));
+      boxShadow.set("strength", v("boxShadow") * solid);
       boxShadow.set("flipY", boxFlipY);
       PGL pgl = canvas.beginPGL();
       blendLayer(pgl, 0);
