@@ -14,13 +14,13 @@
 // lines up with the maps and the 3D models.
 //
 // Showing a mesh:   drag = turn the model   right-drag = move the light   wheel = zoom
-// Keys in this window: space = pause, c = clear, s = save, r = straight on again,
+// Keys in this window: space = pause, n = one step (while paused), c = clear, s = save, r = straight on again,
 //                      l = light on / off
 //
 // The painting is four see-through layers (the Layers tab), combined into one picture every frame.
 //
-// SAVE writes the painting, each layer, and a .json of every setting on the panel, to the saved
-// folder. PRINT writes what this window shows, at the photo's size.
+// SAVE writes the painting, each layer, the paint's height (IMPASTO), and a .json of every setting
+// on the panel, to the saved folder. PRINT writes what this window shows, at the photo's size.
 // LOAD SETTINGS puts a saved .json's settings back on the panel.
 
 // ---- settings ----
@@ -34,6 +34,9 @@ HashMap<String, Float> params = new HashMap<String, Float>();   // the panel's v
 java.util.concurrent.ConcurrentLinkedQueue<String> commands = new java.util.concurrent.ConcurrentLinkedQueue<String>();
 boolean saveWanted = false, printWanted = false;
 boolean runWaiting = false;  // RUN was pressed, but the masses aren't made yet
+boolean stepWanted = false;  // STEP was pressed: paint one step while paused
+float paceOwed = 0;          // painting speed: how many steps are due (see paceDue)
+int paceLast = 0;
 
 // ---- state ----
 String[] faces;              // folder names in mapsFolder
@@ -112,7 +115,9 @@ void draw() {
     startRun();
   }
 
-  if (isRunning && !isPaused) paintFrame();
+  if (isRunning && !isPaused && paceDue()) paintFrame();
+  else if (stepWanted && isRunning && isPaused && !mapShowing()) paintFrame();
+  stepWanted = false;
 
   composite();               // the layers into one picture, every frame - layer settings can change any time
   if (outputMode > 0 && meshShape != null) drawMesh();
@@ -154,6 +159,7 @@ void handle(String c) {
   }
   else if (c.equals("stop")) { isRunning = false; isPaused = false; runWaiting = false; }
   else if (c.equals("pause")) { if (isRunning && !(isPaused && mapShowing())) isPaused = !isPaused; }
+  else if (c.equals("step")) stepWanted = true;
   else if (c.equals("clear")) clearCanvas();
   else if (c.equals("save")) saveWanted = true;
   else if (c.equals("print")) printWanted = true;
@@ -202,6 +208,7 @@ void clearCanvas() {
   if (canvas == null) return;
   clearStart();
   for (int i = 0; i < LAYERS; i++) clearLayer(i);
+  pencils.clear();
   composite();
   markCount = 0;
   gridI = 0;
@@ -239,15 +246,15 @@ void paintFrame() {
 
   // each tool that's on paints on its layer (LAYERS), with its own blend (APPLY), layer by layer
   // and in the TOOLS order within a layer. Scrape (the last tool) takes paint off afterwards
+  // A tool with a thickness also adds what it painted to its layer's height (the Impasto tab)
   for (int L = 0; L < LAYERS; L++) {
-    PGraphics g = null;
     for (int i = 0; i < TOOLS.length - 1; i++) {
       if (!toolOn(i) || (int) v(TOOLS[i] + "_layer") != L) continue;
-      if (g == null) {
-        g = layers[L];
-        g.beginDraw();
-      }
       useTool(i);
+      PGraphics g = layers[L];
+      float thick = t("thickness");
+      if (thick > 0) snapLayer(g);
+      g.beginDraw();
       g.blendMode(blendModes[constrain((int) t("blend"), 0, blendModes.length - 1)]);
       if (i <= 1) {
         int n = (int) t("perFrame");
@@ -255,13 +262,43 @@ void paintFrame() {
       }
       else if (TOOLS[i].equals("splat")) paintSplatters(g);
       else if (TOOLS[i].equals("line")) paintLines(g);
+      else if (TOOLS[i].equals("pencil")) paintPencils(g);
       else paintFragments(g);
       g.blendMode(BLEND);
+      g.endDraw();
+      if (thick > 0) addHeight(L, thick);
     }
-    if (g != null) g.endDraw();
   }
   useTool(TOOLS.length - 1);
   paintScrapes();
+}
+
+// RUN's painting speed: whether to paint a step this frame. At full speed every frame paints;
+// slower, steps are owed as time goes by and paid one a frame, so the window keeps going at full
+// speed while the painting slows down
+boolean paceDue() {
+  int now = millis();
+  float dt = min(0.25, (now - paceLast) / 1000.0);
+  paceLast = now;
+  float pace = v("pace");
+  if (pace >= 0.999) return true;
+  paceOwed = min(1, paceOwed + paceRate(pace) * dt);
+  if (paceOwed < 1) return false;
+  paceOwed -= 1;
+  return true;
+}
+
+// steps a second for the painting speed slider (0 .. 1): from one every 2 seconds up to 60
+float paceRate(float pace) {
+  return 0.5 * pow(120, pace);
+}
+
+// the painting speed in words, for the slider
+String paceText(float rate) {
+  if (rate >= 59.5) return "full speed";
+  if (rate >= 1.5) return round(rate) + " a second";
+  if (rate >= 0.95) return "1 a second";
+  return "1 every " + nf(1 / rate, 0, 1) + " s";
 }
 
 // make tool i the one painting: t() reads its settings, and the direction field goes around or
@@ -359,6 +396,8 @@ void saveAll() {
     canvas.save(base + ".png");
     startLayer.save(base + "-canvas.png");
     for (int i = 0; i < LAYERS; i++) layerPicture(i).save(base + "-layer" + (i + 1) + ".png");
+    combineHeights();
+    heightAll.save(base + "-height.png");
   }
   if (outputMode > 0 && meshShape != null) save(base + "-view.png");
   JSONObject j = panel.settingsJSON();
@@ -367,7 +406,7 @@ void saveAll() {
   j.setFloat("textureSeed", textureSeed);
   j.setInt("marks", markCount);
   saveJSONObject(j, base + ".json");
-  println("saved " + base + " (.png, each layer, .json)");
+  println("saved " + base + " (.png, each layer, the height, .json)");
 }
 
 // PRINT: what this window shows now - the painting, a map, the mesh as it's turned, with the
@@ -420,6 +459,7 @@ void mouseWheel(MouseEvent e) {
 
 void keyPressed() {
   if (key == ' ') command("pause");
+  else if (key == 'n') command("step");
   else if (key == 'c') command("clear");
   else if (key == 's') command("save");
   else if (key == 'r') command("resetView");

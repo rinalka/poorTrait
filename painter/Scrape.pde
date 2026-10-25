@@ -40,7 +40,10 @@ void paintScrapes() {
   scrapeMask.endDraw();
   if (made == 0) return;
   int[] o = layerOrder;
-  for (int p = from; p < LAYERS; p++) eraseWith(layers[o[p]], scrapeMask);
+  for (int p = from; p < LAYERS; p++) {
+    eraseWith(layers[o[p]], scrapeMask);
+    eraseWith(heights[o[p]], scrapeMask);      // the paint's thickness goes with it (Impasto)
+  }
 }
 
 // the direction a scrape goes: along the form, turned by up to 90 degrees as "follow" drops

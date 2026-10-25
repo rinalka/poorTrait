@@ -2,14 +2,15 @@
 //
 // Four columns:
 //   SETUP 1 - 4                   the source picture, the target (2D or a mesh), the masses and
-//                                 what the canvas starts with, each a box that turns green once
-//                                 it's done - 1 - 3 are locked while a run is going
+//                                 what the canvas starts with and its texture, each a box that
+//                                 turns green once it's done - 1 - 3 are locked while a run is going
 //   the tools                     what does the drawing: brush, palette knife, splatter, lines,
-//                                 fragments, scrape - one at a time, with its shape settings
+//                                 fragments, pencil, scrape - one at a time, with its shape settings
 //   MOVEMENT, COLOUR, APPLY       how the chosen tool moves, where its colour comes from, and
 //                                 how solid it is
-//   ABSTRACTION, LAYERS,          where the face may be broken up, the four layers, and the
-//   SHADOW BOX                    layers floating apart, lit from one side
+//   ABSTRACTION, LAYERS,          where the face may be broken up, the four layers, the
+//   SHADOW BOX, IMPASTO           layers floating apart, lit from one side, and thick paint
+//                                 catching the light
 // and along the bottom, VIEW (the MAPS and LAYERS lists) and CAMERA under column 1, and RUN under
 // column 2, level with VIEW.
 //
@@ -53,7 +54,8 @@ public class Panel extends PApplet {
   volatile boolean layoutWanted = true;
   boolean shownRunning = false;
   boolean listOpen = false;  // one of the dropdown lists is open
-  Button runButton, pauseButton;
+  Button runButton, pauseButton, stepButton;
+  Slider paceSlider;
   Row layerRow;                                   // VIEW's lists, with the layers' tick boxes
   int[] layerItem = new int[LAYERS];              // each layer's tick box in layerRow's items
   String shownOrder = "";
@@ -159,6 +161,14 @@ public class Panel extends PApplet {
     startBox = setupBox("SETUP 4   START");
     boxText("").setText("start the canvas with  (at RUN and CLEAR)");
     radio("startWith", startNames, 3, 1);
+    // ... and what it's painted on: a canvas weave, paper or newspaper (the Ground tab)
+    row(28);
+    label("texture", 0);
+    list("groundKind", groundNames, 0, 60, 130);
+    slider("groundAmount", "texture strength", 0, 1, 0.6);
+    onlyWhen("groundKind");
+    slider("groundThrough", "shows through the paint", 0, 1, 0.25);
+    onlyWhen("groundKind");
     row(2);
 
     // ---------------------------------------------------- along the bottom: VIEW, CAMERA and RUN
@@ -221,6 +231,11 @@ public class Panel extends PApplet {
     runButton = button("runStop", "RUN", 0, 96);
     pauseButton = button("pauseRun", "PAUSE", 106, 96);
     button("clearCanvas", "CLEAR", 212, 96);
+    // how fast it paints (the window and the panel keep going at full speed), and while paused,
+    // STEP paints one step at a time
+    row(36);
+    stepButton = button("stepRun", "STEP", 0, 96);
+    paceSlider = sliderAt("pace", "painting speed", 0, 1, 1, 106, 4, 110);
     row(32);
     button("saveNow", "SAVE", 0, 96);
     button("loadSettings", "LOAD SETTINGS", 106, 150);
@@ -281,7 +296,33 @@ public class Panel extends PApplet {
     toggle("frag_shards", "shards", true, 236);
     onlyWhen("on frag");
 
+    // the pencil (the Pencil tab): how it steers, on which map, and the hand
     toolBox(5, false);
+    radio("pencil_kind", new String[] { "trace the edges", "flow from the map", "wander" }, 2, 0);
+    onlyWhen("on pencil");
+    row(28);
+    label("map", 0);
+    list("pencil_map", java.util.Arrays.copyOfRange(mapNames, 1, mapNames.length), 3, 34, 130);
+    toggle("pencil_inv", "follow the light parts", false, 176);
+    onlyWhen("on pencil");
+    toolSlider("level", "level  (where the edge is)", 0, 1, 0.45);
+    toolSlider("hold", "how tightly it steers", 0, 1, 0.5);
+    onlyWhen("on pencil&pencilSteers");
+    toolSlider("turn", "turn the flow  (degrees)", 0, 360, 0).setDecimalPrecision(0);
+    onlyWhen("on pencil&pencilFlow");
+    toolSlider("count", "pencils at once", 1, 40, 10).setDecimalPrecision(0);
+    toolSlider("speed", "speed  (pixels a frame)", 2, 80, 24).setDecimalPrecision(0);
+    toolSlider("length", "line length", 50, 3000, 700).setDecimalPrecision(0);
+    toolSlider("passes", "passes over each line", 1, 6, 2).setDecimalPrecision(0);
+    toolSlider("wobble", "wobble", 0, 1, 0.35);
+    toolSlider("width", "width", 0.3, 6, 1.8);
+    toolSlider("pressure", "pressure changes", 0, 1, 0.6);
+    toolSlider("grain", "paper grain", 0, 1, 0.5);
+    toolSlider("hatch", "hatching  (groups a frame)", 0, 5, 0);
+    toolSlider("hatchAngle", "hatching angle", 0, 180, 45).setDecimalPrecision(0);
+    onlyWhen("on pencil&pencilHatch");
+
+    toolBox(6, false);
     radio("scrape_kind", new String[] { "knife scrape", "scratches" }, 2, 0);
     onlyWhen("on scrape");
     toolSlider("rate", "scrapes per frame", 0.05, 20, 1);
@@ -297,7 +338,7 @@ public class Panel extends PApplet {
     // ---------------------------------------------------- column 3: MOVEMENT, COLOUR, APPLY
     // ... of the tool chosen in column 2. Every tool has its own set; only the chosen one's shows
     column();
-    float[] followDefault = { 0.6, 0.6, 0, 0.5, 0.3, 0.5 };
+    float[] followDefault = { 0.6, 0.6, 0, 0.5, 0.3, 0.3, 0.5 };
     moveHeader = header("MOVEMENT");
     for (int i = 0; i < TOOLS.length; i++) {
       String n = TOOLS[i];
@@ -328,7 +369,7 @@ public class Panel extends PApplet {
 
     colourHeader = header("COLOUR");
     onlyWhen("notScrape");
-    float[] contrastDefault = { 0, 0, 0.5, 0.6, 0.5 };
+    float[] contrastDefault = { 0, 0, 0.5, 0.6, 0.5, 0.55 };
     for (int i = 0; i < TOOLS.length - 1; i++) {
       String n = TOOLS[i];
       row(20);
@@ -364,9 +405,10 @@ public class Panel extends PApplet {
 
     applyHeader = header("APPLY");
     onlyWhen("notScrape");
-    float[] opacityDefault = { 0.9, 0.9, 0.9, 0.8, 0.9 };
-    float[] washesDefault = { 0.15, 0.15, 0, 0, 0 };
-    int[] layerDefault = { 1, 1, 3, 2, 2 };
+    float[] opacityDefault = { 0.9, 0.9, 0.9, 0.8, 0.9, 0.9 };
+    float[] washesDefault = { 0.15, 0.15, 0, 0, 0, 0 };
+    int[] layerDefault = { 1, 1, 3, 2, 2, 3 };
+    float[] thicknessDefault = { 0.5, 0.8, 0.4, 0.1, 0.25, 0 };
     for (int i = 0; i < TOOLS.length - 1; i++) {
       String n = TOOLS[i];
       row(24);
@@ -379,13 +421,15 @@ public class Panel extends PApplet {
       onlyWhen("edit " + n);
       slider(n + "_washes", "see-through washes", 0, 1, washesDefault[i]);
       onlyWhen("edit " + n);
+      slider(n + "_thickness", "thickness  (impasto)", 0, 1, thicknessDefault[i]);
+      onlyWhen("edit " + n);
       row(28);
       label("blend", 0);
       list(n + "_blend", blendNames, 0, 50, 140);
       onlyWhen("edit " + n);
     }
 
-    // ---------------------------------------------------- column 4: ABSTRACTION, LAYERS, SHADOW BOX
+    // ---------------------------------------------------- column 4: ABSTRACTION, LAYERS, SHADOW BOX, IMPASTO
     column();
     header("ABSTRACTION");
     row(26);
@@ -407,7 +451,7 @@ public class Panel extends PApplet {
     row(6);
 
     // the four layers (the Layers tab): how it's combined with the layers under it, a button to
-    // empty it, and how see-through it is (whether it shows is in VIEW's LAYERS list; which layer
+    // empty it, how see-through it is, and how much IMPASTO's light catches its paint (whether it shows is in VIEW's LAYERS list; which layer
     // each tool paints on is in its APPLY)
     header("LAYERS");
     for (int i = 0; i < 4; i++) {
@@ -415,7 +459,9 @@ public class Panel extends PApplet {
       label("layer " + (i + 1), 0);
       list("layerBlend" + i, layerBlendNames, 0, 60, 110);
       button("clearLayer" + i, "CLEAR", 240, 64).setHeight(18);
-      slider("layerSeeThrough" + i, "transparency", 0, 1, 0);
+      row(22);
+      sliderAt("layerSeeThrough" + i, "transparency", 0, 1, 0, 0, 0, 100);
+      sliderAt("layerImpasto" + i, "impasto", 0, 1, 1, 200, 0, 70);
     }
     row(6);
 
@@ -440,6 +486,21 @@ public class Panel extends PApplet {
       slider("layerGap" + i, "layer " + (i + 1), 0, 60, 12).setDecimalPrecision(0);
       onlyWhen("box");
     }
+    row(6);
+
+    // thick paint catching a raking light (the Impasto tab); how thick each tool's paint is is in
+    // its APPLY
+    header("IMPASTO");
+    row(26);
+    toggle("impastoOn", "on  (the light catches thick paint)", true, 0);
+    slider("impastoRelief", "relief", 0, 1, 0.5);
+    onlyWhen("impasto");
+    slider("impastoFrom", "light from  (90 = above)", 0, 360, 135).setDecimalPrecision(0);
+    onlyWhen("impasto");
+    slider("impastoHeight", "light height", 10, 80, 35).setDecimalPrecision(0);
+    onlyWhen("impasto");
+    slider("impastoGloss", "shine", 0, 1, 0.3);
+    onlyWhen("impasto");
 
     // the lists open downwards over the controls under them, so draw them last - the higher
     // ones last of all, so an open list is never hidden behind the one below it
@@ -528,7 +589,10 @@ public class Panel extends PApplet {
     if (!isRunning) buttonColour(pauseButton, color(60), color(70, 130, 200), false);
     else if (isPaused) buttonColour(pauseButton, orange, orangeHover, mapShown);
     else buttonColour(pauseButton, runGreen, runGreenHover, false);
-    canvasShown.setCaptionLabel("canvas  (" + startNames[(int) value("startWith")] + ")");
+    buttonColour(stepButton, color(60), color(70, 130, 200), !(isRunning && isPaused) || mapShown);
+    paceSlider.getValueLabel().setText(paceText(paceRate(value("pace"))));
+    int kind = (int) value("groundKind");
+    canvasShown.setCaptionLabel("canvas  (" + startNames[(int) value("startWith")] + (kind > 0 ? ", " + groundNames[kind] : "") + ")");
     canvasShown.setValue(1);
     canvasShown.setLock(true);
     if (!editing.equals(shownEditing)) {
@@ -674,6 +738,7 @@ public class Panel extends PApplet {
     String n = e.getName();
     if (n.equals("runStop")) command(isRunning || runWaiting ? "stop" : "run");
     else if (n.equals("pauseRun")) command("pause");
+    else if (n.equals("stepRun")) command("step");
     else if (n.equals("clearCanvas")) command("clear");
     else if (n.equals("saveNow")) command("save");
     else if (n.equals("printView")) command("print");
@@ -723,12 +788,17 @@ public class Panel extends PApplet {
     if (when.equals("ground")) return targetDone && value("output") == 0;
     if (when.equals("later")) return false;
     if (when.equals("notScrape")) return !editing.equals("scrape");
+    if (when.equals("pencilSteers")) return value("pencil_kind") < 2;
+    if (when.equals("pencilFlow")) return value("pencil_kind") == 1;
+    if (when.equals("pencilHatch")) return value("pencil_hatch") > 0;
     if (when.equals("knifeFlat")) return value("knife_carry") < CHUNK;   // chunk and copy have no streaks
     if (when.startsWith("mix ")) return value(when.substring(4) + "_pickup") == 2;
     if (when.startsWith("weighted ")) return value(when.substring(9) + "_startAt") == 1;
     if (when.startsWith("mouse ")) return value(when.substring(6) + "_startAt") == 3;
     if (when.equals("abstraction")) return value("abstractionOn") > 0.5;
     if (when.equals("box")) return value("boxOn") > 0.5;
+    if (when.equals("impasto")) return value("impastoOn") > 0.5;
+    if (when.equals("groundKind")) return value("groundKind") > 0;
     if (when.equals("careful")) return value("abstractionOn") > 0.5 && value("protectWith") == 1;
     if (when.equals("2D abstraction")) return value("output") == 0 && value("abstractionOn") > 0.5;
     if (when.equals("2D")) return value("output") == 0;
@@ -827,7 +897,7 @@ public class Panel extends PApplet {
     float amount = all.get("nudgeAmount").getValue();
     for (String n : liveNames) {
       ControllerInterface c = all.get(n);
-      if (!(c instanceof Slider) || n.equals("nudgeAmount") || n.endsWith("perFrame") || n.endsWith("_rate")) continue;
+      if (!(c instanceof Slider) || n.equals("nudgeAmount") || n.equals("pace") || n.endsWith("perFrame") || n.endsWith("_rate")) continue;
       Slider s = (Slider) c;
       float range = s.getMax() - s.getMin();
       s.setValue(constrain(s.getValue() + random(-0.5, 0.5) * range * amount, s.getMin(), s.getMax()));

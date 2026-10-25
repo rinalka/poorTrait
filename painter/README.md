@@ -56,12 +56,13 @@ The panel has four columns:
 1. **SETUP 1–4**: the photo, 2D or a mesh, the large colour masses the painting can start
    from, and what the canvas starts with.
 2. **The tools**: what does the drawing. These are BRUSH, PALETTE KNIFE, SPLATTER, LINES,
-   FRAGMENTS and SCRAPE. Only one tool paints at a time.
+   FRAGMENTS, PENCIL and SCRAPE. Only one tool paints at a time.
 3. **MOVEMENT, COLOUR, APPLY**: how a tool moves and where it lands, where its colour comes from,
    and how solid it is. These belong to **the tool that's on in column 2**: every tool has its
    own set.
-4. **ABSTRACTION, LAYERS, SHADOW BOX**: where the face may be broken up, which layer each tool
-   paints on, and the layers floating apart with light and shadow between them.
+4. **ABSTRACTION, LAYERS, SHADOW BOX, IMPASTO**: where the face may be broken up, the four
+   layers, the layers floating apart with light and shadow between them, and thick paint
+   catching the light.
 
 Along the bottom of the window are **VIEW** (what you're looking at) and **CAMERA**, under
 column 1, and **RUN**, under column 2.
@@ -91,7 +92,7 @@ choice is used at the next CLEAR.
 | SETUP 1  SOURCE | Click it for a list of the photos, and pick one. Its name shows under the title. |
 | SETUP 2  TARGET | Click it to choose **2D canvas**, **mesh: just the person** (a 3D model of the face) or **mesh: whole photo** (the whole picture as a relief). For 2D canvas, the canvas colour wheel appears under it: the colour the painting starts on. |
 | SETUP 3  MASSES | Click it to open the masses' sliders (below). The output window shows the masses as they are now, with the light off so their colours are true. When they look right, click the box's title: the sliders close, the view goes back to what it was, and the box turns green. |
-| SETUP 4  START | What the canvas, under the four layers, holds at RUN and CLEAR: the **plain** canvas colour, the **masses**, or the **photo**. Starting with the masses and then breaking them up with marks is the idea behind ABSTRACTION. The choices are always showing; the box turns green once you click one. |
+| SETUP 4  START | What the canvas, under the four layers, holds at RUN and CLEAR: the **plain** canvas colour, the **masses**, or the **photo**. Starting with the masses and then breaking them up with marks is the idea behind ABSTRACTION. The choices are always showing; the box turns green once you click one. Under them, **texture** puts a **canvas weave**, **paper** or a collage of **newspaper** cuttings on the canvas, over its colour and the masses or photo. It shows wherever there's no paint, and through see-through and scraped paint. **texture strength** is how strongly it shows on the canvas (from the next CLEAR). **shows through the paint** lets it come through the paint too, the way a coarse canvas's weave does; this one changes straight away, and with IMPASTO on, a weave or paper also gets bumps that catch the light. |
 
 Picking a new photo turns SETUP 3 back from green, because the new photo has new masses to look
 at.
@@ -141,8 +142,10 @@ RUN sits beside VIEW, level with its top.
 |---|---|
 | RUN / STOP | Start a new painting (green **RUN**), or end the run (red **STOP**). The painting stays on screen after STOP. |
 | PAUSE / CARRY ON | Freeze the painting. You can still turn the mesh. Green **PAUSE** while it's painting, orange **CARRY ON** while it's paused. |
+| STEP | While paused, paints one step: one frame's worth of marks, as the tool's settings say (for example 20 knife marks at "marks per frame" 20). Change a setting, press STEP, look. The **n** key in the output window does the same. |
+| painting speed | Slows the painting down so you can follow it: from **full speed** (a step every frame, about 60 a second) down to one step every 2 seconds. Only the painting slows, so the window and the panel stay smooth. Each step still paints the tool's marks per frame, so for the slowest pace set that low too. |
 | CLEAR | Reset the canvas and every layer, and keep painting |
-| SAVE | Save the painting, the canvas and each layer (as see-through PNGs you can stack in Photoshop), and every setting, to `painter/saved/`. For a mesh it also saves the view as you see it. |
+| SAVE | Save the painting, the canvas and each layer (as see-through PNGs you can stack in Photoshop), the paint's height (IMPASTO), and every setting, to `painter/saved/`. For a mesh it also saves the view as you see it. |
 | LOAD SETTINGS | Load the settings from a saved `.json` |
 | NUDGE + how far | Shift every live setting, for every tool, by a random amount. "how far" sets how big the change is. Good for when you're stuck. |
 | PRINT | Save what the output window shows now, at the photo's size, to `painter/saved/` as `...-print.png`. That's whatever VIEW shows (the painting or a map), the mesh as you've turned it, and the direction field or protected parts if they're showing. |
@@ -225,6 +228,37 @@ Tiny dots, dashes, triangles and shards, for surface complexity.
 
 For fragments, MOVEMENT's "follow the form" is the share turned along the form.
 
+### PENCIL
+
+Lines that grow a little every frame, as if someone were sketching with a coloured pencil. A few
+pencils are on the paper at once. Each moves on until its line is long enough, then lifts, and
+(with more than one pass) goes down again close to where that line began and goes over it again,
+a little off, like the searching, repeated lines of a sketch.
+
+| Control | What it does |
+|---|---|
+| trace the edges / flow from the map / wander | How the pencil steers. **Trace the edges**: it walks along the edge of the dark parts of the map, where the map crosses **level**, the way you'd draw round a shape. **Flow from the map**: postContemp's continuous flow. The map's value where the pencil is gives a direction (dark 0 degrees, light all the way round), and the pencil keeps turning towards it, making swirls. **Wander**: postContemp's random walk, a new direction now and then, pulled along the form as much as MOVEMENT's "follow the form" says. |
+| map | The map it follows. **light** (the default) outlines the shading. **photo lightness** follows the photo's own light and dark. |
+| follow the light parts | Turns the map over, so the pencil traces the light parts instead |
+| level | Where the edge is: the pencil traces the line where the map is this light. Low values outline only the darkest parts. Hatching also uses it: it only goes where the map is darker than this. |
+| how tightly it steers | (trace and flow) Low values let the line drift off the edge and come back, like a loose hand. High values trace it closely. |
+| turn the flow | (flow) Turns every direction by this many degrees |
+| pencils at once | How many lines are being drawn at the same time |
+| speed | How far each pencil moves in a frame |
+| line length | How long a line gets before the pencil lifts |
+| passes over each line | How many times the pencil goes over each line |
+| wobble | The unsteadiness of the hand |
+| width | How thick the line is |
+| pressure changes | How much the hand presses harder and lighter along a line |
+| paper grain | How much the paper's tooth breaks up the line. The grain stays in place, so lines that go over the same spot catch the same grain. |
+| hatching | Groups of short parallel strokes in the parts darker than **level**: closer together, longer and more of them where it's darker. Off at 0. |
+| hatching angle | Which way the hatching goes |
+
+Each line is one colour, picked up where it starts (COLOUR). COLOUR's "contrast with the photo"
+makes the lines darker or lighter than what's under them, so they show. To use one pencil colour
+for every line, set the accent chance to 1 and choose the accent colour. A pencil lifts over
+protected parts (ABSTRACTION).
+
 ### SCRAPE
 
 Takes paint off instead of putting it on. Each scrape removes paint from every layer above its
@@ -268,10 +302,11 @@ Scrape has MOVEMENT settings but no COLOUR or APPLY.
 
 | Control | What it does |
 |---|---|
-| paints on layer | Which layer the tool paints on. By default brush and knife are on 2, lines and fragments on 3, and splatter on 4. |
+| paints on layer | Which layer the tool paints on. By default brush and knife are on 2, lines and fragments on 3, and splatter and pencil on 4. |
 | opacity | How solid each mark is. It has a "by" row. |
 | see-through washes | The share of marks painted thin and see-through |
 | blend | How marks combine with the paint already on their layer: normal, multiply (darkens), screen (lightens), and so on |
+| thickness  (impasto) | How thick the tool's paint is, for IMPASTO's light. By default the knife is thickest (0.8), then the brush (0.5), splatter (0.4), fragments (0.25) and lines (0.1); the pencil is 0 (flat). Washes and see-through marks come out thinner. |
 
 The blend works against what's already on the same layer. On an empty layer, modes like multiply
 have nothing to work against, so use the layer's own blend in LAYERS instead.
@@ -305,6 +340,7 @@ is all of them combined. Which ones show is set in VIEW's LAYERS menu.
 |---|---|
 | a row for each layer | **List**: how it combines with the layers under it (normal, multiply, screen, add, lightest). **CLEAR**: empties that layer. |
 | transparency | Under each layer's row. At 0 the layer is as solid as its paint; at 1 it's invisible. |
+| impasto | Beside transparency: how much IMPASTO's light catches this layer's paint. 1 = as thick as the tools painted it, 0 = flat. |
 
 Which layer each tool paints on is in its APPLY, and what SCRAPE scrapes down to is in its box in column 2.
 
@@ -330,6 +366,29 @@ what's already painted, and the mesh wears it too. The canvas casts no shadow.
 | lit edges | How bright the edges facing the light are |
 | gap above the layers under it | One slider per layer, in pixels: how far it floats above the stack under it. 0 = flat on it (no shadow). Bigger gaps make longer, softer shadows. The gap belongs to the layer, so it moves with it when you change the order. |
 
+### IMPASTO
+
+Thick paint catching a raking light. Every mark a tool paints adds to its layer's height, as
+thick as the tool's **thickness** in APPLY says. A knife mark becomes a slab with steep edges, and
+lighter paint stands a little higher than dark. A new mark flattens the paint under it a little,
+so the height doesn't pile up for ever. The light brightens the edges that face it and shades the
+ones that face away, with a little shine.
+
+SCRAPE takes the height off with the paint, CLEAR on a layer flattens it, and hiding a layer or
+making it see-through takes its height away too. Each layer's **impasto** slider in LAYERS turns
+its relief up or down: at 0 its paint lies flat, so you can have a thick knife layer over a
+smooth one. The light is applied to the finished picture, so
+the canvas, the mesh, wet paint and a saved painting all have it. SAVE also writes the height as
+`...-height.png` (white = thick).
+
+| Control | What it does |
+|---|---|
+| on | Switches the light on. Paint records its thickness either way, so switching on later shows everything already painted. |
+| relief | How deep the paint looks |
+| light from | Which side the light comes from, in degrees, as for SHADOW BOX: 0 = right, 90 = above, 180 = left. It's a separate light, so set both the same if you use both. |
+| light height | How high the light is: low light (10) rakes across the paint and shows every ridge; high light (80) flattens it. |
+| shine | How much the steepest lit edges glint |
+
 ## Letting the maps decide
 
 Some settings have a **by** row underneath them: size (brush and knife), follow the form (brush
@@ -353,11 +412,12 @@ hug the face in the middle and scatter at the edges.
 
 ## Keys (in the output window)
 
-**space**: pause  **c**: clear  **s**: save  **r**: straight on (mesh)  **l**: light on/off (mesh)
+**space**: pause  **n**: one step (while paused)  **c**: clear  **s**: save  **r**: straight on (mesh)  **l**: light on/off (mesh)
 
 ## Tips
 
-- Start with the defaults, press RUN, and move one slider at a time while it paints.
+- Start with the defaults, press RUN, and move one slider at a time while it paints. Turn the
+  painting speed down to watch what each change does.
   New marks go on top of the old ones, so a single painting can hold several settings in
   layers.
 - Start the canvas with the masses, keep abstraction around 0.5 with careful marks on, and

@@ -14,6 +14,8 @@
 // bigger gap) and lights up its edges that face the light, like cut paper in a shadow box. It's
 // done here, as the layers are combined, so the mesh wears it too.
 //
+// Each layer also has a height - how thick its paint is - for IMPASTO (the Impasto tab).
+//
 // This is built so the layers can later be spread over more than one copy of the mesh ("sheets",
 // for real shadows between them), but for now they're all on the one.
 //
@@ -57,6 +59,7 @@ void makeLayers() {
   for (int i = 0; i < LAYERS; i++) layers[i] = photoSized(layers[i]);
   startLayer = photoSized(startLayer);
   canvas = photoSized(canvas);
+  makeHeights();
 }
 
 PGraphics photoSized(PGraphics g) {
@@ -64,24 +67,31 @@ PGraphics photoSized(PGraphics g) {
   return createGraphics(photo.width, photo.height, P2D);
 }
 
-// the canvas back to its start: the canvas colour, and the masses or the photo
+// the canvas back to its start: the canvas colour, the masses or the photo, and the texture
 void clearStart() {
   if (startLayer == null) return;
   int start = (int) v("startWith");
   PImage under = start == 1 ? massesImg : start == 2 ? photo : null;
   if (start == 1 && massesImg == null) println("the masses aren't ready yet - starting with the plain canvas colour");
+  PImage texture = groundForStart();      // SETUP 4's texture (the Ground tab)
   startLayer.beginDraw();
   startLayer.background(ground);
   if (under != null) startLayer.image(under, 0, 0);
+  if (texture != null) {
+    startLayer.blendMode(MULTIPLY);
+    startLayer.image(texture, 0, 0);
+    startLayer.blendMode(BLEND);
+  }
   startLayer.endDraw();
 }
 
-// a layer back to empty
+// a layer back to empty (and flat)
 void clearLayer(int i) {
   if (layers[i] == null) return;
   layers[i].beginDraw();
   layers[i].clear();
   layers[i].endDraw();
+  clearHeight(i);
 }
 
 // combine the canvas and the layers into `canvas`, bottom to top. With SHADOW BOX on, each layer
@@ -97,6 +107,8 @@ void composite() {
   // pixel of gap: the lower the light, the longer
   float from = radians(v("lightFrom")), lx = cos(from), ly = -sin(from);
   float reach = 1 / tan(radians(v("lightHeight")));
+  boolean fin = finishing();
+  if (fin) combineHeights();
   canvas.beginDraw();
   canvas.background(ground);
   canvas.image(startLayer, 0, 0);
@@ -139,6 +151,7 @@ void composite() {
     if (rim) canvas.resetShader();
   }
   canvas.endDraw();
+  if (fin) finish(canvas);        // IMPASTO's light and the ground through the paint (the Impasto tab)
 }
 
 // OpenGL blending for drawing a premultiplied layer onto what's under it
