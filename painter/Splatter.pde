@@ -7,7 +7,9 @@
 // conspicuously big. Big drops have satellite droplets round their edge, and some clusters fling
 // long thin trails out from the centre, tapering as they go and ending in a drop.
 //
-// Drops aren't circles: each has a wobbly outline, slightly different every time.
+// Drops aren't circles: each has a wobbly outline, slightly different every time. Some drops
+// ("drips") are wet enough to run: paint hangs off the bottom of the drop and runs straight down,
+// thinning a little, and gathers in a blob at the end.
 // Splatters respect ABSTRACTION: no drop lands where it's protected.
 //
 // A cluster can be hundreds of drops, so the whole cluster is drawn as one shape made of
@@ -80,12 +82,52 @@ void drop(PGraphics g, float x, float y, float r, color c, float a) {
     g.vertex(rx[i], ry[i]);
     g.vertex(rx[j], ry[j]);
   }
+  // a drip, more likely from a bigger drop, hanging off its lowest point
+  if (r > 3 && random(1) < t("drip") * min(1, 0.3 + r / max(1, t("size")))) {
+    int low = 0;
+    for (int i = 1; i < pts; i++) if (ry[i] > ry[low]) low = i;
+    drip(g, lerp(rx[low], x, 0.25), ry[low], r);
+  }
   if (r > 5) {
     int sats = (int) random(0, r / 3);
     for (int i = 0; i < sats; i++) {
       float ang = random(TWO_PI), dist = r * random(1.1, 1.9), sr = r * random(0.05, 0.18);
       if (random(1) < protection(x + cos(ang) * dist, y + sin(ang) * dist)) continue;
       disc(g, x + cos(ang) * dist, y + sin(ang) * dist, sr, 6);
+    }
+  }
+}
+
+// paint running straight down from (x, y), the bottom of a drop r across: it leaves the drop
+// wide, thins as it goes with a little waver, and ends in a blob a bit fatter than the run
+void drip(PGraphics g, float x, float y, float r) {
+  float w = r * random(0.25, 0.5);
+  float len = t("dripLength") * random(0.4, 1.2) * sqrt(min(1, r / max(1, t("size")) + 0.3));
+  int steps = max(3, round(len / 3));
+  float seed = random(1000), drift = random(-0.03, 0.03);
+  y -= w * 0.6;                                   // starts inside the drop, so they're joined
+  float pl = 0, pr = 0, py = 0;
+  for (int s = 0; s <= steps; s++) {
+    float u = s / (float) steps, yy = y + len * u;
+    float xx = x + drift * len * u * u + (noise(seed, u * 4) - 0.5) * w * 0.3;
+    // wide where it leaves the drop, then thinning, swelling a little here and there
+    float half = w / 2 * (lerp(1.6, 0.55, sqrt(u)) + 0.25 * (noise(seed + 9, u * 6) - 0.5));
+    if (s > 0) {
+      g.vertex(pl, py); g.vertex(pr, py); g.vertex(xx - half, yy);
+      g.vertex(pr, py); g.vertex(xx + half, yy); g.vertex(xx - half, yy);
+    }
+    pl = xx - half; pr = xx + half; py = yy;
+    if (s == steps) {
+      // the blob: a fat drop, a little longer than it's wide, hanging just below the run's end
+      float br = w * random(0.65, 0.95);
+      int pts = 14;
+      float cy = yy + br * 0.35;
+      for (int i = 0; i < pts; i++) {
+        float a0 = TWO_PI * i / pts, a1 = TWO_PI * (i + 1) / pts;
+        g.vertex(xx, cy);
+        g.vertex(xx + cos(a0) * br, cy + sin(a0) * br * (sin(a0) > 0 ? 1.2 : 0.9));
+        g.vertex(xx + cos(a1) * br, cy + sin(a1) * br * (sin(a1) > 0 ? 1.2 : 0.9));
+      }
     }
   }
 }

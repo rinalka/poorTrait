@@ -225,7 +225,7 @@ public class Panel extends PApplet {
     Slider sm = slider("smoothing", "direction field smoothing", 0, 24, 4);
     sm.setNumberOfTickMarks(13).snapToTickMarks(true).showTickMarks(false);
     sm.setTriggerEvent(Slider.RELEASE);          // rebuilding the field takes a moment - only on letting go
-    colourPicker("meshBg", "mesh background", color(30));
+    colourPicker("meshBg", "mesh background  (when there's no backdrop)", color(30));
     onlyWhen("mesh");
     row(30);
     toggle("sway", "sway", false, 0);
@@ -289,6 +289,8 @@ public class Panel extends PApplet {
     toolSlider("scatter", "scatter", 5, 400, 60).setDecimalPrecision(0);
     toolSlider("trails", "flung trails", 0, 1, 0.3);
     toolSlider("vary", "drop colour variation", 0, 0.5, 0.1);
+    toolSlider("drip", "drips", 0, 1, 0);
+    toolSlider("dripLength", "drip length", 10, 400, 120).setDecimalPrecision(0);
 
     toolBox(3, false);
     toolSlider("rate", "lines per frame", 0.05, 20, 1);
@@ -510,7 +512,7 @@ public class Panel extends PApplet {
     column();
     header("ABSTRACTION");
     row(26);
-    toggle("abstractionOn", "on  (off: nothing is protected)", true, 0);
+    toggle("abstractionOn", "on  (off: nothing is protected)", false, 0);      // always starts off
     slider("abstraction", "abstraction", 0, 1, 0.6);
     onlyWhen("abstraction");
     slider("anchors", "anchors (always kept)", 0, 1, 0.3);
@@ -550,7 +552,8 @@ public class Panel extends PApplet {
     layerBands[LAYERS] = new Row[] { cur, cur };
     row(6);
 
-    // the layers floating apart, lit from one side (the Layers tab's composite)
+    // the layers floating apart, lit from one side (the Layers tab's composite). The light is the
+    // same for all; each layer has its own gap, shadow and lit edges - a row each, under headings
     header("SHADOW BOX");
     row(26);
     toggle("boxOn", "on  (the layers float apart)", false, 0);
@@ -558,17 +561,19 @@ public class Panel extends PApplet {
     onlyWhen("box");
     slider("lightHeight", "light height", 10, 80, 45).setDecimalPrecision(0);
     onlyWhen("box");
-    slider("boxShadow", "shadow darkness", 0, 1, 0.6);
-    onlyWhen("box");
-    slider("boxSoftness", "shadow softness", 0, 1, 0.4);
-    onlyWhen("box");
-    slider("boxRim", "lit edges", 0, 1, 0.4);
-    onlyWhen("box");
     row(20);
-    label("gap above the layers under it  (pixels)", 0);
+    label("gap", 54);
+    label("shadow", 120);
+    label("softness", 186);
+    label("lit edges", 252);
     onlyWhen("box");
     for (int i = 0; i < LAYERS; i++) {
-      slider("layerGap" + i, "layer " + (i + 1), 0, 60, 12).setDecimalPrecision(0);
+      row(22);
+      label("layer " + (i + 1), 0);
+      shadowSlider("layerGap" + i, 0, 60, 12, 54).setDecimalPrecision(0);
+      shadowSlider("boxShadow" + i, 0, 1, 0.6, 120);
+      shadowSlider("boxSoftness" + i, 0, 1, 0.4, 186);
+      shadowSlider("boxRim" + i, 0, 1, 0.4, 252);
       onlyWhen("box");
     }
     row(6);
@@ -1248,6 +1253,13 @@ public class Panel extends PApplet {
     row(24);
     label(caption, 12);
     radioAt(name, new String[] { "1", "2", "3", "4" }, chosen, 110, 44);
+  }
+
+  // one of a SHADOW BOX layer's small sliders, under its heading (so no caption of its own)
+  Slider shadowSlider(String name, float lo, float hi, float value, float dx) {
+    Slider s = sliderAt(name, "", lo, hi, value, dx, 0, 60);
+    s.getCaptionLabel().setVisible(false);
+    return s;
   }
 
   // a colour: its name, then red, green and blue sliders over a strip of the colour

@@ -14,8 +14,9 @@
 //
 // SHADOW BOX fakes the layers floating apart: each has a gap above the stack under it, and a
 // light from one side makes it cast a soft shadow on what's under it (further and softer with a
-// bigger gap) and lights up its edges that face the light, like cut paper in a shadow box. It's
-// done here, as the layers are combined, so the mesh wears it too.
+// bigger gap) and lights up its edges that face the light, like cut paper in a shadow box. Each
+// layer has its own gap, shadow darkness, softness and lit edges. It's done here, as the layers
+// are combined, so the mesh wears it too.
 //
 // Each layer also has a height - how thick its paint is - for IMPASTO (the Impasto tab).
 //
@@ -122,11 +123,11 @@ void composite() {
     float solid = 1 - v("layerSeeThrough" + i);
     float op = 255 * solid;
     float gap = box ? v("layerGap" + i) : 0;
-    if (gap > 0 && v("boxShadow") > 0) {
+    if (gap > 0 && v("boxShadow" + i) > 0) {
       float len = gap * reach;
       boxShadow.set("offset", -lx * len, -ly * len);
-      boxShadow.set("radius", 1 + v("boxSoftness") * len);
-      boxShadow.set("strength", v("boxShadow") * solid);
+      boxShadow.set("radius", 1 + v("boxSoftness" + i) * len);
+      boxShadow.set("strength", v("boxShadow" + i) * solid);
       boxShadow.set("flipY", boxFlipY);
       PGL pgl = canvas.beginPGL();
       blendLayer(pgl, 0);
@@ -136,11 +137,11 @@ void composite() {
       canvas.resetShader();
       canvas.endPGL();
     }
-    boolean rim = box && v("boxRim") > 0;
+    boolean rim = box && v("boxRim" + i) > 0;
     if (rim) {
       boxRim.set("toLight", lx, ly);
       boxRim.set("width", 2 + gap * 0.15);
-      boxRim.set("amount", v("boxRim"));
+      boxRim.set("amount", v("boxRim" + i));
       boxRim.set("flipY", boxFlipY);
       canvas.shader(boxRim);
     }

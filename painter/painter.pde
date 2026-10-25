@@ -376,6 +376,12 @@ void rebuildShape() {
 
 void drawMesh() {
   background(panel.colour("meshBg"));
+  // behind the model, SETUP 4's backdrop filling the window (with "none", the mesh background)
+  if (v("backdropKind") > 0) {
+    hint(DISABLE_DEPTH_TEST);
+    image(backdropGraphics(), 0, 0, width, height);
+    hint(ENABLE_DEPTH_TEST);
+  }
   // the light stays put while the model turns, so it's set before turning. With it off the
   // model shows its picture's colours exactly, with no shading
   if (v("light") > 0.5) {
