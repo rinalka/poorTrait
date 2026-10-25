@@ -48,6 +48,7 @@ void loadFace(String face, int smoothing) {
   }
   buildField(normalImg, smoothing);
   canvas = null;
+  previewing = false;
   meshShape = null;
   massesImg = null;          // the Masses tab makes this picture's masses next frame
   outputMode = 0;

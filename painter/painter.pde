@@ -19,8 +19,9 @@
 //
 // The painting is four see-through layers (the Layers tab), combined into one picture every frame.
 //
-// SAVE writes the painting, each layer, the paint's height (IMPASTO), and a .json of every setting
-// on the panel, to the saved folder. PRINT writes what this window shows, at the photo's size.
+// SAVE writes the painting, the backdrop, the canvas, each layer, the paint's height (IMPASTO),
+// and a .json of every setting on the panel, to the saved folder. PRINT writes what this window
+// shows, at the photo's size.
 // LOAD SETTINGS puts a saved .json's settings back on the panel.
 
 // ---- settings ----
@@ -119,6 +120,7 @@ void draw() {
   else if (stepWanted && isRunning && isPaused && !mapShowing()) paintFrame();
   stepWanted = false;
 
+  previewStart();
   composite();               // the layers into one picture, every frame - layer settings can change any time
   if (outputMode > 0 && meshShape != null) drawMesh();
   else draw2D();
@@ -186,6 +188,7 @@ void startRun() {
   randomSeed(runSeed);
   noiseSeed(runSeed);
   makeLayers();
+  previewing = false;
   clearCanvas();
   mesh = null;
   meshShape = null;
@@ -201,6 +204,30 @@ void startRun() {
   isPaused = false;
   isRunning = true;
   println("run: " + faceName + ", " + (outputMode == 0 ? "2D" : "mesh") + ", seed " + runSeed);
+}
+
+// Before the first RUN on a picture, once SETUP 5 is done, the window shows what the painting
+// will start on: the backdrop (SETUP 4) and the canvas with the plain colour, the masses or the
+// photo (SETUP 5), with the canvas colour and the LAYERS settings as they are. It follows changes
+// to them. After a run the painting stays instead, until the next RUN or another picture
+boolean previewing = false;  // the canvas holds that preview, not a painting
+String previewKey = "";
+
+void previewStart() {
+  if (isRunning || runWaiting || !panel.startDone) return;
+  if (canvas != null && !previewing) return;
+  if (!previewing) {
+    makeLayers();
+    for (int i = 0; i < LAYERS; i++) clearLayer(i);
+    previewing = true;
+    previewKey = "";
+  }
+  ground = panel.colour("ground");
+  String key = faceName + " " + v("startWith") + " " + ground + " " + System.identityHashCode(massesImg);
+  if (!key.equals(previewKey)) {
+    previewKey = key;
+    clearStart();
+  }
 }
 
 // the canvas back to its start, and every layer empty (the Layers tab)
@@ -395,6 +422,7 @@ void saveAll() {
   if (canvas != null) {
     canvas.save(base + ".png");
     startLayer.save(base + "-canvas.png");
+    backdropLayer.save(base + "-backdrop.png");
     for (int i = 0; i < LAYERS; i++) layerPicture(i).save(base + "-layer" + (i + 1) + ".png");
     combineHeights();
     heightAll.save(base + "-height.png");
@@ -406,7 +434,7 @@ void saveAll() {
   j.setFloat("textureSeed", textureSeed);
   j.setInt("marks", markCount);
   saveJSONObject(j, base + ".json");
-  println("saved " + base + " (.png, each layer, the height, .json)");
+  println("saved " + base + " (.png, the backdrop, the canvas, each layer, the height, .json)");
 }
 
 // PRINT: what this window shows now - the painting, a map, the mesh as it's turned, with the

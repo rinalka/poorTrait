@@ -2,12 +2,15 @@
 // into `canvas` - the picture you see, that the mesh wears, and that wet paint picks up from.
 //
 // Under them is the canvas (`startLayer`): solid, the canvas colour with the masses or the photo
-// on it (SETUP 4), made at RUN and CLEAR and never painted on. The layers start empty; they're
-// stacked in `layerOrder`, layer 1 at the bottom to start with, and VIEW's LAYERS list can change
-// the order. Each tool chooses the layer it paints on in its APPLY, and in the panel's LAYERS
-// block each layer can be made see-through or combined with the ones under it in a different way
-// (multiply, screen ...); VIEW's LAYERS list hides and shows them (the canvas always shows). SCRAPE takes
-// paint off the layers above a chosen layer, or all of them, showing what's underneath.
+// on it (SETUP 5), made at RUN and CLEAR and never painted on. Under that, at the very bottom, is
+// the backdrop (SETUP 4, the Backdrop tab): white, a canvas weave, paper or newspaper, which shows
+// where the canvas is made see-through or hidden. The backdrop and the canvas stay at the bottom.
+// The layers start empty; they're stacked in `layerOrder`, layer 1 at the bottom to start with,
+// and VIEW's LAYERS list can change the order. Each tool chooses the layer it paints on in its
+// APPLY, and in the panel's LAYERS block each layer (and the canvas) can be made see-through, and
+// each layer combined with the ones under it in a different way (multiply, screen ...); VIEW's
+// LAYERS list hides and shows them (the backdrop always shows). SCRAPE takes paint off the layers
+// above a chosen layer, or all of them, showing what's underneath.
 //
 // SHADOW BOX fakes the layers floating apart: each has a gap above the stack under it, and a
 // light from one side makes it cast a soft shadow on what's under it (further and softer with a
@@ -67,21 +70,15 @@ PGraphics photoSized(PGraphics g) {
   return createGraphics(photo.width, photo.height, P2D);
 }
 
-// the canvas back to its start: the canvas colour, the masses or the photo, and the texture
+// the canvas back to its start: the canvas colour, and the masses or the photo
 void clearStart() {
   if (startLayer == null) return;
   int start = (int) v("startWith");
   PImage under = start == 1 ? massesImg : start == 2 ? photo : null;
   if (start == 1 && massesImg == null) println("the masses aren't ready yet - starting with the plain canvas colour");
-  PImage texture = groundForStart();      // SETUP 4's texture (the Ground tab)
   startLayer.beginDraw();
   startLayer.background(ground);
   if (under != null) startLayer.image(under, 0, 0);
-  if (texture != null) {
-    startLayer.blendMode(MULTIPLY);
-    startLayer.image(texture, 0, 0);
-    startLayer.blendMode(BLEND);
-  }
   startLayer.endDraw();
 }
 
@@ -94,7 +91,7 @@ void clearLayer(int i) {
   clearHeight(i);
 }
 
-// combine the canvas and the layers into `canvas`, bottom to top. With SHADOW BOX on, each layer
+// combine the backdrop, the canvas and the layers into `canvas`, bottom to top. With SHADOW BOX on, each layer
 // first casts its shadow on what's under it, and is drawn with its lit edges
 void composite() {
   if (canvas == null) return;
@@ -109,9 +106,15 @@ void composite() {
   float reach = 1 / tan(radians(v("lightHeight")));
   boolean fin = finishing();
   if (fin) combineHeights();
+  PGraphics back = backdropGraphics();       // made before drawing on the canvas (see there)
   canvas.beginDraw();
-  canvas.background(ground);
-  canvas.image(startLayer, 0, 0);
+  canvas.background(255);
+  canvas.image(back, 0, 0);
+  if (v("canvasOn") > 0.5) {
+    canvas.tint(255, 255 * (1 - v("canvasSeeThrough")));
+    canvas.image(startLayer, 0, 0);
+    canvas.noTint();
+  }
   int[] o = layerOrder;
   for (int p = 0; p < LAYERS; p++) {
     int i = o[p];
@@ -151,7 +154,7 @@ void composite() {
     if (rim) canvas.resetShader();
   }
   canvas.endDraw();
-  if (fin) finish(canvas);        // IMPASTO's light and the ground through the paint (the Impasto tab)
+  if (fin) finish(canvas);        // IMPASTO's light and the backdrop through the paint (the Impasto tab)
 }
 
 // OpenGL blending for drawing a premultiplied layer onto what's under it

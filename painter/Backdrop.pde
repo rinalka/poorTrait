@@ -1,63 +1,58 @@
-// Ground: what the painting is painted on (design doc, "Additions": ground / substrate layer).
+// Backdrop: what the painting is painted on (design doc, "Additions": ground / substrate layer).
 //
-// SETUP 4's texture puts a canvas weave, paper or a collage of newspaper cuttings on the canvas
-// the painting starts with, over its colour and the masses or photo (multiplied, so it darkens
-// and never lightens). It's there wherever no paint is, and wherever paint is see-through or
-// scraped away. "shows through the paint" lets it come through the paint as well, the way a
-// coarse canvas's weave does (that part is in the Impasto tab's finishing pass, and a weave or
-// paper also gets bumps there that the IMPASTO light catches).
+// SETUP 4 chooses it: nothing (plain white), a canvas weave, paper or a collage of newspaper
+// cuttings. It's the bottom of the stack (the Layers tab), under the canvas the painting starts
+// with: it shows wherever the canvas is made see-through (or hidden) in LAYERS. "strength" fades
+// it towards white. "shows through the paint" lets it come through everything above it as well,
+// the way a coarse canvas's weave does (that part is in the Impasto tab's finishing pass, and a
+// weave or paper also gets bumps there that the IMPASTO light catches).
 //
-// A texture is made the first time it's needed (and again for another choice or picture size).
+// It can change at any time. A texture is made the first time it's needed (and again for another
+// choice or picture size).
 
-String[] groundNames = { "none", "canvas weave", "paper", "newspaper" };
-PImage groundImg;            // the texture: white where it changes nothing
-PGraphics groundGfx;         // the same, for the finishing pass
-String groundKey = "", groundGfxKey = "";
+String[] backdropNames = { "none", "canvas weave", "paper", "newspaper" };
+PImage backdropImg;          // the texture, at full strength
+PGraphics backdropLayer;     // the backdrop as drawn: the texture at SETUP 4's strength
+String backdropKey = "", backdropLayerKey = "";
 
 // the texture for SETUP 4's choice, made if it isn't already
-PImage groundTexture() {
-  int kind = (int) v("groundKind");
+PImage backdropTexture() {
+  int kind = (int) v("backdropKind");
   String key = kind + " " + photo.width + " " + photo.height;
-  if (!key.equals(groundKey)) {
-    groundKey = key;
-    groundImg = kind == 1 ? weave(photo.width, photo.height)
-              : kind == 2 ? paper(photo.width, photo.height)
-              : kind == 3 ? newspaper(photo.width, photo.height)
-              : blank(photo.width, photo.height);
+  if (!key.equals(backdropKey)) {
+    backdropKey = key;
+    backdropImg = kind == 1 ? weave(photo.width, photo.height)
+                : kind == 2 ? paper(photo.width, photo.height)
+                : kind == 3 ? newspaper(photo.width, photo.height)
+                : blank(photo.width, photo.height);
   }
-  return groundImg;
+  return backdropImg;
 }
 
-// the texture as a picture the finishing pass can use. Not while another picture is being drawn
+// the backdrop, faded towards white as "strength" says. Not while another picture is being drawn
 // on: drawing on two at once upsets OpenGL
-PGraphics groundGraphics() {
-  groundTexture();
-  if (!groundKey.equals(groundGfxKey)) {
-    groundGfxKey = groundKey;
-    groundGfx = photoSized(groundGfx);
-    groundGfx.beginDraw();
-    groundGfx.blendMode(REPLACE);
-    groundGfx.image(groundImg, 0, 0);
-    groundGfx.blendMode(BLEND);
-    groundGfx.endDraw();
+PGraphics backdropGraphics() {
+  backdropTexture();
+  String key = backdropKey + " " + nf(v("backdropAmount"), 0, 2);
+  if (!key.equals(backdropLayerKey)) {
+    backdropLayerKey = key;
+    PImage t = backdropImg.copy();
+    float s = v("backdropAmount");
+    t.loadPixels();
+    for (int i = 0; i < t.pixels.length; i++) {
+      int c = t.pixels[i];
+      int r = round(lerp(255, c >> 16 & 255, s)), gr = round(lerp(255, c >> 8 & 255, s)), b = round(lerp(255, c & 255, s));
+      t.pixels[i] = 0xFF000000 | r << 16 | gr << 8 | b;
+    }
+    t.updatePixels();
+    backdropLayer = photoSized(backdropLayer);
+    backdropLayer.beginDraw();
+    backdropLayer.blendMode(REPLACE);
+    backdropLayer.image(t, 0, 0);
+    backdropLayer.blendMode(BLEND);
+    backdropLayer.endDraw();
   }
-  return groundGfx;
-}
-
-// the texture for the canvas the painting starts with, as strong as "texture strength" says,
-// or null for none. Made before the canvas is drawn on (see groundGraphics)
-PImage groundForStart() {
-  if (v("groundKind") == 0) return null;
-  PImage t = groundTexture().copy();
-  float s = v("groundAmount");
-  t.loadPixels();
-  for (int i = 0; i < t.pixels.length; i++) {
-    int c = t.pixels[i];
-    int r = round(lerp(255, c >> 16 & 255, s)), gr = round(lerp(255, c >> 8 & 255, s)), b = round(lerp(255, c & 255, s));
-    t.pixels[i] = 0xFF000000 | r << 16 | gr << 8 | b;
-  }
-  t.updatePixels();
-  return t;
+  return backdropLayer;
 }
 
 PImage blank(int w, int h) {

@@ -14,7 +14,7 @@
 // saved painting all have it. SAVE also writes the height as -height.png - white is thick - which
 // could later push the mesh's surface out.
 //
-// The same pass lets the GROUND's texture show through the paint (the Ground tab).
+// The same pass lets the backdrop's texture show through the paint (the Backdrop tab).
 
 PGraphics[] heights = new PGraphics[4];     // one for each layer (LAYERS, which is defined later)
 PGraphics heightAll;         // every visible layer's height, added up
@@ -89,9 +89,9 @@ void combineHeights() {
   heightAll.endDraw();
 }
 
-// whether the finishing pass (the light on the paint, the ground showing through) does anything
+// whether the finishing pass (the light on the paint, the backdrop showing through) does anything
 boolean finishing() {
-  return v("impastoOn") > 0.5 || (v("groundKind") > 0 && v("groundThrough") > 0);
+  return v("impastoOn") > 0.5 || (v("backdropKind") > 0 && v("backdropThrough") > 0);
 }
 
 // the finishing pass, over the canvas once it's combined (composite() calls it last). Drawn into
@@ -99,16 +99,16 @@ boolean finishing() {
 // the window's size
 void finish(PGraphics c) {
   boolean on = v("impastoOn") > 0.5;
-  boolean textured = v("groundKind") > 0;
+  boolean textured = v("backdropKind") > 0;
   float from = radians(v("impastoFrom")), up = radians(v("impastoHeight"));
   impastoShader.set("heights", heightAll);
-  impastoShader.set("groundTex", groundGraphics());
+  impastoShader.set("groundTex", backdropGraphics());
   impastoShader.set("relief", on ? v("impastoRelief") : 0);
   impastoShader.set("gloss", on ? v("impastoGloss") : 0);
   impastoShader.set("toLight", cos(from) * cos(up), -sin(from) * cos(up), sin(up));
-  impastoShader.set("through", textured ? v("groundThrough") : 0);
+  impastoShader.set("through", textured ? v("backdropThrough") : 0);
   // a weave or paper is bumpy where it shows through; newspaper's print is flat
-  impastoShader.set("groundBumps", textured && v("groundKind") != 3 ? v("groundThrough") * (on ? 1 : 0) : 0);
+  impastoShader.set("groundBumps", textured && v("backdropKind") != 3 ? v("backdropThrough") * (on ? 1 : 0) : 0);
   impastoShader.set("flipY", boxFlipY);
   finished.beginDraw();
   finished.shader(impastoShader);

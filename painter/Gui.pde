@@ -1,9 +1,10 @@
 // The control panel: a second window, built with controlP5.
 //
 // Four columns:
-//   SETUP 1 - 4                   the source picture, the target (2D or a mesh), the masses and
-//                                 what the canvas starts with and its texture, each a box that
-//                                 turns green once it's done - 1 - 3 are locked while a run is going
+//   SETUP 1 - 5                   the source picture, the target (2D or a mesh), the masses, the
+//                                 backdrop and what the canvas starts with, each a box whose
+//                                 square turns from red to green once it's done - 1 - 3 are
+//                                 locked while a run is going
 //   the tools                     what does the drawing: brush, palette knife, splatter, lines,
 //                                 fragments, pencil, scrape - one at a time, with its shape settings
 //   MOVEMENT, COLOUR, APPLY       how the chosen tool moves, where its colour comes from, and
@@ -59,19 +60,20 @@ public class Panel extends PApplet {
   Row layerRow;                                   // VIEW's lists, with the layers' tick boxes
   int[] layerItem = new int[LAYERS];              // each layer's tick box in layerRow's items
   String shownOrder = "";
-  Toggle canvasShown;                           // LAYERS' canvas: always on
+  Toggle canvasShown, backdropShown;            // VIEW's LAYERS: the canvas, and the backdrop (always on)
+  Row[][] layerBands = new Row[LAYERS + 1][];   // LAYERS' first and last rows for each layer, then the canvas's
   int runGreen = 0xFF2E9E48, runGreenHover = 0xFF45B860, runRed = 0xFFCC3B2E, runRedHover = 0xFFE26A5E;
   int orange = 0xFFE08A1E, orangeHover = 0xFFF0A040;
   String[] startNames = { "plain", "masses", "photo" };
-  // the three setup boxes: their colour blocks, the line under each title, and whether each is done
-  int sourceBox, targetBox, massBox, startBox;
+  // the setup boxes: their colour blocks, the line under each title, and whether each is done
+  int sourceBox, targetBox, massBox, backdropBox, startBox;
   Textlabel boxTitle, massTitle, sourceText, targetText, massText;
-  boolean sourceDone, targetDone, massesDone, startDone;
+  volatile boolean sourceDone, targetDone, massesDone, backdropDone, startDone;
   volatile boolean massesOpen = false;
   float showBefore, lightBefore;      // put back when the masses box closes
   int pressedIn = -1;                 // the setup box a click started in
   ScrollableList picked;              // a setup list an item was just picked from
-  int green = 0xFFA6DA9C;             // a setup box that's done
+  int doneGreen = 0xFF2E9E48, notDoneRed = 0xFFCC3B2E;   // a setup box's square
   String[] outputNames = { "2D canvas", "mesh: just the person", "mesh: whole photo" };
   int colW = 340;            // width of a column
   int sections = 0;          // SETUP, RUN, VIEW ... each gets a block of colour behind it
@@ -89,6 +91,7 @@ public class Panel extends PApplet {
   class Row {
     String when = "";
     float h;
+    float y = -1;            // where layout() put it, or -1 if it's hidden
     int section;
     ArrayList<ControllerInterface> items = new ArrayList<ControllerInterface>();
     ArrayList<String> itemWhen = new ArrayList<String>();
@@ -116,9 +119,10 @@ public class Panel extends PApplet {
     cp5.setColorActive(color(110, 170, 240));
     cp5.setColorBackground(color(60));
 
-    // ---------------------------------------------------- column 1: SETUP 1 - 4
-    // The setup is three boxes, done in order: click one to choose. Each turns green once it's
-    // done. They're locked while a run is going (all but the masses' palette sliders)
+    // ---------------------------------------------------- column 1: SETUP 1 - 5
+    // The setup is five boxes, done in order: click one to choose. Each has a square before its
+    // title, red until it's done and then green. 1 - 3 are locked while a run is going (all but the
+    // masses' palette sliders)
     column();
     live = false;
     sourceBox = setupBox("SETUP 1   SOURCE");
@@ -156,19 +160,22 @@ public class Panel extends PApplet {
     toggle("massTexture", "textured paint", false, 0);
     button("massSeed", "NEW TEXTURE", 170, 110);
     onlyWhen("later");
-    // what the canvas starts with at RUN and CLEAR - always open, and green once a choice is
+    // the backdrop, under the canvas (the Backdrop tab) - always open, done once it's clicked,
+    // and it can change any time
+    backdropBox = setupBox("SETUP 4   BACKDROP");
+    boxText("").setText("what the canvas sits on");
+    row(28);
+    list("backdropKind", backdropNames, 0, 0, 150);
+    slider("backdropAmount", "strength", 0, 1, 0.6);
+    onlyWhen("backdropKind");
+    slider("backdropThrough", "shows through the paint", 0, 1, 0.25);
+    onlyWhen("backdropKind");
+    row(2);
+    // what the canvas starts with at RUN and CLEAR - always open, and done once a choice is
     // clicked. It can change during a run (it's used at the next CLEAR)
-    startBox = setupBox("SETUP 4   START");
+    startBox = setupBox("SETUP 5   START");
     boxText("").setText("start the canvas with  (at RUN and CLEAR)");
     radio("startWith", startNames, 3, 1);
-    // ... and what it's painted on: a canvas weave, paper or newspaper (the Ground tab)
-    row(28);
-    label("texture", 0);
-    list("groundKind", groundNames, 0, 60, 130);
-    slider("groundAmount", "texture strength", 0, 1, 0.6);
-    onlyWhen("groundKind");
-    slider("groundThrough", "shows through the paint", 0, 1, 0.25);
-    onlyWhen("groundKind");
     row(2);
 
     // ---------------------------------------------------- along the bottom: VIEW, CAMERA and RUN
@@ -190,8 +197,9 @@ public class Panel extends PApplet {
     register("showWhat", r);
     put(r, 0, 4);
     // the stack, top first, as in Photoshop: the four layers, which can be hidden and moved up
-    // and down (layerOrder, the Layers tab), and the canvas (SETUP 4's start) at the bottom, always
-    // shown. A layer's tick box moves to its place in draw(); the up / down buttons stay put
+    // and down (layerOrder, the Layers tab), then the canvas (SETUP 5's start), which can be
+    // hidden, and the backdrop (SETUP 4), always shown - those two stay at the bottom. A layer's
+    // tick box moves to its place in draw(); the up / down buttons stay put
     layerRow = cur;
     for (int i = 0; i < LAYERS; i++) {
       toggle("layerOn" + i, "layer " + (i + 1), true, 160);
@@ -202,9 +210,12 @@ public class Panel extends PApplet {
       if (k > 0) moveButton("layerUp" + pos, "^", 262, 4 + 22 * k);
       if (k < LAYERS - 1) moveButton("layerDown" + pos, "v", 290, 4 + 22 * k);
     }
-    canvasShown = cp5.addToggle("canvasShown").setSize(16, 16).setValue(true).lock();
-    canvasShown.getCaptionLabel().align(ControlP5.RIGHT_OUTSIDE, ControlP5.CENTER).setPaddingX(6);
-    put(canvasShown, 160, 4 + 22 * LAYERS);
+    toggle("canvasOn", "canvas", true, 160);
+    cur.dy.set(cur.dy.size() - 1, 4 + 22 * LAYERS);
+    canvasShown = (Toggle) all.get("canvasOn");
+    backdropShown = cp5.addToggle("backdropShown").setSize(16, 16).setValue(true).lock();
+    backdropShown.getCaptionLabel().align(ControlP5.RIGHT_OUTSIDE, ControlP5.CENTER).setPaddingX(6);
+    put(backdropShown, 160, 4 + 22 * (LAYERS + 1));
 
     header("CAMERA");
     row(26);
@@ -451,18 +462,26 @@ public class Panel extends PApplet {
     row(6);
 
     // the four layers (the Layers tab): how it's combined with the layers under it, a button to
-    // empty it, how see-through it is, and how much IMPASTO's light catches its paint (whether it shows is in VIEW's LAYERS list; which layer
-    // each tool paints on is in its APPLY)
+    // empty it, how see-through it is, and how much IMPASTO's light catches its paint - and the
+    // canvas, which can only be made see-through (showing the backdrop). Layers 1 and 3 and the
+    // canvas have a darker band behind them, drawn in draw(). (Whether each shows is in VIEW's
+    // LAYERS list; which layer each tool paints on is in its APPLY)
     header("LAYERS");
-    for (int i = 0; i < 4; i++) {
+    for (int i = 0; i < LAYERS; i++) {
       row(28);
+      Row first = cur;
       label("layer " + (i + 1), 0);
       list("layerBlend" + i, layerBlendNames, 0, 60, 110);
       button("clearLayer" + i, "CLEAR", 240, 64).setHeight(18);
-      row(22);
+      row(26);
       sliderAt("layerSeeThrough" + i, "transparency", 0, 1, 0, 0, 0, 100);
       sliderAt("layerImpasto" + i, "impasto", 0, 1, 1, 200, 0, 70);
+      layerBands[i] = new Row[] { first, cur };
     }
+    row(30);
+    label("canvas", 0);
+    sliderAt("canvasSeeThrough", "transparency", 0, 1, 0, 60, 2, 100);
+    layerBands[LAYERS] = new Row[] { cur, cur };
     row(6);
 
     // the layers floating apart, lit from one side (the Layers tab's composite)
@@ -550,10 +569,24 @@ public class Panel extends PApplet {
     noStroke();
     for (int i = 0; i < sections; i++) {
       if (block[i] == null) continue;
-      boolean done = i == sourceBox && sourceDone || i == targetBox && targetDone || i == massBox && massesDone
-        || i == startBox && startDone;
-      fill(done ? green : blockColour[i]);
+      fill(blockColour[i]);
       rect(block[i][0] - 8, block[i][1], colW - 12, block[i][2] - block[i][1], 8);
+    }
+    // each setup box's square, before its title: red, then green once it's done
+    int[] setupBoxes = { sourceBox, targetBox, massBox, backdropBox, startBox };
+    boolean[] setupDone = { sourceDone, targetDone, massesDone, backdropDone, startDone };
+    for (int k = 0; k < setupBoxes.length; k++) {
+      float[] b = block[setupBoxes[k]];
+      if (b == null) continue;
+      fill(setupDone[k] ? doneGreen : notDoneRed);
+      rect(b[0] - 1, b[1] + 9, 15, 15, 3);
+    }
+    // LAYERS: a darker band behind layers 1 and 3 and the canvas
+    for (int i = 0; i <= LAYERS; i += 2) {
+      Row a = layerBands[i][0], z = layerBands[i][1];
+      if (a.y < 0 || block[a.section] == null) continue;
+      fill(lerpColor(blockColour[a.section], color(0), 0.12));
+      rect(block[a.section][0] - 4, a.y - 2, colW - 20, z.y + z.h - a.y, 5);
     }
     // a frame round the box of the tool that's on
     int ch = toolSection[max(0, java.util.Arrays.asList(TOOLS).indexOf(editing))];
@@ -591,10 +624,10 @@ public class Panel extends PApplet {
     else buttonColour(pauseButton, runGreen, runGreenHover, false);
     buttonColour(stepButton, color(60), color(70, 130, 200), !(isRunning && isPaused) || mapShown);
     paceSlider.getValueLabel().setText(paceText(paceRate(value("pace"))));
-    int kind = (int) value("groundKind");
-    canvasShown.setCaptionLabel("canvas  (" + startNames[(int) value("startWith")] + (kind > 0 ? ", " + groundNames[kind] : "") + ")");
-    canvasShown.setValue(1);
-    canvasShown.setLock(true);
+    canvasShown.setCaptionLabel("canvas  (" + startNames[(int) value("startWith")] + ")");
+    backdropShown.setCaptionLabel("backdrop  (" + backdropNames[(int) value("backdropKind")] + ")");
+    backdropShown.setValue(1);
+    backdropShown.setLock(true);
     if (!editing.equals(shownEditing)) {
       shownEditing = editing;
       int e = java.util.Arrays.asList(TOOLS).indexOf(editing);
@@ -645,6 +678,7 @@ public class Panel extends PApplet {
     }
     if (listOpen) return;
     if (inBlock(startBox, 0)) startDone = true;
+    if (inBlock(backdropBox, 0)) backdropDone = true;
     for (int b : new int[] { sourceBox, targetBox, massBox }) {
       if (inBlock(b, 0)) {
         pressedIn = b;
@@ -752,6 +786,7 @@ public class Panel extends PApplet {
     }
     else if (n.equals("output")) targetDone = true;
     else if (n.equals("startWith")) startDone = true;
+    else if (n.equals("backdropKind")) backdropDone = true;
     else if (n.equals("smoothing")) command("field");
     else if (n.equals("showWhat")) command("show");
     else if (n.equals("layMasses")) command("layMasses");
@@ -798,7 +833,7 @@ public class Panel extends PApplet {
     if (when.equals("abstraction")) return value("abstractionOn") > 0.5;
     if (when.equals("box")) return value("boxOn") > 0.5;
     if (when.equals("impasto")) return value("impastoOn") > 0.5;
-    if (when.equals("groundKind")) return value("groundKind") > 0;
+    if (when.equals("backdropKind")) return value("backdropKind") > 0;
     if (when.equals("careful")) return value("abstractionOn") > 0.5 && value("protectWith") == 1;
     if (when.equals("2D abstraction")) return value("output") == 0 && value("abstractionOn") > 0.5;
     if (when.equals("2D")) return value("output") == 0;
@@ -828,6 +863,7 @@ public class Panel extends PApplet {
       top[i] = y;
       for (Row r : columns.get(i)) {
         boolean rowShown = shown(r.when);
+        r.y = rowShown ? y : -1;
         if (rowShown && r.section >= 0) {
           // the block runs from just inside its header row to just above the next header
           if (b[r.section] == null) b[r.section] = new float[] { x, y + 4, 0 };
@@ -1001,6 +1037,7 @@ public class Panel extends PApplet {
   // a setup box: a section whose title is clicked (see mouseReleased). Returns its section
   int setupBox(String title) {
     boxTitle = header(title);
+    cur.dx.set(0, 20);                   // room for the square before it (drawn in draw())
     return sections - 1;
   }
 

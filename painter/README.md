@@ -47,7 +47,7 @@ Press **Ctrl+R** in Processing (or the play button). Two windows open:
 - **The output window**, which is the size of the photo
 - **The control panel**
 
-Work down SETUP 1 to 4 (each box turns green when it's done), then press **RUN**.
+Work down SETUP 1 to 5 (each box's square turns from red to green when it's done), then press **RUN**.
 
 ## The control panel
 
@@ -80,19 +80,21 @@ under "start at" only appear when "weighted by map" is chosen.
 
 ## Column 1
 
-### SETUP 1 to 4
+### SETUP 1 to 5
 
-The setup is four boxes, done in order. Click a box to set it up. Once it's done it turns green.
-SETUP 1 to 3 stay fixed for a whole run, so they're locked while a run is going (except the
-palette sliders in SETUP 3). Press STOP to change them. SETUP 4 can change during a run: the new
-choice is used at the next CLEAR.
+The setup is five boxes, done in order. Click a box to set it up. Each has a square before its
+title: red until it's done, then green. SETUP 1 to 3 stay fixed for a whole run, so they're locked
+while a run is going (except the palette sliders in SETUP 3). Press STOP to change them. SETUP 4
+and 5 can change during a run: the backdrop changes straight away, and the start is used at the
+next CLEAR.
 
 | Box | What it does |
 |---|---|
 | SETUP 1  SOURCE | Click it for a list of the photos, and pick one. Its name shows under the title. |
 | SETUP 2  TARGET | Click it to choose **2D canvas**, **mesh: just the person** (a 3D model of the face) or **mesh: whole photo** (the whole picture as a relief). For 2D canvas, the canvas colour wheel appears under it: the colour the painting starts on. |
 | SETUP 3  MASSES | Click it to open the masses' sliders (below). The output window shows the masses as they are now, with the light off so their colours are true. When they look right, click the box's title: the sliders close, the view goes back to what it was, and the box turns green. |
-| SETUP 4  START | What the canvas, under the four layers, holds at RUN and CLEAR: the **plain** canvas colour, the **masses**, or the **photo**. Starting with the masses and then breaking them up with marks is the idea behind ABSTRACTION. The choices are always showing; the box turns green once you click one. Under them, **texture** puts a **canvas weave**, **paper** or a collage of **newspaper** cuttings on the canvas, over its colour and the masses or photo. It shows wherever there's no paint, and through see-through and scraped paint. **texture strength** is how strongly it shows on the canvas (from the next CLEAR). **shows through the paint** lets it come through the paint too, the way a coarse canvas's weave does; this one changes straight away, and with IMPASTO on, a weave or paper also gets bumps that catch the light. |
+| SETUP 4  BACKDROP | What the canvas sits on: the bottom of the whole stack, under the canvas. Choose **none** (plain white), **canvas weave**, **paper** or a collage of **newspaper** cuttings (more to come). It shows wherever the canvas is see-through (its **transparency** in LAYERS) or hidden (VIEW's LAYERS). **strength** fades it towards white. **shows through the paint** lets it come through everything above it too, the way a coarse canvas's weave does; with IMPASTO on, a weave or paper also gets bumps that catch the light. It changes straight away. |
+| SETUP 5  START | What the canvas, under the four layers, holds at RUN and CLEAR: the **plain** canvas colour, the **masses**, or the **photo**. Starting with the masses and then breaking them up with marks is the idea behind ABSTRACTION. The choices are always showing; the box is done once you click one. Once it's done, and until the first RUN on this picture, the output window shows what the painting will start on: the backdrop with the canvas over it, following any changes to SETUP 4 and 5, the canvas colour and the LAYERS settings. After a run the painting stays on screen instead. |
 
 Picking a new photo turns SETUP 3 back from green, because the new photo has new masses to look
 at.
@@ -121,7 +123,7 @@ VIEW has two lists side by side, always open.
 | List | What it does |
 |---|---|
 | MAPS | **none** shows the painting. Or show one of the maps in its place: the photo, normal, importance, curvature, depth, light, or the masses. **While a map is showing, nothing paints:** a run pauses, and RUN and CARRY ON are greyed out until you choose **none** again. |
-| LAYERS | The stack, top first, like Photoshop's layers panel, with the **canvas** (what SETUP 4 started it with) always at the bottom. Tick boxes show and hide the layers: any number can be on, but the canvas is always on. **^** and **v** move a layer up or down the stack. A layer takes its paint and its settings with it, and the tools that paint on "layer 2" keep painting on layer 2 wherever it is. SAVE keeps the order, and LOAD SETTINGS puts it back. |
+| LAYERS | The stack, top first, like Photoshop's layers panel, with the **canvas** (what SETUP 5 started it with) and under it the **backdrop** (SETUP 4) always at the bottom: those two can't be moved. Tick boxes show and hide the layers and the canvas; the backdrop is always on. **^** and **v** move a layer up or down the stack. A layer takes its paint and its settings with it, and the tools that paint on "layer 2" keep painting on layer 2 wherever it is. SAVE keeps the order, and LOAD SETTINGS puts it back. |
 
 ### CAMERA
 
@@ -145,7 +147,7 @@ RUN sits beside VIEW, level with its top.
 | STEP | While paused, paints one step: one frame's worth of marks, as the tool's settings say (for example 20 knife marks at "marks per frame" 20). Change a setting, press STEP, look. The **n** key in the output window does the same. |
 | painting speed | Slows the painting down so you can follow it: from **full speed** (a step every frame, about 60 a second) down to one step every 2 seconds. Only the painting slows, so the window and the panel stay smooth. Each step still paints the tool's marks per frame, so for the slowest pace set that low too. |
 | CLEAR | Reset the canvas and every layer, and keep painting |
-| SAVE | Save the painting, the canvas and each layer (as see-through PNGs you can stack in Photoshop), the paint's height (IMPASTO), and every setting, to `painter/saved/`. For a mesh it also saves the view as you see it. |
+| SAVE | Save the painting, the backdrop, the canvas and each layer (as see-through PNGs you can stack in Photoshop), the paint's height (IMPASTO), and every setting, to `painter/saved/`. For a mesh it also saves the view as you see it. |
 | LOAD SETTINGS | Load the settings from a saved `.json` |
 | NUDGE + how far | Shift every live setting, for every tool, by a random amount. "how far" sets how big the change is. Good for when you're stuck. |
 | PRINT | Save what the output window shows now, at the photo's size, to `painter/saved/` as `...-print.png`. That's whatever VIEW shows (the painting or a map), the mesh as you've turned it, and the direction field or protected parts if they're showing. |
@@ -330,9 +332,11 @@ shared by all the tools.
 
 ### LAYERS
 
-The painting is four see-through layers, one on top of another, on the canvas. The canvas is
-solid: the canvas colour with the masses or the photo on it (see SETUP 4), and it's never painted
-on. The layers start empty, and layer 1 is at the bottom until you change the order in VIEW's
+The painting is four see-through layers, one on top of another, on the canvas, which sits on the
+backdrop. The canvas is the canvas colour with the masses or the photo on it (see SETUP 5), and
+it's never painted on. The backdrop (SETUP 4) is under it and shows where the canvas is made
+see-through. From the bottom: backdrop, canvas, layers 1 to 4 (the layers' order can change; the
+backdrop and canvas stay at the bottom). The layers start empty, and layer 1 is at the bottom until you change the order in VIEW's
 LAYERS list. What you see, and what the mesh wears,
 is all of them combined. Which ones show is set in VIEW's LAYERS menu.
 
@@ -341,6 +345,9 @@ is all of them combined. Which ones show is set in VIEW's LAYERS menu.
 | a row for each layer | **List**: how it combines with the layers under it (normal, multiply, screen, add, lightest). **CLEAR**: empties that layer. |
 | transparency | Under each layer's row. At 0 the layer is as solid as its paint; at 1 it's invisible. |
 | impasto | Beside transparency: how much IMPASTO's light catches this layer's paint. 1 = as thick as the tools painted it, 0 = flat. |
+| canvas transparency | The last row. At 0 the canvas is solid; towards 1 the backdrop shows through it. |
+
+Layers 1 and 3 and the canvas have a darker band behind them, so the rows are easy to tell apart.
 
 Which layer each tool paints on is in its APPLY, and what SCRAPE scrapes down to is in its box in column 2.
 

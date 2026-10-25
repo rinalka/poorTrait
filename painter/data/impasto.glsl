@@ -1,9 +1,9 @@
-// impasto.glsl - the finished painting with the ground showing through and the light catching
-// the thick paint (GROUND and IMPASTO, the Ground and Impasto tabs).
+// impasto.glsl - the finished painting with the backdrop showing through and the light catching
+// the thick paint (SETUP 4's BACKDROP and IMPASTO, the Backdrop and Impasto tabs).
 //
 // Run over the combined canvas. The height of the paint (every layer's added up) gives each pixel
 // a slope; a raking light from one side brightens slopes that face it and darkens those that face
-// away, with a little shine on the steepest lit ones. The ground texture is multiplied in as much
+// away, with a little shine on the steepest lit ones. The backdrop is multiplied in as much
 // as "shows through the paint" says, and a canvas weave or paper adds its own bumps to the height.
 
 #ifdef GL_ES
@@ -18,12 +18,12 @@ varying vec4 vertColor;
 varying vec4 vertTexCoord;
 
 uniform sampler2D heights;      // the paint's height (red)
-uniform sampler2D groundTex;    // the ground texture: white where it changes nothing
+uniform sampler2D groundTex;    // the backdrop: white where it changes nothing
 uniform float relief;           // how steep the height looks (0 = no light effect)
 uniform float gloss;            // shine
 uniform vec3 toLight;           // which way the light is: x, y in pixels (y down the picture), z up
-uniform float through;          // how much the ground's texture shows through the paint
-uniform float groundBumps;      // how much the ground's texture adds to the height
+uniform float through;          // how much the backdrop shows through the paint
+uniform float groundBumps;      // how much the backdrop's texture adds to the height
 uniform float flipY;            // 1, or -1 where the texture is upside down
 
 float heightAt(vec2 st) {
