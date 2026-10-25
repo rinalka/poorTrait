@@ -6,7 +6,8 @@
 //                                 square turns from red to green once it's done - 1 - 3 are
 //                                 locked while a run is going
 //   the tools                     what does the drawing: brush, palette knife, splatter, lines,
-//                                 fragments, pencil, scrape - one at a time, with its shape settings
+//                                 fragments, pencil, flow, outline, scrape - one at a time, with its
+//                                 shape settings
 //   MOVEMENT, COLOUR, APPLY       how the chosen tool moves, where its colour comes from, and
 //                                 how solid it is
 //   ABSTRACTION, LAYERS,          where the face may be broken up, the four layers, the
@@ -131,7 +132,7 @@ public class Panel extends PApplet {
     targetBox = setupBox("SETUP 2   TARGET");
     targetText = boxText("output");
     setupList("output", outputNames);
-    colourWheel("ground", "canvas colour", color(222, 214, 200));
+    colourPicker("ground", "canvas colour", color(222, 214, 200));
     onlyWhen("ground");
     // the masses (the Masses tab): clicking the box opens these and shows the masses; clicking
     // its title again closes them. They're made again when one of the sliders is let go, and RUN
@@ -224,7 +225,7 @@ public class Panel extends PApplet {
     Slider sm = slider("smoothing", "direction field smoothing", 0, 24, 4);
     sm.setNumberOfTickMarks(13).snapToTickMarks(true).showTickMarks(false);
     sm.setTriggerEvent(Slider.RELEASE);          // rebuilding the field takes a moment - only on letting go
-    colourWheel("meshBg", "mesh background", color(30));
+    colourPicker("meshBg", "mesh background", color(30));
     onlyWhen("mesh");
     row(30);
     toggle("sway", "sway", false, 0);
@@ -333,7 +334,52 @@ public class Panel extends PApplet {
     toolSlider("hatchAngle", "hatching angle", 0, 180, 45).setDecimalPrecision(0);
     onlyWhen("on pencil&pencilHatch");
 
+    // flow (the Flow tab): postContemp's continuous flow - which picture steers it, and the line
     toolBox(6, false);
+    row(28);
+    label("steered by", 0);
+    list("flow_src", flowSources, 0, 70, 120);
+    onlyWhen("on flow");
+    radio("flow_channel", flowChannels, 3, 0);
+    onlyWhen("on flow&flowColour");
+    toolSlider("smooth", "smoothing", 0, 30, 2).setDecimalPrecision(0);
+    toolSlider("turn", "turn the flow  (degrees)", 0, 360, 0).setDecimalPrecision(0);
+    toolSlider("steer", "how hard it turns", 0, 1, 0.4);
+    toolSlider("count", "lines at once", 1, 40, 4).setDecimalPrecision(0);
+    toolSlider("speed", "speed  (pixels a frame)", 2, 120, 30).setDecimalPrecision(0);
+    toolSlider("length", "line length", 10, 1000, 300).setDecimalPrecision(0);
+    toolSlider("width", "width", 0.3, 20, 2);
+    toolSlider("pressure", "width changes", 0, 1, 0.3);
+    row(24);
+    toggle("flow_along", "colour changes along the line", true, 0);
+    onlyWhen("on flow");
+
+    // outline (the Outline tab): the face in one line - which parts it takes in, and the pen
+    toolBox(7, false);
+    row(24);
+    toggle("outline_sil", "silhouette", true, 0);
+    toggle("outline_hair", "hairline", true, 100);
+    toggle("outline_clothes", "neck & clothes", true, 190);
+    onlyWhen("on outline");
+    row(24);
+    toggle("outline_face", "face", true, 0);
+    toggle("outline_brows", "brows", true, 60);
+    toggle("outline_eyes", "eyes", true, 128);
+    toggle("outline_nose", "nose", true, 190);
+    toggle("outline_mouth", "mouth", true, 252);
+    onlyWhen("on outline");
+    toolSlider("smooth", "smoothness", 0, 1, 0.5);
+    toolSlider("speed", "speed  (pixels a frame)", 2, 200, 20).setDecimalPrecision(0);
+    toolSlider("passes", "passes", 1, 6, 1).setDecimalPrecision(0);
+    toolSlider("wobble", "wobble", 0, 1, 0.3);
+    toolSlider("width", "width", 0.3, 12, 2);
+    toolSlider("pressure", "pressure changes", 0, 1, 0.5);
+    row(24);
+    toggle("outline_loop", "start again when done", false, 0);
+    toggle("outline_join", "one unbroken line", false, 180);
+    onlyWhen("on outline");
+
+    toolBox(8, false);
     radio("scrape_kind", new String[] { "knife scrape", "scratches" }, 2, 0);
     onlyWhen("on scrape");
     toolSlider("rate", "scrapes per frame", 0.05, 20, 1);
@@ -341,19 +387,30 @@ public class Panel extends PApplet {
     toolSlider("width", "width", 2, 150, 40).setDecimalPrecision(0);
     toolSlider("ragged", "ragged edges", 0, 1, 0.5);
     toolSlider("strength", "how much comes off", 0, 1, 0.8);
+    // which paint comes off: every layer above "down to", or just one layer
     row(24);
-    label("scrape down to", 0);
-    radioAt("scrape_layer", new String[] { "canvas", "1", "2", "3" }, 0, 100, 54);
+    label("scrape", 0);
+    radioAt("scrape_which", new String[] { "down to a layer", "one layer" }, 0, 60, 120);
     onlyWhen("on scrape");
+    row(24);
+    label("down to", 0);
+    radioAt("scrape_layer", new String[] { "canvas", "1", "2", "3" }, 0, 100, 54);
+    onlyWhen("on scrape&scrapeDown");
+    row(24);
+    label("only layer", 0);
+    radioAt("scrape_only", new String[] { "1", "2", "3", "4" }, 3, 100, 54);
+    onlyWhen("on scrape&scrapeOne");
 
     // ---------------------------------------------------- column 3: MOVEMENT, COLOUR, APPLY
     // ... of the tool chosen in column 2. Every tool has its own set; only the chosen one's shows
     column();
-    float[] followDefault = { 0.6, 0.6, 0, 0.5, 0.3, 0.3, 0.5 };
+    float[] followDefault = { 0.6, 0.6, 0, 0.5, 0.3, 0.3, 0, 0, 0.5 };
     moveHeader = header("MOVEMENT");
+    onlyWhen("notOutline");
     for (int i = 0; i < TOOLS.length; i++) {
       String n = TOOLS[i];
-      if (!n.equals("splat")) {
+      if (n.equals("outline")) continue;       // it goes where the face is
+      if (!n.equals("splat") && !n.equals("flow")) {
         slider(n + "_follow", "follow the form", 0, 1, followDefault[i]);
         onlyWhen("edit " + n);
         if (i <= 1) {
@@ -377,12 +434,21 @@ public class Panel extends PApplet {
       onlyWhen("edit " + n + "&mouse " + n);
     }
     row(6);
+    onlyWhen("notOutline");
 
     colourHeader = header("COLOUR");
     onlyWhen("notScrape");
-    float[] contrastDefault = { 0, 0, 0.5, 0.6, 0.5, 0.55 };
+    float[] contrastDefault = { 0, 0, 0.5, 0.6, 0.5, 0.55, 0, 0.9 };
     for (int i = 0; i < TOOLS.length - 1; i++) {
       String n = TOOLS[i];
+      // flow and outline can draw in one colour of your own instead
+      if (n.equals("flow") || n.equals("outline")) {
+        row(24);
+        toggle(n + "_one", "one colour", false, 0);
+        onlyWhen("edit " + n);
+        colourPicker(n + "_ink", "the colour", color(35, 30, 28));
+        onlyWhen("edit " + n + "&one " + n);
+      }
       row(20);
       label("pick up from", 0);
       onlyWhen("edit " + n);
@@ -409,17 +475,17 @@ public class Panel extends PApplet {
       slider(n + "_accentChance", "accent chance", 0, 1, 0);
       onlyWhen("edit " + n);
     }
-    colourWheel("accent", "accent colour  (all tools)", color(200, 60, 30));
+    colourPicker("accent", "accent colour  (all tools)", color(200, 60, 30));
     onlyWhen("notScrape");
     row(6);
     onlyWhen("notScrape");
 
     applyHeader = header("APPLY");
     onlyWhen("notScrape");
-    float[] opacityDefault = { 0.9, 0.9, 0.9, 0.8, 0.9, 0.9 };
-    float[] washesDefault = { 0.15, 0.15, 0, 0, 0, 0 };
-    int[] layerDefault = { 1, 1, 3, 2, 2, 3 };
-    float[] thicknessDefault = { 0.5, 0.8, 0.4, 0.1, 0.25, 0 };
+    float[] opacityDefault = { 0.9, 0.9, 0.9, 0.8, 0.9, 0.9, 0.9, 0.95 };
+    float[] washesDefault = { 0.15, 0.15, 0, 0, 0, 0, 0, 0 };
+    int[] layerDefault = { 1, 1, 3, 2, 2, 3, 2, 3 };
+    float[] thicknessDefault = { 0.5, 0.8, 0.4, 0.1, 0.25, 0, 0.2, 0 };
     for (int i = 0; i < TOOLS.length - 1; i++) {
       String n = TOOLS[i];
       row(24);
@@ -823,6 +889,11 @@ public class Panel extends PApplet {
     if (when.equals("ground")) return targetDone && value("output") == 0;
     if (when.equals("later")) return false;
     if (when.equals("notScrape")) return !editing.equals("scrape");
+    if (when.startsWith("one ")) return value(when.substring(4) + "_one") > 0.5;
+    if (when.equals("notOutline")) return !editing.equals("outline");
+    if (when.equals("flowColour")) return value("flow_src") < 2;     // the photo or the masses
+    if (when.equals("scrapeDown")) return value("scrape_which") == 0;
+    if (when.equals("scrapeOne")) return value("scrape_which") == 1;
     if (when.equals("pencilSteers")) return value("pencil_kind") < 2;
     if (when.equals("pencilFlow")) return value("pencil_kind") == 1;
     if (when.equals("pencilHatch")) return value("pencil_hatch") > 0;
@@ -896,14 +967,14 @@ public class Panel extends PApplet {
   }
 
   int colour(String name) {
-    return ((ColorWheel) all.get(name)).getRGB();
+    return ((ColorPicker) all.get(name)).getColorValue() | 0xFF000000;
   }
 
   JSONObject settingsJSON() {
     JSONObject j = new JSONObject();
     for (String n : all.keySet()) {
       ControllerInterface c = all.get(n);
-      if (c instanceof ColorWheel) j.setInt(n, ((ColorWheel) c).getRGB());
+      if (c instanceof ColorPicker) j.setInt(n, ((ColorPicker) c).getColorValue() | 0xFF000000);
       else j.setFloat(n, c.getValue());
     }
     j.setString("face", faceName);
@@ -916,7 +987,7 @@ public class Panel extends PApplet {
       if (!j.hasKey(n) || n.equals("source")) continue;
       if (setupNames.contains(n) && !includeSetup) continue;
       ControllerInterface c = all.get(n);
-      if (c instanceof ColorWheel) ((ColorWheel) c).setRGB(j.getInt(n));
+      if (c instanceof ColorPicker) ((ColorPicker) c).setColorValue(j.getInt(n) | 0xFF000000);
       else if (c instanceof RadioButton) ((RadioButton) c).activate((int) j.getFloat(n));
       else c.setValue(j.getFloat(n));
     }
@@ -953,6 +1024,8 @@ public class Panel extends PApplet {
         for (Toggle t : ((RadioButton) c).getItems()) t.setLock(on);
       } else if (c instanceof Controller) {
         ((Controller) c).setLock(on);
+      } else if (c instanceof ColorPicker) {
+        for (String k : new String[] { "-red", "-green", "-blue" }) cp5.getController(n + k).setLock(on);
       }
     }
   }
@@ -1177,13 +1250,14 @@ public class Panel extends PApplet {
     radioAt(name, new String[] { "1", "2", "3", "4" }, chosen, 110, 44);
   }
 
-  // a colour wheel on a row of its own
-  void colourWheel(String name, String caption, int c) {
-    row(128);
-    ColorWheel w = cp5.addColorWheel(name, 0, 0, 100).setRGB(c);
-    w.setCaptionLabel(caption);
-    register(name, w);
-    put(w, 0, 0);
+  // a colour: its name, then red, green and blue sliders over a strip of the colour
+  void colourPicker(String name, String caption, int c) {
+    row(84);
+    label(caption, 0);
+    ColorPicker p = cp5.addColorPicker(name).setColorValue(c | 0xFF000000);
+    cp5.getController(name + "-alpha").hide();     // always solid
+    register(name, p);
+    put(p, 0, 20);
   }
 
   // a small up or down button in VIEW's LAYERS list

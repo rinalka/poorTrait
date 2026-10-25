@@ -236,6 +236,8 @@ void clearCanvas() {
   clearStart();
   for (int i = 0; i < LAYERS; i++) clearLayer(i);
   pencils.clear();
+  flows.clear();
+  outlineRestart = true;
   composite();
   markCount = 0;
   gridI = 0;
@@ -290,6 +292,8 @@ void paintFrame() {
       else if (TOOLS[i].equals("splat")) paintSplatters(g);
       else if (TOOLS[i].equals("line")) paintLines(g);
       else if (TOOLS[i].equals("pencil")) paintPencils(g);
+      else if (TOOLS[i].equals("flow")) paintFlows(g);
+      else if (TOOLS[i].equals("outline")) paintOutline(g);
       else paintFragments(g);
       g.blendMode(BLEND);
       g.endDraw();

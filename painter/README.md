@@ -264,9 +264,10 @@ protected parts (ABSTRACTION).
 ### SCRAPE
 
 Takes paint off instead of putting it on. Each scrape removes paint from every layer above its
-"scrape down to" layer, so what's on that layer (or under it) shows through: an
+"down to" layer, so what's on that layer (or under it) shows through: an
 earlier stage of the painting or, scraping down to the **canvas**, what it started with (the
-masses, the photo or the bare canvas colour).
+masses, the photo or the bare canvas colour). Or it scrapes **one layer** only, leaving the
+layers above and below it alone.
 
 | Control | What it does |
 |---|---|
@@ -275,7 +276,9 @@ masses, the photo or the bare canvas colour).
 | length, width | Their size. Scratches are much thinner than the width says. |
 | ragged edges | How rough a knife scrape's edges are |
 | how much comes off | At 1 a scrape takes nearly everything. Lower values leave more behind. |
-| scrape down to | What scraping reveals: the **canvas** (every layer is scraped) or a layer (every layer above it in the stack is scraped). |
+| scrape | **down to a layer** or **one layer** |
+| down to | With "down to a layer": what scraping reveals, the **canvas** (every layer is scraped) or a layer (every layer above it in the stack is scraped). |
+| only layer | With "one layer": the one layer that's scraped (1 to 4). Paint on the layers above it stays, so the scrape only shows where nothing above covers it. |
 
 Scrape has MOVEMENT settings but no COLOUR or APPLY.
 

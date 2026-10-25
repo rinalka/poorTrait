@@ -1,7 +1,8 @@
 // Scraping (the panel's SCRAPE block): taking paint off, instead of putting it on. Every scrape
 // removes paint from all the layers above the "down to" layer, so whatever is on that layer (or
 // under it) shows through - an earlier stage of the painting, or, down to the canvas, what it
-// started with (the masses, the photo or the bare canvas).
+// started with (the masses, the photo or the bare canvas). Or it scrapes just one layer, leaving
+// the others as they are.
 //
 //   knife scrape   a palette knife dragged across wet paint: a broad mark, the same shape as the
 //                  knife's (the Knife tab's Blade), that doesn't take everything - streaks of
@@ -17,12 +18,13 @@ PGraphics scrapeMask;
 
 void paintScrapes() {
   if (t("on") < 0.5) return;
-  // 0 = down to the canvas, so every layer is scraped; 1 = down to layer 1, so the layers above
-  // it in the stack are scraped ...
+  // "down to": 0 = the canvas, so every layer is scraped; 1 = layer 1, so the layers above it in
+  // the stack are scraped ... "one layer": only that layer
+  boolean one = t("which") == 1;
   int down = (int) t("layer");
   int from = down == 0 ? 0 : layerPosition(down - 1) + 1;
   int n = countFor(t("rate"));
-  if (n == 0 || from >= LAYERS) return;
+  if (n == 0 || !one && from >= LAYERS) return;
   if (scrapeMask == null || scrapeMask.width != photo.width || scrapeMask.height != photo.height) {
     scrapeMask = createGraphics(photo.width, photo.height, P2D);
   }
@@ -39,10 +41,16 @@ void paintScrapes() {
   }
   scrapeMask.endDraw();
   if (made == 0) return;
+  if (one) {
+    int L = (int) t("only");
+    eraseWith(layers[L], scrapeMask);
+    eraseWith(heights[L], scrapeMask);          // the paint's thickness goes with it (Impasto)
+    return;
+  }
   int[] o = layerOrder;
   for (int p = from; p < LAYERS; p++) {
     eraseWith(layers[o[p]], scrapeMask);
-    eraseWith(heights[o[p]], scrapeMask);      // the paint's thickness goes with it (Impasto)
+    eraseWith(heights[o[p]], scrapeMask);
   }
 }
 
