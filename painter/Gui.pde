@@ -5,6 +5,8 @@
 //                                 backdrop and what the canvas starts with, each a box whose
 //                                 square turns from red to green once it's done - 1 - 3 are
 //                                 locked while a run is going
+//   RECOLOUR                      under them: changing the painting's colours a few at a time -
+//                                 opened, it takes the place of the SETUP boxes
 //   the tools                     what does the drawing: brush, palette knife, splatter, lines,
 //                                 fragments, pencil, flow, outline, scrape - one at a time, with its
 //                                 shape settings
@@ -75,6 +77,17 @@ public class Panel extends PApplet {
   int pressedIn = -1;                 // the setup box a click started in
   ScrollableList picked;              // a setup list an item was just picked from
   int doneGreen = 0xFF2E9E48, notDoneRed = 0xFFCC3B2E;   // a setup box's square
+
+  // RECOLOUR (the Recolour tab): the palette's colours, what's been done to each (hue shift in
+  // degrees, saturation and brightness multiplied by), and which are chosen. Replaced whole, never
+  // changed in place, as the painter reads them from its own thread
+  volatile int[] recolourBase = new int[0];
+  volatile float[][] recolourAdj = new float[0][];
+  boolean[] recolourPicked = new boolean[0];
+  Row recolourGrid;                   // the row the swatches are drawn in
+  Textlabel recolourText;
+  boolean recolourSyncing = false;    // the sliders are being set to show a swatch, not moved
+  final int SWATCH_COLS = 5, SWATCH_H = 38;
   String[] outputNames = { "2D canvas", "mesh: just the person", "mesh: whole photo" };
   int colW = 340;            // width of a column
   int sections = 0;          // SETUP, RUN, VIEW ... each gets a block of colour behind it
@@ -178,6 +191,38 @@ public class Panel extends PApplet {
     boxText("").setText("start the canvas with  (at RUN and CLEAR)");
     radio("startWith", startNames, 3, 1);
     row(2);
+    // everything above is hidden while RECOLOUR is open, so it takes their place
+    for (Row r : columns.get(columns.size() - 1)) r.when = r.when.equals("") ? "notRecolour" : r.when + "&notRecolour";
+
+    // RECOLOUR (the Recolour tab): NEW PALETTE divides the painting into 40 colours; click
+    // swatches to choose them, and the sliders change those
+    header("RECOLOUR");
+    row(26);
+    toggle("recolourOpen", "open  (in place of SETUP)", false, 0);
+    toggle("recolourOn", "on", true, 240);
+    row(32);
+    button("recolourNew", "READ COLOURS", 0, 100);
+    button("recolourRandom", "RANDOM NUDGE", 106, 110);
+    recolourText = cp5.addTextlabel("recolourText").setText("").setColorValue(dark);
+    put(recolourText, 222, 6);
+    onlyWhen("recolour");
+    row(SWATCH_H * ((RECOLOURS + SWATCH_COLS - 1) / SWATCH_COLS) + 6);
+    recolourGrid = cur;
+    onlyWhen("recolour");
+    slider("recolourHue", "hue  (degrees)", -180, 180, 0).setDecimalPrecision(0);
+    onlyWhen("recolour");
+    slider("recolourSat", "saturation", 0, 2, 1);
+    onlyWhen("recolour");
+    slider("recolourBri", "brightness", 0, 2, 1);
+    onlyWhen("recolour");
+    slider("recolourReach", "reach  (how far it spreads)", 0.02, 0.3, 0.08);
+    onlyWhen("recolour");
+    row(32);
+    button("recolourAll", "ALL", 0, 50);
+    button("recolourNone", "NONE", 56, 60);
+    button("recolourResetPicked", "RESET CHOSEN", 122, 112);
+    button("recolourResetAll", "RESET ALL", 240, 80);
+    onlyWhen("recolour");
 
     // ---------------------------------------------------- along the bottom: VIEW, CAMERA and RUN
     // VIEW is two lists side by side, always open: MAPS (a map in place of the painting) and
@@ -381,7 +426,24 @@ public class Panel extends PApplet {
     toggle("outline_join", "one unbroken line", false, 180);
     onlyWhen("on outline");
 
+    // the sponge (the Sponge tab): the chunk, and how it's dabbed
     toolBox(8, false);
+    toolSlider("rate", "stamps per frame", 0.05, 20, 2);
+    toolSlider("size", "size  (pixels across)", 10, 300, 70).setDecimalPrecision(0);
+    toolSlider("ragged", "torn edges", 0, 1, 0.5);
+    toolSlider("pores", "pore size", 1, 12, 3);
+    toolSlider("open", "how open  (holes even when full)", 0, 1, 0.4);
+    toolSlider("load", "picks up  (% of the picture)", 10, 100, 85).setDecimalPrecision(0);
+    toolSlider("smear", "smearing  (each stamp)", 0, 8, 2);
+    toolSlider("loss", "paint lost each stamp  (%)", 1, 80, 20).setDecimalPrecision(0);
+    toolSlider("stamps", "stamps per dip", 1, 40, 8).setDecimalPrecision(0);
+    toolSlider("step", "distance between stamps", 0, 3, 0.7);
+    toolSlider("turn", "rotation  (degrees either way)", 0, 180, 180).setDecimalPrecision(0);
+    row(24);
+    toggle("sponge_fresh", "a new chunk each dip", false, 0);
+    onlyWhen("on sponge");
+
+    toolBox(9, false);
     radio("scrape_kind", new String[] { "knife scrape", "scratches" }, 2, 0);
     onlyWhen("on scrape");
     toolSlider("rate", "scrapes per frame", 0.05, 20, 1);
@@ -406,13 +468,13 @@ public class Panel extends PApplet {
     // ---------------------------------------------------- column 3: MOVEMENT, COLOUR, APPLY
     // ... of the tool chosen in column 2. Every tool has its own set; only the chosen one's shows
     column();
-    float[] followDefault = { 0.6, 0.6, 0, 0.5, 0.3, 0.3, 0, 0, 0.5 };
+    float[] followDefault = { 0.6, 0.6, 0, 0.5, 0.3, 0.3, 0, 0, 0, 0.5 };
     moveHeader = header("MOVEMENT");
     onlyWhen("notOutline");
     for (int i = 0; i < TOOLS.length; i++) {
       String n = TOOLS[i];
       if (n.equals("outline")) continue;       // it goes where the face is
-      if (!n.equals("splat") && !n.equals("flow")) {
+      if (!n.equals("splat") && !n.equals("flow") && !n.equals("sponge")) {
         slider(n + "_follow", "follow the form", 0, 1, followDefault[i]);
         onlyWhen("edit " + n);
         if (i <= 1) {
@@ -440,7 +502,7 @@ public class Panel extends PApplet {
 
     colourHeader = header("COLOUR");
     onlyWhen("notScrape");
-    float[] contrastDefault = { 0, 0, 0.5, 0.6, 0.5, 0.55, 0, 0.9 };
+    float[] contrastDefault = { 0, 0, 0.5, 0.6, 0.5, 0.55, 0, 0.9, 0 };
     for (int i = 0; i < TOOLS.length - 1; i++) {
       String n = TOOLS[i];
       // flow and outline can draw in one colour of your own instead
@@ -484,10 +546,10 @@ public class Panel extends PApplet {
 
     applyHeader = header("APPLY");
     onlyWhen("notScrape");
-    float[] opacityDefault = { 0.9, 0.9, 0.9, 0.8, 0.9, 0.9, 0.9, 0.95 };
-    float[] washesDefault = { 0.15, 0.15, 0, 0, 0, 0, 0, 0 };
-    int[] layerDefault = { 1, 1, 3, 2, 2, 3, 2, 3 };
-    float[] thicknessDefault = { 0.5, 0.8, 0.4, 0.1, 0.25, 0, 0.2, 0 };
+    float[] opacityDefault = { 0.9, 0.9, 0.9, 0.8, 0.9, 0.9, 0.9, 0.95, 0.9 };
+    float[] washesDefault = { 0.15, 0.15, 0, 0, 0, 0, 0, 0, 0 };
+    int[] layerDefault = { 1, 1, 3, 2, 2, 3, 2, 3, 2 };
+    float[] thicknessDefault = { 0.5, 0.8, 0.4, 0.1, 0.25, 0, 0.2, 0, 0.15 };
     for (int i = 0; i < TOOLS.length - 1; i++) {
       String n = TOOLS[i];
       row(24);
@@ -659,6 +721,7 @@ public class Panel extends PApplet {
       fill(lerpColor(blockColour[a.section], color(0), 0.12));
       rect(block[a.section][0] - 4, a.y - 2, colW - 20, z.y + z.h - a.y, 5);
     }
+    drawSwatches();
     // a frame round the box of the tool that's on
     int ch = toolSection[max(0, java.util.Arrays.asList(TOOLS).indexOf(editing))];
     if (block[ch] != null && value(editing + "_on") > 0.5) {
@@ -748,6 +811,7 @@ public class Panel extends PApplet {
       }
     }
     if (listOpen) return;
+    if (swatchClicked()) return;
     if (inBlock(startBox, 0)) startDone = true;
     if (inBlock(backdropBox, 0)) backdropDone = true;
     for (int b : new int[] { sourceBox, targetBox, massBox }) {
@@ -807,6 +871,141 @@ public class Panel extends PApplet {
     return mouseX >= k[0] - 8 && mouseX <= k[0] - 20 + colW && mouseY >= k[1] && mouseY <= bottom;
   }
 
+  // ---------------------------------------------------- RECOLOUR
+
+  // a new palette from the painter (makeRecolourPalette): nothing changed, nothing chosen
+  void newRecolourPalette(int[] base) {
+    float[][] adj = new float[base.length][];
+    for (int i = 0; i < base.length; i++) adj[i] = new float[] { 0, 1, 1 };
+    recolourPicked = new boolean[base.length];
+    recolourAdj = adj;
+    recolourBase = base;
+    showChosen();
+  }
+
+  void recolourEvent(String n, float value) {
+    if (n.equals("recolourNew")) command("recolourPalette");
+    else if (n.equals("recolourRandom")) randomRecolour();
+    else if (n.equals("recolourOpen")) {
+      if (value > 0.5 && recolourBase.length == 0) command("recolourPalette");
+    }
+    else if (n.equals("recolourAll") || n.equals("recolourNone")) {
+      java.util.Arrays.fill(recolourPicked, n.equals("recolourAll"));
+      showChosen();
+    }
+    else if (n.equals("recolourResetPicked") || n.equals("recolourResetAll")) {
+      float[][] adj = copyAdj();
+      for (int i = 0; i < adj.length; i++) {
+        if (n.equals("recolourResetAll") || recolourPicked[i]) adj[i] = new float[] { 0, 1, 1 };
+      }
+      recolourAdj = adj;
+      showChosen();
+    }
+    else if (!recolourSyncing && (n.equals("recolourHue") || n.equals("recolourSat") || n.equals("recolourBri"))) {
+      // a slider moved: the chosen swatches all take its value
+      int q = n.equals("recolourHue") ? 0 : n.equals("recolourSat") ? 1 : 2;
+      float[][] adj = copyAdj();
+      for (int i = 0; i < adj.length; i++) if (recolourPicked[i]) adj[i][q] = value;
+      recolourAdj = adj;
+    }
+  }
+
+  // RANDOM NUDGE: each chosen swatch (all of them if none are) has its hue turned a little and
+  // its saturation changed a little, from where they are now - brightness is left alone, so
+  // pressing it again and again drifts the colours further
+  void randomRecolour() {
+    float[][] adj = copyAdj();
+    boolean any = false;
+    for (boolean b : recolourPicked) any |= b;
+    for (int i = 0; i < adj.length; i++) {
+      if (any && !recolourPicked[i]) continue;
+      adj[i][0] = constrain(adj[i][0] + random(-40, 40), -180, 180);
+      adj[i][1] = constrain(adj[i][1] * random(0.75, 1.28), 0, 2);
+    }
+    recolourAdj = adj;
+    showChosen();
+  }
+
+  float[][] copyAdj() {
+    float[][] a = recolourAdj, c = new float[a.length][];
+    for (int i = 0; i < a.length; i++) c[i] = a[i].clone();
+    return c;
+  }
+
+  // the sliders show the first chosen swatch's changes (or none)
+  void showChosen() {
+    float[] a = { 0, 1, 1 };
+    int chosen = 0;
+    for (int i = 0; i < recolourPicked.length && i < recolourAdj.length; i++) {
+      if (!recolourPicked[i]) continue;
+      if (chosen == 0) a = recolourAdj[i];
+      chosen++;
+    }
+    recolourSyncing = true;
+    all.get("recolourHue").setValue(a[0]);
+    all.get("recolourSat").setValue(a[1]);
+    all.get("recolourBri").setValue(a[2]);
+    recolourSyncing = false;
+  }
+
+  // the swatch under the mouse, or -1
+  int swatchAt(float mx, float my) {
+    if (value("recolourOpen") < 0.5 || recolourGrid == null || recolourGrid.y < 0) return -1;
+    float[] b = block[recolourGrid.section];
+    if (b == null) return -1;
+    float w = (colW - 28) / (float) SWATCH_COLS;
+    int col = floor((mx - b[0]) / w), row = floor((my - recolourGrid.y) / SWATCH_H);
+    if (col < 0 || col >= SWATCH_COLS || row < 0) return -1;
+    int i = row * SWATCH_COLS + col;
+    return i < recolourBase.length ? i : -1;
+  }
+
+  boolean swatchClicked() {
+    int i = swatchAt(mouseX, mouseY);
+    if (i < 0 || i >= recolourPicked.length) return false;
+    recolourPicked[i] = !recolourPicked[i];
+    showChosen();
+    return true;
+  }
+
+  // the swatches: each the colour it was on the left, as it is now on the right, with its number,
+  // and a thick frame if it's chosen
+  void drawSwatches() {
+    if (value("recolourOpen") < 0.5 || recolourGrid == null || recolourGrid.y < 0) return;
+    float[] b = block[recolourGrid.section];
+    if (b == null) return;
+    int[] base = recolourBase;
+    float[][] adj = recolourAdj;
+    float w = (colW - 28) / (float) SWATCH_COLS;
+    int chosen = 0;
+    for (int i = 0; i < base.length && i < adj.length; i++) {
+      float x = b[0] + (i % SWATCH_COLS) * w, y = recolourGrid.y + (i / SWATCH_COLS) * SWATCH_H;
+      boolean on = i < recolourPicked.length && recolourPicked[i];
+      if (on) chosen++;
+      int now = recoloured(base[i], adj[i]);
+      noStroke();
+      fill(base[i]);
+      rect(x, y, (w - 6) / 2, SWATCH_H - 6);
+      fill(now);
+      rect(x + (w - 6) / 2, y, (w - 6) / 2, SWATCH_H - 6);
+      if (on) {
+        noFill();
+        stroke(20);
+        strokeWeight(3);
+        rect(x - 1, y - 1, w - 4, SWATCH_H - 4);
+        stroke(255);
+        strokeWeight(1);
+        rect(x + 1.5, y + 1.5, w - 9, SWATCH_H - 9);
+        noStroke();
+      }
+      fill(brightness(base[i]) > 140 ? 20 : 240);
+      textAlign(LEFT, TOP);
+      text(i + 1, x + 4, y + 3);
+    }
+    textAlign(LEFT, BASELINE);
+    recolourText.setText(base.length == 0 ? "no palette yet  (needs a painting)" : chosen + "/" + base.length + " chosen");
+  }
+
   // opening the masses box shows the masses (with the light off, so their colours are true);
   // closing it puts the view back and marks them done
   void openMasses(boolean open) {
@@ -849,6 +1048,7 @@ public class Panel extends PApplet {
     else if (n.equals("printView")) command("print");
     else if (n.equals("loadSettings")) command("load");
     else if (n.equals("nudge")) nudgeAll();
+    else if (n.startsWith("recolour")) recolourEvent(n, e.getValue());
     else if (n.equals("resetView")) command("resetView");
     else if (n.equals("source")) {
       command("source");
@@ -895,6 +1095,8 @@ public class Panel extends PApplet {
     if (when.equals("later")) return false;
     if (when.equals("notScrape")) return !editing.equals("scrape");
     if (when.startsWith("one ")) return value(when.substring(4) + "_one") > 0.5;
+    if (when.equals("recolour")) return value("recolourOpen") > 0.5;
+    if (when.equals("notRecolour")) return value("recolourOpen") < 0.5;
     if (when.equals("notOutline")) return !editing.equals("outline");
     if (when.equals("flowColour")) return value("flow_src") < 2;     // the photo or the masses
     if (when.equals("scrapeDown")) return value("scrape_which") == 0;
@@ -983,6 +1185,16 @@ public class Panel extends PApplet {
       else j.setFloat(n, c.getValue());
     }
     j.setString("face", faceName);
+    // RECOLOUR's palette and what's been done to it
+    int[] base = recolourBase;
+    float[][] adj = recolourAdj;
+    JSONArray pal = new JSONArray(), ch = new JSONArray();
+    for (int i = 0; i < base.length && i < adj.length; i++) {
+      pal.append(base[i]);
+      for (float a : adj[i]) ch.append(a);
+    }
+    j.setJSONArray("recolourPalette", pal);
+    j.setJSONArray("recolourChanges", ch);
     return j;
   }
 
@@ -995,6 +1207,19 @@ public class Panel extends PApplet {
       if (c instanceof ColorPicker) ((ColorPicker) c).setColorValue(j.getInt(n) | 0xFF000000);
       else if (c instanceof RadioButton) ((RadioButton) c).activate((int) j.getFloat(n));
       else c.setValue(j.getFloat(n));
+    }
+    if (j.hasKey("recolourPalette") && j.hasKey("recolourChanges")) {
+      JSONArray pal = j.getJSONArray("recolourPalette"), ch = j.getJSONArray("recolourChanges");
+      int[] base = new int[pal.size()];
+      float[][] adj = new float[pal.size()][];
+      for (int i = 0; i < base.length; i++) {
+        base[i] = pal.getInt(i);
+        adj[i] = new float[] { ch.getFloat(i * 3), ch.getFloat(i * 3 + 1), ch.getFloat(i * 3 + 2) };
+      }
+      recolourPicked = new boolean[base.length];
+      recolourAdj = adj;
+      recolourBase = base;
+      showChosen();
     }
     if (includeSetup && j.hasKey("face")) {
       int i = java.util.Arrays.asList(faces).indexOf(j.getString("face"));

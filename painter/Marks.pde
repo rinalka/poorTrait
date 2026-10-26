@@ -17,8 +17,8 @@ int gridI = 0;               // how far the grid start has got
 // The tools (the panel's column 2), in the order they paint. Each has its own settings - its
 // shape in its box, and its MOVEMENT, COLOUR and APPLY - named with the tool's name in front:
 // "knife_size", "splat_drops" ... `tool` is the one painting now, and t("size") reads its setting.
-String[] TOOLS = { "brush", "knife", "splat", "line", "frag", "pencil", "flow", "outline", "scrape" };
-String[] toolTitles = { "BRUSH", "PALETTE KNIFE", "SPLATTER", "LINES", "FRAGMENTS", "PENCIL", "FLOW", "OUTLINE", "SCRAPE" };
+String[] TOOLS = { "brush", "knife", "splat", "line", "frag", "pencil", "flow", "outline", "sponge", "scrape" };
+String[] toolTitles = { "BRUSH", "PALETTE KNIFE", "SPLATTER", "LINES", "FRAGMENTS", "PENCIL", "FLOW", "OUTLINE", "SPONGE", "SCRAPE" };
 String tool = "brush";
 
 float t(String name) {

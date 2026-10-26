@@ -108,6 +108,13 @@ void composite() {
   boolean fin = finishing();
   if (fin) combineHeights();
   PGraphics back = backdropGraphics();       // made before drawing on the canvas (see there)
+  // RECOLOUR (the Recolour tab): a new palette if asked for, and the layers with its changes -
+  // made before drawing on the canvas too
+  recolourStep();
+  PGraphics[] shown = layers.clone();
+  if (recolouring()) {
+    for (int i = 0; i < LAYERS; i++) if (v("layerOn" + i) > 0.5) shown[i] = recolouredLayer(i);
+  }
   canvas.beginDraw();
   canvas.background(255);
   canvas.image(back, 0, 0);
@@ -120,6 +127,7 @@ void composite() {
   for (int p = 0; p < LAYERS; p++) {
     int i = o[p];
     if (v("layerOn" + i) < 0.5) continue;
+    PGraphics layer = shown[i];
     float solid = 1 - v("layerSeeThrough" + i);
     float op = 255 * solid;
     float gap = box ? v("layerGap" + i) : 0;
@@ -132,7 +140,7 @@ void composite() {
       PGL pgl = canvas.beginPGL();
       blendLayer(pgl, 0);
       canvas.shader(boxShadow);
-      canvas.image(layers[i], 0, 0);
+      canvas.image(layer, 0, 0);
       canvas.flush();
       canvas.resetShader();
       canvas.endPGL();
@@ -148,7 +156,7 @@ void composite() {
     PGL pgl = canvas.beginPGL();
     blendLayer(pgl, (int) v("layerBlend" + i));
     canvas.tint(op, op);          // premultiplied, so fading scales the colour as well as the alpha
-    canvas.image(layers[i], 0, 0);
+    canvas.image(layer, 0, 0);
     canvas.flush();
     canvas.endPGL();              // puts Processing's own blending back
     canvas.noTint();

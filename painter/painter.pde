@@ -149,7 +149,8 @@ void command(String c) {
 }
 
 void handle(String c) {
-  if (c.equals("source")) {
+  if (c.equals("recolourPalette")) recolourWanted = true;
+  else if (c.equals("source")) {
     String f = faces[constrain((int) v("source"), 0, faces.length - 1)];
     if (!isRunning && !f.equals(faceName)) loadFace(f, (int) v("smoothing"));
   }
@@ -238,6 +239,7 @@ void clearCanvas() {
   pencils.clear();
   flows.clear();
   outlineRestart = true;
+  spongePaint = 0;
   composite();
   markCount = 0;
   gridI = 0;
@@ -294,6 +296,7 @@ void paintFrame() {
       else if (TOOLS[i].equals("pencil")) paintPencils(g);
       else if (TOOLS[i].equals("flow")) paintFlows(g);
       else if (TOOLS[i].equals("outline")) paintOutline(g);
+      else if (TOOLS[i].equals("sponge")) paintSponges(g);
       else paintFragments(g);
       g.blendMode(BLEND);
       g.endDraw();
