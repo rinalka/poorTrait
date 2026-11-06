@@ -20,3 +20,8 @@ closeTest/
 
 # paintings and settings saved from the painter
 painter/saved/
+painter2D/saved/
+painter3D/saved/
+
+# the maps the painter reads and the map maker writes (personal photos - never online)
+/maps/

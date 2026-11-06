@@ -90,6 +90,8 @@ def make_mesh(folder, depth_scale=0.4, step=4, smooth=1.5, max_jump=0.03):
     parts_path = os.path.join(folder, "parts.png")
     parts = cv2.imread(parts_path, cv2.IMREAD_GRAYSCALE) if os.path.exists(parts_path) else None
     person = parts != BACKGROUND if parts is not None else np.ones((h, w), bool)
+    if not person.any():               # no person found (a picture without a face): use all of it
+        person = np.ones((h, w), bool)
 
     # The face model gets its own depth range, stretched over just the person, so their shape
     # uses all of the depth instead of sharing it with the background.
