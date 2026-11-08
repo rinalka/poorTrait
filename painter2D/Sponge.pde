@@ -16,7 +16,9 @@
 //
 // Each print is made as a small picture of the sponge's face - the paint it carries, how much of
 // it prints in the alpha - and drawn turned. Pressing is never quite even, so every print differs
-// a little. The same chunk is used dip after dip, unless "a new chunk each dip".
+// a little. The same chunk is used dip after dip, unless "a new chunk each dip". Its size is
+// picked from "size range" - once (again when the range changes), or every dip with "a new size
+// each dip" (a new size is a new chunk).
 // Stamps respect ABSTRACTION: a stamp doesn't land where it's protected.
 
 float[] spongeHolds;               // the chunk: how much paint each pixel of its face holds, 0 = outside
@@ -26,6 +28,8 @@ float[] spongeR, spongeG, spongeB; // the paint it carries, a colour for each pi
 float spongePaint = 0;             // paint left, 0 .. 1 - 0 means dip it again
 int spongeStamps = 0;              // stamps since the last dip
 float spongeX, spongeY;            // where the last stamp was
+float spongeSize = 0;              // how big it is now (pixels across), from the size range
+String spongeRangeFor = "";        // the size range it was picked from
 ArrayList<PImage> spongePrints = new ArrayList<PImage>();   // a picture for each stamp in a frame
 
 void paintSponges(PGraphics g) {
@@ -45,6 +49,7 @@ void spongeStamp(PGraphics g, int k) {
     if (s == null) return;
     spongeX = s[0];
     spongeY = s[1];
+    pickSpongeSize();
     makeSponge(t("fresh") > 0.5);
     soakUp(spongeX, spongeY);
     spongePaint = t("load") / 100;
@@ -52,7 +57,7 @@ void spongeStamp(PGraphics g, int k) {
   } else {
     smearSponge(t("smear"));
     // the next stamp, a little way on
-    float a = random(TWO_PI), d = t("step") * t("size") * random(0.5, 1.2);
+    float a = random(TWO_PI), d = t("step") * spongeSize * random(0.5, 1.2);
     spongeX = constrain(spongeX + cos(a) * d, 0, photo.width - 1);
     spongeY = constrain(spongeY + sin(a) * d, 0, photo.height - 1);
   }
@@ -73,9 +78,20 @@ void spongeStamp(PGraphics g, int k) {
   markCount++;
 }
 
-// the chunk: made again when its settings change, or every dip if `fresh`
+// its size, at a dip: a new one from the size range every dip if "a new size each dip", otherwise
+// one picked when the range changes and kept
+void pickSpongeSize() {
+  float lo = t("sizeRange_lo"), hi = max(lo, t("sizeRange_hi"));
+  String range = lo + " " + hi;
+  if (t("sizeEachDip") > 0.5 || !range.equals(spongeRangeFor) || spongeSize <= 0) {
+    spongeSize = max(4, random(lo, hi));
+    spongeRangeFor = range;
+  }
+}
+
+// the chunk: made again when its settings change (a new size too), or every dip if `fresh`
 void makeSponge(boolean fresh) {
-  float size = t("size"), ragged = t("ragged"), pore = t("pores");
+  float size = spongeSize, ragged = t("ragged"), pore = t("pores");
   String key = size + " " + ragged + " " + pore;
   if (!fresh && key.equals(spongeFor) && spongeHolds != null) return;
   spongeFor = key;

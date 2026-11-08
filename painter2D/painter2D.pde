@@ -19,7 +19,8 @@
 // The painting is five see-through layers (the Layers tab), combined into one picture every frame.
 //
 // SAVE writes the painting, the backdrop, the canvas, each layer, the paint's height (IMPASTO),
-// and a .json of every setting on the panel, to the saved folder. PRINT writes what this window
+// SETUP 5's palette (and the masses in its colours, if they're on), and a .json of every setting
+// on the panel, to the saved folder. PRINT writes what this window
 // shows, at the photo's size.
 // LOAD SETTINGS puts a saved .json's settings back on the panel.
 
@@ -50,7 +51,7 @@ int runSeed = 0;
 color ground;                // the canvas colour, fixed for a run
 boolean around = true;       // used by the Field tab: marks go around the form, or across it
 
-String[] showNames = { "painting", "photo", "normal", "importance", "curvature", "depth", "light", "masses" };
+String[] showNames = { "painting", "photo", "normal", "importance", "curvature", "depth", "light", "masses", "masses (palette)" };
 String[] blendNames = { "normal", "multiply", "screen", "lightest", "darkest", "add", "subtract" };
 int[] blendModes = { BLEND, MULTIPLY, SCREEN, LIGHTEST, DARKEST, ADD, SUBTRACT };
 
@@ -103,6 +104,9 @@ void draw() {
   params = panel.snapshot();
   for (String t : todo) handle(t);
   updateMasses();
+  updatePaletteMasses();
+  updatePaletteMatch();
+  updatePaletteUse();
   // nothing paints while a map is showing (VIEW's MAPS) - you couldn't see what it's doing
   if (isRunning && !isPaused && mapShowing()) isPaused = true;
   if (runWaiting && !massesPending()) {
@@ -182,7 +186,12 @@ void handle(String c) {
     else startRun();
   }
   else if (c.equals("stop")) { isRunning = false; isPaused = false; runWaiting = false; }
-  else if (c.equals("pause")) { if (isRunning && !(isPaused && mapShowing())) isPaused = !isPaused; }
+  else if (c.equals("pause")) {
+    if (isRunning && !(isPaused && mapShowing())) {
+      isPaused = !isPaused;
+      if (!isPaused) restartGrid();      // CARRY ON: the grid starts another pass at the top left
+    }
+  }
   else if (c.equals("step")) stepWanted = true;
   else if (c.equals("clear")) clearCanvas();
   else if (c.equals("save")) saveWanted = true;
@@ -190,6 +199,7 @@ void handle(String c) {
   else if (c.equals("load")) selectInput("Choose a settings file (.json)", "settingsChosen", new java.io.File(sketchPath("saved") + "/x.json"));
   else if (c.equals("field")) buildField(normalImg, (int) v("smoothing"));
   else if (c.equals("cutOutside")) cutOutsideOutline((int) v("cut_layer"));
+  else if (c.equals("eraseColour")) erasePaletteColour((int) v("eraseColourLayer"), panel.erasePick);
   else if (c.equals("layMasses")) layMasses(v("layOpacity"));
   else if (c.startsWith("clearLayer")) clearLayer(int(c.substring(10)));
   else if (c.startsWith("moveLayer")) {
@@ -259,7 +269,7 @@ void clearCanvas() {
   spongePaint = 0;
   composite();
   markCount = 0;
-  gridI = 0;
+  restartGrid();
 }
 
 // whether tool number i is switched on
@@ -373,6 +383,7 @@ PImage currentView() {
   if (s == 1) return photo;
   if (s == 2) return normalImg;
   if (s == 7) return massesImg != null ? massesImg : photo;
+  if (s == 8) return paletteMassesImg != null ? paletteMassesImg : massesImg != null ? massesImg : photo;
   return maps[s - 2];        // importance, curvature, depth, light
 }
 
@@ -425,13 +436,16 @@ void saveAll() {
     combineHeights();
     heightAll.save(base + "-height.png");
   }
+  PImage pal = palettePicture();
+  if (pal != null) pal.save(base + "-palette.png");
+  if (paletteMassesImg != null) paletteMassesImg.save(base + "-masses-palette.png");
   JSONObject j = panel.settingsJSON();
   j.setString("layerOrder", join(str(layerOrder), " "));
   j.setInt("seed", runSeed);
   j.setFloat("textureSeed", textureSeed);
   j.setInt("marks", markCount);
   saveJSONObject(j, base + ".json");
-  println("saved " + base + " (.png, the backdrop, the canvas, each layer, the height, .json)");
+  println("saved " + base + " (.png, the backdrop, the canvas, each layer, the height, the palette, .json)");
 }
 
 // PRINT: what this window shows now - the painting or a map, with the

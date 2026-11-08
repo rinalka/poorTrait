@@ -5,7 +5,9 @@
 //                                 canvas starts with (and its colour), each a box whose square
 //                                 turns from red to green once it's done - 1 and 2 are locked
 //                                 while a run is going
-//   RECOLOUR                      under them: changing the painting's colours a few at a time -
+//   SETUP 5  PALETTE GEN          a palette of 24 colours on a colour scheme - opened, it takes
+//                                 the place of SETUP 1 - 4 and RECOLOUR
+//   RECOLOUR                     under them: changing the painting's colours a few at a time -
 //                                 opened, it takes the place of the SETUP boxes
 //   the tools                     what does the drawing: brush, palette knife, splatter, lines,
 //                                 fragments, pencil, flow, outline, scrape - one at a time, with its
@@ -15,8 +17,8 @@
 //   ABSTRACTION, LAYERS,          where the face may be broken up, the five layers, the
 //   SHADOW BOX, IMPASTO           layers floating apart, lit from one side, and thick paint
 //                                 catching the light
-// and along the bottom, VIEW (the MAPS and LAYERS lists) and DIRECTION FIELD under column 1, and RUN under
-// column 2, level with VIEW.
+// and along the bottom, VIEW (the MAPS and LAYERS lists) and DIRECTION FIELD under column 1, and RUN, one
+// strip under columns 2 - 4, at the very bottom.
 //
 // Every tool has its own MOVEMENT, COLOUR and APPLY settings, named with the tool in front
 // ("knife_follow", "splat_opacity" ...). Only one tool is on at a time: switching one on (its
@@ -97,7 +99,32 @@ public class Panel extends PApplet {
   Textlabel recolourText;
   boolean recolourSyncing = false;    // the sliders are being set to show a swatch, not moved
   final int SWATCH_COLS = 5, SWATCH_H = 38;
+
+  // SETUP 5, PALETTE GEN (the Palette Gen tab): the palette's colours as generated, what's been
+  // done to each (hue shift in degrees, saturation and brightness multiplied by), which are chosen,
+  // and the scheme and hue it was made from. Replaced whole, never changed in place, as the painter
+  // reads them from its own thread
+  int paletteBox;
+  volatile boolean paletteOpen = false;
+  volatile int[] paletteBase = new int[0];
+  volatile float[][] paletteAdj = new float[0][];
+  boolean[] palettePicked = new boolean[0];
+  int paletteSchemeMade = 0, paletteHueMade = 0;
+  java.util.Random paletteRnd = new java.util.Random();
+  Row paletteGrid;                    // the row the palette's swatches are drawn in
+  Textlabel paletteTitle, paletteText;
+  boolean paletteSyncing = false;     // the chosen-colour sliders are being set to show a swatch
+  final int PAL_COLS = 6, PAL_H = 34;
+  // SCRAPE's ERASE A PALETTE COLOUR: the strip of the palette's colours, and the one chosen (-1: none)
+  Row eraseStrip;
+  // (never give a variable here the same name as a control: controlP5 sets a variable with a
+  // control's name whenever that control is used - the ERASE button was once called the same as
+  // this, and every press set it to 1)
+  volatile int erasePick = -1;
+  volatile float[] paletteUse = new float[0];   // each palette colour's share of the masses (from the painter)
+  final int ERASE_COLS = 12, ERASE_H = 22;
   int colW = 340;            // width of a column
+  int runSection = -1;       // RUN's strip, three columns wide
   int sections = 0;          // SETUP, RUN, VIEW ... each gets a block of colour behind it
   int[] blockColour = new int[0];
   float[][] block = new float[0][];   // each section's x, top, bottom as laid out, or null if hidden
@@ -160,8 +187,7 @@ public class Panel extends PApplet {
     massSlider("massRound", "roundness", 1, 40, 10).setDecimalPrecision(1);
     massSlider("massJoin", "join similar neighbours", 0, 40, 8).setDecimalPrecision(1);
     massSlider("massSmooth", "smooth edges", 0, 16, 3).setDecimalPrecision(1);
-    Slider mp = massSlider("massPaints", "number of colours", 2, 32, 12).setDecimalPrecision(0);
-    mp.setNumberOfTickMarks(31).snapToTickMarks(true).showTickMarks(false);
+    // (always 24 colours, one for each of SETUP 5's - see MASS_PAINTS in the Masses tab)
     live = true;
     massSlider("massHue", "palette hue", -0.5, 0.5, 0);
     massSlider("massSat", "palette saturation", 0, 2, 1);
@@ -197,11 +223,62 @@ public class Panel extends PApplet {
     colourPicker("ground", "canvas colour  (fixed for a run)", color(222, 214, 200));
     live = true;
     row(2);
+    // SETUP 1 - 4 are hidden while PALETTE GEN is open, so it takes their place
+    for (Row r : columns.get(columns.size() - 1)) r.when = r.when.equals("") ? "notPalette" : r.when + "&notPalette";
+
+    // SETUP 5, PALETTE GEN (the Palette Gen tab): a palette of 24 colours on a colour scheme.
+    // Clicking the box opens it, in place of SETUP 1 - 4 and RECOLOUR; clicking its title again
+    // closes it. Choosing a scheme or GENERATE makes a new palette; the "whole palette" sliders
+    // change every colour, and the "chosen colours" ones the swatches clicked
+    paletteBox = setupBox("SETUP 5   PALETTE GEN");
+    paletteTitle = boxTitle;
+    paletteText = boxText("");
+    radio("paletteScheme", schemeNames, 2, 0);
+    onlyWhen("paletteOpen");
+    row(32);
+    button("paletteGenerate", "GENERATE", 0, 100);
+    onlyWhen("paletteOpen");
+    row(PAL_H * ((PALETTE_SIZE + PAL_COLS - 1) / PAL_COLS) + 6);
+    paletteGrid = cur;
+    onlyWhen("paletteOpen");
+    row(20);
+    label("whole palette", 0);
+    onlyWhen("paletteOpen");
+    slider("paletteHue", "hue  (degrees)", -180, 180, 0).setDecimalPrecision(0);
+    onlyWhen("paletteOpen");
+    slider("paletteSat", "saturation", 0, 2, 1);
+    onlyWhen("paletteOpen");
+    slider("paletteBri", "brightness", 0, 2, 1);
+    onlyWhen("paletteOpen");
+    row(20);
+    label("chosen colours  (click the swatches)", 0);
+    onlyWhen("paletteOpen");
+    slider("paletteHueC", "hue  (degrees)", -180, 180, 0).setDecimalPrecision(0);
+    onlyWhen("paletteOpen");
+    slider("paletteSatC", "saturation", 0, 2, 1);
+    onlyWhen("paletteOpen");
+    slider("paletteBriC", "brightness", 0, 2, 1);
+    onlyWhen("paletteOpen");
+    row(32);
+    button("paletteAll", "ALL", 0, 50);
+    button("paletteNone", "NONE", 56, 60);
+    button("paletteResetPicked", "RESET CHOSEN", 122, 112);
+    button("paletteResetAll", "RESET ALL", 240, 80);
+    onlyWhen("paletteOpen");
+    // a second masses picture in the palette's colours (VIEW's "masses (palette)")
+    row(26);
+    toggle("paletteMasses", "masses in these colours  (VIEW: masses (palette))", false, 0);
+    onlyWhen("paletteOpen");
+    slider("paletteKeepLight", "keep the masses' lightness", 0, 1, 0.5);
+    onlyWhen("paletteOpen&paletteMasses");
+    row(2);
     // everything above is hidden while RECOLOUR is open, so it takes their place
     for (Row r : columns.get(columns.size() - 1)) r.when = r.when.equals("") ? "notRecolour" : r.when + "&notRecolour";
 
     // RECOLOUR (the Recolour tab): one layer at a time - READ COLOURS divides its paint into 40
-    // colours; click swatches to choose them, and the sliders change those
+    // colours; click swatches to choose them, and the sliders change those. Hidden while PALETTE
+    // GEN is open
+    int recolourFrom = columns.get(columns.size() - 1).size();
     header("RECOLOUR");
     row(26);
     toggle("recolourOpen", "open  (in place of SETUP)", false, 0);
@@ -232,11 +309,16 @@ public class Panel extends PApplet {
     button("recolourResetPicked", "RESET CHOSEN", 122, 112);
     button("recolourResetAll", "RESET ALL", 240, 80);
     onlyWhen("recolour");
+    ArrayList<Row> col1 = columns.get(columns.size() - 1);
+    for (int i = recolourFrom; i < col1.size(); i++) {
+      Row r = col1.get(i);
+      r.when = r.when.equals("") ? "notPalette" : r.when + "&notPalette";
+    }
 
     // ---------------------------------------------------- along the bottom: VIEW, CAMERA and RUN
     // VIEW is two lists side by side, always open: MAPS (a map in place of the painting) and
     // LAYERS (which parts of the painting show)
-    int viewColumn = bottomColumn(0, -1);
+    bottomColumn(0, -1);
     header("VIEW");
     row(20);
     label("MAPS", 0);
@@ -279,27 +361,28 @@ public class Panel extends PApplet {
     sm.setNumberOfTickMarks(13).snapToTickMarks(true).showTickMarks(false);
     sm.setTriggerEvent(Slider.RELEASE);          // rebuilding the field takes a moment - only on letting go
 
-    // RUN's top is level with VIEW's. PRINT saves what the output window shows now, at the
-    // photo's size
-    bottomColumn(1, viewColumn);
-    header("RUN");
-    row(32);
-    runButton = button("runStop", "RUN", 0, 96);
-    pauseButton = button("pauseRun", "PAUSE", 106, 96);
-    button("clearCanvas", "CLEAR", 212, 96);
-    // how fast it paints (the window and the panel keep going at full speed), and while paused,
-    // STEP paints one step at a time
-    row(36);
-    stepButton = button("stepRun", "STEP", 0, 96);
-    paceSlider = sliderAt("pace", "painting speed", 0, 1, 1, 106, 4, 110);
-    row(32);
-    button("saveNow", "SAVE", 0, 96);
-    button("loadSettings", "LOAD SETTINGS", 106, 150);
-    row(36);
-    button("nudge", "NUDGE", 0, 96);
-    sliderAt("nudgeAmount", "how far", 0, 1, 0.2, 106, 4, 110);
-    row(32);
-    button("printView", "PRINT", 0, 96);
+    // RUN: one strip along the very bottom, under columns 2 - 4, so no box above can grow over it.
+    // The painting speed slider is how fast it paints (the window and the panel keep going at
+    // full speed), and while paused, STEP paints one step at a time. PRINT saves what the output
+    // window shows now, at the photo's size
+    bottomColumn(1, -1);
+    sections++;
+    runSection = sections - 1;
+    row(44);
+    Textlabel runTitle = cp5.addTextlabel("header RUN").setText("RUN").setColorValue(color(20));
+    put(runTitle, -4, 17);
+    runButton = button("runStop", "RUN", 40, 76);
+    pauseButton = button("pauseRun", "PAUSE", 122, 90);
+    button("clearCanvas", "CLEAR", 218, 66);
+    stepButton = button("stepRun", "STEP", 290, 60);
+    paceSlider = sliderAt("pace", "speed", 0, 1, 1, 358, 0, 100);
+    button("saveNow", "SAVE", 506, 66);
+    button("loadSettings", "LOAD SETTINGS", 578, 124);
+    button("nudge", "NUDGE", 708, 66);
+    sliderAt("nudgeAmount", "how far", 0, 1, 0.2, 780, 0, 70);
+    button("printView", "PRINT", 906, 66);
+    // all in the middle of the strip, top to bottom
+    for (int k = 1; k < cur.items.size(); k++) cur.dy.set(k, cur.items.get(k) instanceof Slider ? 14 : 9);
 
     // ---------------------------------------------------- column 2: the tools
     // Each tool's box: switched on or off (only one at a time), and - while it's on - its shape
@@ -428,7 +511,12 @@ public class Panel extends PApplet {
     // the sponge (the Sponge tab): the chunk, and how it's dabbed
     toolBox(8, false);
     toolSlider("rate", "stamps per frame", 0.05, 20, 2);
-    toolSlider("size", "size  (pixels across)", 10, 300, 70).setDecimalPrecision(0);
+    // its size: one picked from this range - kept, or a new one every dip
+    range("sponge_sizeRange", "size range  (pixels across)", 10, 300, 50, 90);
+    onlyWhen("on sponge");
+    row(24);
+    toggle("sponge_sizeEachDip", "a new size each dip", false, 0);
+    onlyWhen("on sponge");
     toolSlider("ragged", "torn edges", 0, 1, 0.5);
     toolSlider("pores", "pore size", 1, 12, 3);
     toolSlider("open", "how open  (holes even when full)", 0, 1, 0.4);
@@ -463,13 +551,30 @@ public class Panel extends PApplet {
     label("only layer", 0);
     radioAt("scrape_only", new String[] { "1", "2", "3", "4", "5" }, 3, 100, 46);
     onlyWhen("on scrape&scrapeOne");
-    // a layer cut to the OUTLINE tool's line, closed (Scrape tab, cutOutsideOutline) - shown with
-    // the scrape on or off, as it isn't scraping
+    // a layer cut to the OUTLINE tool's line, closed (Scrape tab, cutOutsideOutline), and ERASE A
+    // PALETTE COLOUR (the Palette Gen tab's erasePaletteColour): click one of SETUP 5's colours, and
+    // everything on the layer where the masses in the palette's colours are that colour comes off.
+    // Like the rest of the box, shown only while the scrape is on
     row(24);
     label("cut layer", 0);
     radioAt("cut_layer", new String[] { "1", "2", "3", "4", "5" }, 0, 100, 46);
+    onlyWhen("on scrape");
     row(32);
     button("cutOutside", "ERASE OUTSIDE THE OUTLINE", 0, 200);
+    onlyWhen("on scrape");
+    row(22);
+    label("erase where this colour is  (numbers: % of picture)", 0);
+    onlyWhen("on scrape");
+    row(2 * ERASE_H + 4);
+    eraseStrip = cur;
+    onlyWhen("on scrape");
+    row(24);
+    label("from layer", 0);
+    radioAt("eraseColourLayer", new String[] { "1", "2", "3", "4", "5" }, 0, 100, 46);
+    onlyWhen("on scrape");
+    row(32);
+    button("eraseColour", "ERASE THAT COLOUR'S PLACES", 0, 200);
+    onlyWhen("on scrape");
 
     // ---------------------------------------------------- column 3: MOVEMENT, COLOUR, APPLY
     // ... of the tool chosen in column 2. Every tool has its own set; only the chosen one's shows
@@ -495,6 +600,9 @@ public class Panel extends PApplet {
       onlyWhen("edit " + n);
       radio(n + "_startAt", new String[] { "random", "weighted by map", "grid", "mouse (2D, hold button)" }, 2, 0);
       onlyWhen("edit " + n);
+      // the grid: one pass from the top left, started again by RUN and CARRY ON
+      slider(n + "_gridSize", "grid spacing  (x the usual)", 0.2, 5, 1);
+      onlyWhen("edit " + n + "&grid " + n);
       row(28);
       label("map", 12);
       list(n + "_startMap", mapNames, 1, 50, 120);
@@ -522,8 +630,15 @@ public class Panel extends PApplet {
       row(20);
       label("pick up from", 0);
       onlyWhen("edit " + n);
-      radio(n + "_pickup", new String[] { "photo", "canvas (wet)", "mix", "masses", "random  (accent ranges)" }, 2, 0);
+      radio(n + "_pickup", new String[] { "photo", "canvas (wet)", "mix", "masses", "random  (accent ranges)", "palette  (SETUP 5)" }, 2, 0);
       onlyWhen("edit " + n);
+      // palette: the masses' colour, matched to the palette in this order (the Palette Gen tab)
+      row(28);
+      label("match by", 0);
+      list(n + "_palOrder", matchOrders, 4, 66, 200);
+      onlyWhen("edit " + n + "&palette " + n);
+      slider(n + "_palTolerance", "how close counts as a match", 0, 0.5, 0.1);
+      onlyWhen("edit " + n + "&palette " + n);
       slider(n + "_mix", "mix: share from the canvas", 0, 1, 0.5);
       onlyWhen("edit " + n + "&mix " + n);
       if (i <= 1) {
@@ -731,11 +846,11 @@ public class Panel extends PApplet {
     for (int i = 0; i < sections; i++) {
       if (block[i] == null) continue;
       fill(blockColour[i]);
-      rect(block[i][0] - 8, block[i][1], colW - 12, block[i][2] - block[i][1], 8);
+      rect(block[i][0] - 8, block[i][1], (i == runSection ? 3 * colW : colW) - 12, block[i][2] - block[i][1], 8);
     }
     // each setup box's square, before its title: red, then green once it's done
-    int[] setupBoxes = { sourceBox, massBox, backdropBox, startBox };
-    boolean[] setupDone = { sourceDone, massesDone, backdropDone, startDone };
+    int[] setupBoxes = { sourceBox, massBox, backdropBox, startBox, paletteBox };
+    boolean[] setupDone = { sourceDone, massesDone, backdropDone, startDone, paletteBase.length > 0 };
     for (int k = 0; k < setupBoxes.length; k++) {
       float[] b = block[setupBoxes[k]];
       if (b == null) continue;
@@ -750,6 +865,8 @@ public class Panel extends PApplet {
       rect(block[a.section][0] - 4, a.y - 2, colW - 20, z.y + z.h - a.y, 5);
     }
     drawSwatches();
+    drawPaletteSwatches();
+    drawEraseSwatches();
     drawAccentBar();
     // a frame round the box of the tool that's on
     int ch = toolSection[max(0, java.util.Arrays.asList(TOOLS).indexOf(editing))];
@@ -803,6 +920,8 @@ public class Panel extends PApplet {
     massTitle.setText(massesOpen ? "SETUP 2   MASSES     click here when they look right" : "SETUP 2   MASSES");
     massText.setText(massesOpen ? massStatus : massesDone ? "done  -  " + massStatus.replace("masses: ", "")
       : "click to make the masses");
+    paletteTitle.setText(paletteOpen ? "SETUP 5   PALETTE GEN     click here to close" : "SETUP 5   PALETTE GEN");
+    paletteText.setText(paletteStatus());
 
     cp5.draw();
     // with every tool off, columns 3 - 4 still show the last tool's settings, under a grey cover
@@ -842,10 +961,13 @@ public class Panel extends PApplet {
     }
     if (listOpen) return;
     if (swatchClicked()) return;
+    if (paletteSwatchClicked()) return;
+    if (eraseSwatchClicked()) return;
     if (inBlock(startBox, 0)) startDone = true;
     if (inBlock(backdropBox, 0)) backdropDone = true;
-    for (int b : new int[] { sourceBox, massBox }) {
-      if (inBlock(b, 0)) {
+    for (int b : new int[] { sourceBox, massBox, paletteBox }) {
+      // an open palette box only counts its title - its controls take their own clicks
+      if (inBlock(b, b == paletteBox && paletteOpen ? 34 : 0)) {
         pressedIn = b;
         return;
       }
@@ -877,6 +999,11 @@ public class Panel extends PApplet {
     if (b == massBox) {
       if (!massesOpen) openMasses(true);
       else if (inBlock(b, 34)) openMasses(false);    // only the title closes it
+    } else if (b == paletteBox) {
+      // opening it the first time makes a palette
+      if (!paletteOpen && paletteBase.length == 0) newPalette();
+      paletteOpen = !paletteOpen;
+      layoutWanted = true;
     } else if (!isRunning) {
       ScrollableList l = (ScrollableList) all.get("source");
       l.open();
@@ -1088,6 +1215,215 @@ public class Panel extends PApplet {
     recolourText.setText(base.length == 0 ? "no palette yet  (needs paint)" : chosen + "/" + base.length + " chosen");
   }
 
+  // ---------------------------------------------------- PALETTE GEN
+
+  // a new palette on the scheme chosen (generatePalette, the Palette Gen tab): nothing changed,
+  // nothing chosen. The "whole palette" sliders stay as they are
+  void newPalette() {
+    paletteSchemeMade = constrain((int) value("paletteScheme"), 0, schemeNames.length - 1);
+    int[] g = generatePalette(paletteSchemeMade, paletteRnd);
+    float[][] adj = new float[PALETTE_SIZE][];
+    for (int i = 0; i < PALETTE_SIZE; i++) adj[i] = new float[] { 0, 1, 1 };
+    palettePicked = new boolean[PALETTE_SIZE];
+    paletteAdj = adj;
+    paletteBase = java.util.Arrays.copyOf(g, PALETTE_SIZE);
+    paletteHueMade = g[PALETTE_SIZE];
+    showPaletteChosen();
+  }
+
+  // the palette as it is now: each colour with its own changes, then the whole palette's
+  int[] paletteFinal() {
+    int[] base = paletteBase;
+    float[][] adj = paletteAdj;
+    float[] whole = { value("paletteHue"), value("paletteSat"), value("paletteBri") };
+    int[] out = new int[min(base.length, adj.length)];
+    for (int i = 0; i < out.length; i++) out[i] = recoloured(recoloured(base[i], adj[i]), whole);
+    return out;
+  }
+
+  String paletteStatus() {
+    if (paletteBase.length == 0) return "click to make a palette of " + PALETTE_SIZE + " colours";
+    int chosen = 0;
+    for (boolean b : palettePicked) if (b) chosen++;
+    return schemeNames[paletteSchemeMade] + " on hue " + paletteHueMade + (paletteOpen ? "      " + chosen + "/" + paletteBase.length + " chosen" : "");
+  }
+
+  void paletteEvent(String n, float value) {
+    if (n.equals("paletteGenerate") || n.equals("paletteScheme")) newPalette();
+    else if (n.equals("paletteAll") || n.equals("paletteNone")) {
+      boolean[] p = new boolean[paletteBase.length];
+      java.util.Arrays.fill(p, n.equals("paletteAll"));
+      palettePicked = p;
+      showPaletteChosen();
+    }
+    else if (n.equals("paletteResetPicked") || n.equals("paletteResetAll")) {
+      float[][] adj = copyPaletteAdj();
+      for (int i = 0; i < adj.length; i++) {
+        if (n.equals("paletteResetAll") || palettePicked[i]) adj[i] = new float[] { 0, 1, 1 };
+      }
+      paletteAdj = adj;
+      // RESET ALL puts the whole palette's sliders back too
+      if (n.equals("paletteResetAll")) {
+        all.get("paletteHue").setValue(0);
+        all.get("paletteSat").setValue(1);
+        all.get("paletteBri").setValue(1);
+      }
+      showPaletteChosen();
+    }
+    else if (!paletteSyncing && (n.equals("paletteHueC") || n.equals("paletteSatC") || n.equals("paletteBriC"))) {
+      // a chosen-colour slider moved: the chosen swatches all take its value
+      int q = n.equals("paletteHueC") ? 0 : n.equals("paletteSatC") ? 1 : 2;
+      float[][] adj = copyPaletteAdj();
+      for (int i = 0; i < adj.length && i < palettePicked.length; i++) if (palettePicked[i]) adj[i][q] = value;
+      paletteAdj = adj;
+    }
+  }
+
+  float[][] copyPaletteAdj() {
+    float[][] a = paletteAdj, c = new float[a.length][];
+    for (int i = 0; i < a.length; i++) c[i] = a[i].clone();
+    return c;
+  }
+
+  // the chosen-colour sliders show the first chosen swatch's changes (or none)
+  void showPaletteChosen() {
+    float[] a = { 0, 1, 1 };
+    for (int i = 0; i < palettePicked.length && i < paletteAdj.length; i++) {
+      if (palettePicked[i]) {
+        a = paletteAdj[i];
+        break;
+      }
+    }
+    paletteSyncing = true;
+    all.get("paletteHueC").setValue(a[0]);
+    all.get("paletteSatC").setValue(a[1]);
+    all.get("paletteBriC").setValue(a[2]);
+    paletteSyncing = false;
+  }
+
+  // the palette swatch under the mouse, or -1
+  int paletteSwatchAt(float mx, float my) {
+    if (!paletteOpen || paletteGrid == null || paletteGrid.y < 0) return -1;
+    float[] b = block[paletteGrid.section];
+    if (b == null) return -1;
+    float w = (colW - 28) / (float) PAL_COLS;
+    int col = floor((mx - b[0]) / w), row = floor((my - paletteGrid.y) / PAL_H);
+    if (col < 0 || col >= PAL_COLS || row < 0) return -1;
+    int i = row * PAL_COLS + col;
+    return i < paletteBase.length ? i : -1;
+  }
+
+  boolean paletteSwatchClicked() {
+    int i = paletteSwatchAt(mouseX, mouseY);
+    if (i < 0 || i >= palettePicked.length) return false;
+    boolean[] p = palettePicked.clone();
+    p[i] = !p[i];
+    palettePicked = p;
+    showPaletteChosen();
+    return true;
+  }
+
+  // the palette's swatches: each colour as generated on the left, as it is now on the right, with
+  // its number, and a thick frame if it's chosen
+  void drawPaletteSwatches() {
+    if (!paletteOpen || paletteGrid == null || paletteGrid.y < 0) return;
+    float[] b = block[paletteGrid.section];
+    if (b == null) return;
+    int[] base = paletteBase, now = paletteFinal();
+    float w = (colW - 28) / (float) PAL_COLS;
+    for (int i = 0; i < now.length; i++) {
+      float x = b[0] + (i % PAL_COLS) * w, y = paletteGrid.y + (i / PAL_COLS) * PAL_H;
+      noStroke();
+      fill(base[i]);
+      rect(x, y, (w - 6) / 2, PAL_H - 6);
+      fill(now[i]);
+      rect(x + (w - 6) / 2, y, (w - 6) / 2, PAL_H - 6);
+      if (i < palettePicked.length && palettePicked[i]) {
+        noFill();
+        stroke(20);
+        strokeWeight(3);
+        rect(x - 1, y - 1, w - 4, PAL_H - 4);
+        stroke(255);
+        strokeWeight(1);
+        rect(x + 1.5, y + 1.5, w - 9, PAL_H - 9);
+        noStroke();
+      }
+      fill(brightness(base[i]) > 140 ? 20 : 240);
+      textAlign(LEFT, TOP);
+      text(i + 1, x + 3, y + 2);
+    }
+    textAlign(LEFT, BASELINE);
+  }
+
+  // SCRAPE's strip of the palette's colours: the one under the mouse, or -1
+  int eraseSwatchAt(float mx, float my) {
+    if (eraseStrip == null || eraseStrip.y < 0) return -1;
+    float[] b = block[eraseStrip.section];
+    if (b == null) return -1;
+    float w = (colW - 28) / (float) ERASE_COLS;
+    int col = floor((mx - b[0]) / w), row = floor((my - eraseStrip.y) / ERASE_H);
+    if (col < 0 || col >= ERASE_COLS || row < 0 || row > 1) return -1;
+    int i = row * ERASE_COLS + col;
+    return i < paletteBase.length ? i : -1;
+  }
+
+  boolean eraseSwatchClicked() {
+    int i = eraseSwatchAt(mouseX, mouseY);
+    if (i < 0) return false;
+    erasePick = erasePick == i ? -1 : i;    // clicking the chosen one again un-chooses it
+    return true;
+  }
+
+  void drawEraseSwatches() {
+    if (eraseStrip == null || eraseStrip.y < 0) return;
+    float[] b = block[eraseStrip.section];
+    if (b == null) return;
+    int[] now = paletteFinal();
+    if (now.length == 0) {
+      fill(dark);
+      textAlign(LEFT, TOP);
+      text("no palette yet - make one in SETUP 5", b[0], eraseStrip.y + 4);
+      textAlign(LEFT, BASELINE);
+      return;
+    }
+    // each colour with how much of the picture it covers in the masses (%), or crossed out if no
+    // mass is given it - erasing that one takes nothing off
+    float[] use = paletteUse;
+    float w = (colW - 28) / (float) ERASE_COLS;
+    textSize(10);
+    for (int i = 0; i < now.length; i++) {
+      float x = b[0] + (i % ERASE_COLS) * w, y = eraseStrip.y + (i / ERASE_COLS) * ERASE_H;
+      noStroke();
+      fill(now[i]);
+      rect(x, y, w - 3, ERASE_H - 3);
+      boolean known = i < use.length;
+      int ink = brightness(now[i]) > 140 ? color(20) : color(240);
+      if (known && use[i] > 0) {
+        fill(ink);
+        textAlign(CENTER, CENTER);
+        text(use[i] < 0.01 ? "<1" : str(round(use[i] * 100)), x + (w - 3) / 2, y + (ERASE_H - 3) / 2 - 1);
+      } else if (known) {
+        stroke(ink);
+        strokeWeight(1);
+        line(x + 3, y + 3, x + w - 6, y + ERASE_H - 6);
+        line(x + w - 6, y + 3, x + 3, y + ERASE_H - 6);
+        noStroke();
+      }
+      if (i == erasePick) {
+        noFill();
+        stroke(20);
+        strokeWeight(3);
+        rect(x - 1, y - 1, w - 1, ERASE_H - 1);
+        stroke(255);
+        strokeWeight(1);
+        rect(x + 1.5, y + 1.5, w - 6, ERASE_H - 6);
+        noStroke();
+      }
+    }
+    textSize(12);
+    textAlign(LEFT, BASELINE);
+  }
+
   // opening the masses box shows the masses; closing it puts the view back and marks them done
   void openMasses(boolean open) {
     massesOpen = open;
@@ -1124,9 +1460,11 @@ public class Panel extends PApplet {
     else if (n.equals("saveNow")) command("save");
     else if (n.equals("printView")) command("print");
     else if (n.equals("cutOutside")) command("cutOutside");
+    else if (n.equals("eraseColour")) command("eraseColour");
     else if (n.equals("loadSettings")) command("load");
     else if (n.equals("nudge")) nudgeAll();
     else if (n.startsWith("recolour")) recolourEvent(n, e.getValue());
+    else if (n.startsWith("palette")) paletteEvent(n, e.getValue());
     else if (n.equals("source")) {
       // the last item opens a photo of your own; the list goes back to the picture there is now
       if (e.getValue() >= faces.length) {
@@ -1178,6 +1516,9 @@ public class Panel extends PApplet {
     if (when.startsWith("one ")) return value(when.substring(4) + "_one") > 0.5;
     if (when.equals("recolour")) return value("recolourOpen") > 0.5;
     if (when.equals("notRecolour")) return value("recolourOpen") < 0.5;
+    if (when.equals("paletteOpen")) return paletteOpen;
+    if (when.equals("notPalette")) return !paletteOpen;
+    if (when.equals("paletteMasses")) return value("paletteMasses") > 0.5;
     if (when.equals("notOutline")) return !editing.equals("outline");
     if (when.equals("flowColour")) return value("flow_src") < 2;     // the photo or the masses
     if (when.equals("scrapeDown")) return value("scrape_which") == 0;
@@ -1187,8 +1528,10 @@ public class Panel extends PApplet {
     if (when.equals("pencilHatch")) return value("pencil_hatch") > 0;
     if (when.equals("knifeFlat")) return value("knife_carry") < CHUNK;   // chunk and copy have no streaks
     if (when.startsWith("mix ")) return value(when.substring(4) + "_pickup") == 2;
+    if (when.startsWith("palette ")) return value(when.substring(8) + "_pickup") == PICK_PALETTE;
     if (when.startsWith("weighted ")) return value(when.substring(9) + "_startAt") == 1;
     if (when.startsWith("mouse ")) return value(when.substring(6) + "_startAt") == 3;
+    if (when.startsWith("grid ")) return value(when.substring(5) + "_startAt") == 2;
     if (when.equals("abstraction")) return value("abstractionOn") > 0.5;
     if (when.equals("box")) return value("boxOn") > 0.5;
     if (when.equals("impasto")) return value("impastoOn") > 0.5;
@@ -1290,6 +1633,20 @@ public class Panel extends PApplet {
       layersJ.append(o);
     }
     j.setJSONArray("recolourLayers", layersJ);
+    // PALETTE GEN: the palette as generated and what's been done to each colour
+    int[] pb = paletteBase;
+    float[][] pa = paletteAdj;
+    JSONArray pal = new JSONArray(), ch = new JSONArray();
+    for (int i = 0; i < pb.length && i < pa.length; i++) {
+      pal.append(pb[i]);
+      for (float a : pa[i]) ch.append(a);
+    }
+    JSONObject po = new JSONObject();
+    po.setJSONArray("palette", pal);
+    po.setJSONArray("changes", ch);
+    po.setInt("scheme", paletteSchemeMade);
+    po.setInt("hue", paletteHueMade);
+    j.setJSONObject("paletteGen", po);
     return j;
   }
 
@@ -1327,6 +1684,23 @@ public class Panel extends PApplet {
       for (int L = 0; L < LAYERS; L++) loadRecolour(L, j.getJSONArray("recolourPalette"), j.getJSONArray("recolourChanges"));
       showLayer(constrain((int) value("recolourLayer"), 0, LAYERS - 1));
     }
+    // (after the controls: choosing the scheme above made a new palette, and this replaces it)
+    if (j.hasKey("paletteGen")) {
+      JSONObject po = j.getJSONObject("paletteGen");
+      JSONArray pal = po.getJSONArray("palette"), ch = po.getJSONArray("changes");
+      int[] base = new int[pal.size()];
+      float[][] adj = new float[pal.size()][];
+      for (int i = 0; i < base.length; i++) {
+        base[i] = pal.getInt(i);
+        adj[i] = new float[] { ch.getFloat(i * 3), ch.getFloat(i * 3 + 1), ch.getFloat(i * 3 + 2) };
+      }
+      palettePicked = new boolean[base.length];
+      paletteAdj = adj;
+      paletteBase = base;
+      paletteSchemeMade = po.getInt("scheme", 0);
+      paletteHueMade = po.getInt("hue", 0);
+      showPaletteChosen();
+    }
     if (includeSetup && j.hasKey("face")) {
       int i = java.util.Arrays.asList(faces).indexOf(j.getString("face"));
       if (i >= 0) all.get("source").setValue(i);
@@ -1341,6 +1715,7 @@ public class Panel extends PApplet {
     for (String n : liveNames) {
       ControllerInterface c = all.get(n);
       if (!(c instanceof Slider) || n.equals("nudgeAmount") || n.equals("pace") || n.endsWith("perFrame") || n.endsWith("_rate")) continue;
+      if (n.startsWith("palette")) continue;      // PALETTE GEN isn't part of the painting (yet)
       Slider s = (Slider) c;
       float range = s.getMax() - s.getMin();
       s.setValue(constrain(s.getValue() + random(-0.5, 0.5) * range * amount, s.getMin(), s.getMax()));

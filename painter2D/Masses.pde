@@ -9,12 +9,17 @@
 // used like the other maps. Making them takes a few seconds, so it's done in a thread of its own,
 // and starts again whenever a picture is chosen or one of SETUP's masses sliders changes (once
 // it's been let go); RUN waits until they're made. Only the steps after the slider that changed
-// are done again: changing the number of colours doesn't cut the blobs again. The palette's hue,
+// are done again: joining and smoothing don't cut the blobs again. There are always 24 paints
+// (MASS_PAINTS). The palette's hue,
 // saturation and brightness, and the texture, only change how the paints look, so they're
 // instant and can change during a run.
 //
 // The masses can start the canvas (MASSES "start the canvas with"), be laid over it at any time
 // (LAY ON NOW), and be where the brushes pick up their paint (COLOUR "pick up from: masses").
+
+// The masses always have 24 paints, one for each of SETUP 5's palette colours (the Palette Gen
+// tab), so the masses in the palette's colours use every one of them
+final int MASS_PAINTS = 24;            // (the same as PALETTE_SIZE)
 
 PImage massesImg;              // the masses as they look now, at the photo's size (null until made)
 String massStatus = "masses: not made yet";
@@ -40,7 +45,7 @@ PGraphics massCanvas;          // where the shader paints them
 
 // the settings that need the work done again, in the order the work is done
 float[] massSettings() {
-  return new float[] { v("massBlobs"), v("massRound"), v("massJoin"), v("massSmooth"), v("massPaints") };
+  return new float[] { v("massBlobs"), v("massRound"), v("massJoin"), v("massSmooth"), MASS_PAINTS };
 }
 
 // true until the masses for this picture and these settings are made and showing
@@ -192,6 +197,26 @@ MassResult makePalette(PImage img, int[] label, int paints) {
     for (int c = 0; c < k; c++) if (sum[c][3] > 0) for (int j = 0; j < 3; j++) centre[c][j] = (float) (sum[c][j] / sum[c][3]);
   }
 
+  // every paint used: a paint left with no regions takes the region that fits its own paint
+  // worst (from a paint with more than one) - that region comes out a little off colour, but
+  // there are always `paints` colours
+  for (int c = 0; c < k; c++) {
+    int[] count = new int[k];
+    for (int u = 0; u < used.size(); u++) count[paintOfRegion[used.get(u)]]++;
+    if (count[c] > 0) continue;
+    int worst = -1;
+    float worstD = -1;
+    for (int u = 0; u < used.size(); u++) {
+      int r = used.get(u), p = paintOfRegion[r];
+      if (count[p] < 2) continue;
+      float dd = labDist2(lab[r], centre[p]);
+      if (dd > worstD) { worstD = dd; worst = r; }
+    }
+    if (worst < 0) break;
+    paintOfRegion[worst] = c;
+    centre[c] = lab[worst].clone();
+  }
+
   // each paint's colour: the average of all the pixels it covers
   long[][] prgb = new long[k][4];
   for (int u = 0; u < used.size(); u++) {
@@ -238,7 +263,12 @@ int[] adjustedPalette(int[] rgb) {
 }
 
 void renderMasses(MassResult r) {
-  int[] pal = adjustedPalette(r.rgb);
+  massesImg = massesPicture(r, adjustedPalette(r.rgb));
+}
+
+// the masses with each paint in the colour `pal` gives it, at the photo's size (also the Palette
+// Gen tab's masses in the palette's colours)
+PImage massesPicture(MassResult r, int[] pal) {
   PImage img;
   if (v("massTexture") > 0.5) {
     img = texturedMasses(r, pal);
@@ -250,7 +280,7 @@ void renderMasses(MassResult r) {
   }
   if (img.width != photo.width || img.height != photo.height) img.resize(photo.width, photo.height);
   img.loadPixels();
-  massesImg = img;
+  return img;
 }
 
 // each paint with its own noise texture, through the Paints tab's shader

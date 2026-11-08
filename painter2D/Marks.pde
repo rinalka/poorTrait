@@ -13,7 +13,12 @@
 
 final int ONE = 0, START_END = 1, TWO = 2, CHUNK = 3, COPY = 4;   // the panel's "carry" choices
 final int PICK_RANDOM = 4;   // "pick up from: random" - each mark an accent colour (COLOUR's accent ranges)
-int gridI = 0;               // how far the grid start has got
+HashMap<String, Integer> gridAt = new HashMap<String, Integer>();   // how far each tool's grid start has got
+
+// the grid starts (MOVEMENT's "start at: grid") back at the top left, for another pass
+void restartGrid() {
+  gridAt.clear();
+}
 
 // The tools (the panel's column 2), in the order they paint. Each has its own settings - its
 // shape in its box, and its MOVEMENT, COLOUR and APPLY - named with the tool's name in front:
@@ -89,10 +94,20 @@ float[] startPoint() {
     return new float[] { x, y };
   }
   if (mode == 2) {
-    // a grid, row by row like reading a page, each mark a little off its spot
-    float step = max(3, max(t("size"), 30) * 0.35);
+    // a grid, row by row like reading a page from the top left, each mark a little off its spot.
+    // Its spacing goes with the tool's size, times "grid spacing". One pass, then the tool stops
+    // until RUN or CARRY ON starts it again at the top left (restartGrid)
+    float size = tool.equals("sponge") ? (t("sizeRange_lo") + t("sizeRange_hi")) / 2 : t("size");
+    float step = max(3, max(size, 30) * 0.35 * t("gridSize"));
     int cols = ceil(photo.width / step), rows = ceil(photo.height / step);
-    int i = gridI++ % (cols * rows);
+    Integer at = gridAt.get(tool);
+    int i = at == null ? 0 : at;
+    if (i >= cols * rows) {
+      if (i == cols * rows) println(tool + ": the grid is done - RUN or CARRY ON starts it again");
+      gridAt.put(tool, cols * rows + 1);
+      return null;
+    }
+    gridAt.put(tool, i + 1);
     return new float[] { constrain((i % cols + random(1)) * step, 0, photo.width - 1),
                          constrain((i / cols + random(1)) * step, 0, photo.height - 1) };
   }
@@ -120,6 +135,10 @@ Paint newPaint(float alpha) {
   if (p.textured()) {
     boolean fromCanvas = p.pickup == 1 || (p.pickup == 2 && random(1) < p.mix);
     p.tex = fromCanvas && canvasSnap != null ? canvasSnap : p.pickup == 3 && massesImg != null ? massesImg : photo;
+    if (p.pickup == PICK_PALETTE) {
+      PImage m = paletteMatchedMasses();
+      p.tex = m != null ? m : massesImg != null ? massesImg : photo;
+    }
   }
   return p;
 }
@@ -143,7 +162,8 @@ Paint carefulPaint(float alpha) {
 //   chunk          a strip of the picture where the brush landed, smeared along the mark
 //   copy           the picture right under the mark, as if seen through a hole in the shape of it
 // The paint is picked up from the photo, from what's already on the canvas (wet paint), a mix of
-// the two, or from the masses (the Masses tab) - or "random": a colour from the accent ranges for
+// the two, from the masses (the Masses tab), from the masses matched to SETUP 5's palette (the
+// Palette Gen tab) - or "random": a colour from the accent ranges for
 // each mark, carried as one colour, like an accent.
 class Paint {
   int carry, pickup;
@@ -164,6 +184,7 @@ class Paint {
     if (pickup == 1) return canvasAt(x, y);
     if (pickup == 2) return lerpColor(photoAt(x, y), canvasAt(x, y), mix);
     if (pickup == 3) return massesAt(x, y);
+    if (pickup == PICK_PALETTE) return paletteAt(x, y);
     return photoAt(x, y);
   }
 

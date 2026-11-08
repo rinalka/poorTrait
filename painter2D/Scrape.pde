@@ -17,6 +17,10 @@
 // ERASE OUTSIDE THE OUTLINE (under the box) cuts one layer to the OUTLINE tool's line: each part
 // of the line with OUTLINE's parts as they're set is made a closed shape, and everything on the
 // layer outside all of them comes off. See cutOutsideOutline().
+//
+// ERASE THAT COLOUR'S PLACES (under that) takes one of SETUP 5's palette colours, clicked in the
+// strip, and empties one layer wherever the masses in the palette's colours are that colour. See
+// erasePaletteColour() in the Palette Gen tab.
 
 PGraphics scrapeMask;
 
