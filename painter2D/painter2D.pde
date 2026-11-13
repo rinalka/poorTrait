@@ -4,7 +4,7 @@
 // - while you change things on the control panel (the Gui tab, which opens in its own window) and
 // watch what happens. The point is to experiment: to get a look nobody could predict.
 //
-// On the panel, SETUP is fixed for a whole run: which picture, the masses, and the canvas colour.
+// On the panel, SETUP is fixed for a whole run: which picture and the masses.
 // Press RUN and everything else can be changed while it paints - new marks use the new settings
 // on top of the old ones. STOP ends the run; the painting stays until the next
 // RUN starts a fresh one.
@@ -20,8 +20,9 @@
 //
 // SAVE writes the painting, the backdrop, the canvas, each layer, the paint's height (IMPASTO),
 // SETUP 5's palette (and the masses in its colours, if they're on), and a .json of every setting
-// on the panel, to the saved folder. PRINT writes what this window
-// shows, at the photo's size.
+// on the panel, into a folder of its own in the saved folder: the picture's name and the next
+// free letter (PXL_1234-A, PXL_1234-B, ... after Z, AA, AB ...), each file named the same way.
+// PRINT writes what this window shows, at the photo's size, to the saved folder.
 // LOAD SETTINGS puts a saved .json's settings back on the panel.
 
 // ---- settings ----
@@ -48,8 +49,9 @@ volatile boolean isRunning = false, isPaused = false;
 volatile int markCount = 0;
 volatile float outputFps = 0;
 int runSeed = 0;
-color ground;                // the canvas colour, fixed for a run
+color ground = 0xFFDED6C8;   // the canvas colour for SETUP 4's "plain" (222, 214, 200)
 boolean around = true;       // used by the Field tab: marks go around the form, or across it
+boolean alongOutline = false; // ... or along the outline (MOVEMENT's third choice)
 
 String[] showNames = { "painting", "photo", "normal", "importance", "curvature", "depth", "light", "masses", "masses (palette)" };
 String[] blendNames = { "normal", "multiply", "screen", "lightest", "darkest", "add", "subtract" };
@@ -197,6 +199,7 @@ void handle(String c) {
   else if (c.equals("save")) saveWanted = true;
   else if (c.equals("print")) printWanted = true;
   else if (c.equals("load")) selectInput("Choose a settings file (.json)", "settingsChosen", new java.io.File(sketchPath("saved") + "/x.json"));
+  else if (c.equals("backdropChoose")) chooseBackdrop();
   else if (c.equals("field")) buildField(normalImg, (int) v("smoothing"));
   else if (c.equals("cutOutside")) cutOutsideOutline((int) v("cut_layer"));
   else if (c.equals("eraseColour")) erasePaletteColour((int) v("eraseColourLayer"), panel.erasePick);
@@ -222,7 +225,6 @@ color randomAccent() {
 }
 
 void startRun() {
-  ground = panel.colour("ground");
   runSeed = (int) random(1000000);
   randomSeed(runSeed);
   noiseSeed(runSeed);
@@ -250,7 +252,6 @@ void previewStart() {
     previewing = true;
     previewKey = "";
   }
-  ground = panel.colour("ground");
   String key = faceName + " " + v("startWith") + " " + ground + " " + System.identityHashCode(massesImg);
   if (!key.equals(previewKey)) {
     previewKey = key;
@@ -362,10 +363,12 @@ String paceText(float rate) {
 }
 
 // make tool i the one painting: t() reads its settings, and the direction field goes around or
-// across the form as its MOVEMENT says
+// across the form, or along the outline, as its MOVEMENT says
 void useTool(int i) {
   tool = TOOLS[i];
   around = t("around") == 0;
+  alongOutline = t("around") == 2;
+  if (alongOutline) outlineFieldReady();
 }
 
 
@@ -390,8 +393,17 @@ PImage currentView() {
 void draw2D() {
   background(20);
   image(currentView(), 0, 0, width, height);
-  if (v("fieldOverlay") > 0.5) drawField(0, 0, width / (float) photo.width);
-  if (v("showProtected") > 0.5 && v("abstractionOn") > 0.5) image(protectedPicture(), 0, 0, width, height);
+  if (v("fieldOverlay") > 0.5) {
+    // the field of the tool chosen in column 2 (around, across or along the outline)
+    String was = tool;
+    int e = java.util.Arrays.asList(TOOLS).indexOf(panel.editing);
+    if (e >= 0) useTool(e);
+    drawField(0, 0, width / (float) photo.width);
+    tool = was;
+    around = t("around") == 0;
+    alongOutline = t("around") == 2;
+  }
+  if (panel.outlineOpen) drawOutlinePreview(width / (float) photo.width);
   if (canvas == null) {
     fill(255, 200);
     textSize(14);
@@ -401,33 +413,11 @@ void draw2D() {
 }
 
 
-// the protected spots in see-through red (ABSTRACTION's "show protected parts"), made again only
-// when the abstraction, the anchors or the picture change
-PImage protectedImg;
-String protectedKey = "";
-
-PImage protectedPicture() {
-  String key = faceName + " " + v("abstraction") + " " + v("anchors");
-  if (!key.equals(protectedKey)) {
-    protectedKey = key;
-    protectedImg = createImage(photo.width, photo.height, ARGB);
-    protectedImg.loadPixels();
-    for (int y = 0; y < photo.height; y++) {
-      for (int x = 0; x < photo.width; x++) {
-        protectedImg.pixels[y * photo.width + x] = color(255, 30, 30, 170 * protection(x, y));
-      }
-    }
-    protectedImg.updatePixels();
-  }
-  return protectedImg;
-}
-
-
 // ---------------------------------------------------------------- saving and loading
 
 // the painting (photo size), its parts, and every setting on the panel
 void saveAll() {
-  String base = saveName();
+  String base = saveFolder();
   if (canvas != null) {
     canvas.save(base + ".png");
     startLayer.save(base + "-canvas.png");
@@ -444,12 +434,34 @@ void saveAll() {
   j.setInt("seed", runSeed);
   j.setFloat("textureSeed", textureSeed);
   j.setInt("marks", markCount);
+  j.setString("savedAt", nf(year(), 4) + "-" + nf(month(), 2) + "-" + nf(day(), 2) + " " + nf(hour(), 2) + ":" + nf(minute(), 2) + ":" + nf(second(), 2));
+  if (backdropFilePath.length() > 0) j.setString("backdropFile", backdropFilePath);
   saveJSONObject(j, base + ".json");
-  println("saved " + base + " (.png, the backdrop, the canvas, each layer, the height, the palette, .json)");
+  println("saved to " + new java.io.File(base).getParent() + "  (the painting, the backdrop, the canvas, each layer, the height, the palette, .json)");
+}
+
+// SAVE's folder: the picture's name and the next letter not used yet - made, and returned with
+// the start of its files' names (the folder's own name)
+String saveFolder() {
+  String dir = sketchPath("saved");
+  for (int n = 0; ; n++) {
+    String name = faceName + "-" + saveLetters(n);
+    java.io.File f = new java.io.File(dir, name);
+    if (f.exists()) continue;
+    f.mkdirs();
+    return f.getPath().replace('\\', '/') + "/" + name;
+  }
+}
+
+// 0 = A, 25 = Z, 26 = AA, 27 = AB ... (like spreadsheet columns)
+String saveLetters(int n) {
+  String s = "";
+  for (n++; n > 0; n = (n - 1) / 26) s = (char) ('A' + (n - 1) % 26) + s;
+  return s;
 }
 
 // PRINT: what this window shows now - the painting or a map, with the
-// direction field or protected parts over it if they're on - at the photo's size
+// direction field over it if it's on - at the photo's size
 void printView() {
   PImage v = get();
   v.resize(photo.width, photo.height);
@@ -468,6 +480,8 @@ String saveName() {
 void settingsChosen(java.io.File f) {
   if (f == null) return;
   JSONObject j = loadJSONObject(f.getAbsolutePath());
+  // the backdrop's picture first, so choosing "load ..." below doesn't ask for one
+  if (j.hasKey("backdropFile")) loadBackdropFile(j.getString("backdropFile"));
   panel.applySettings(j, !isRunning);
   if (j.hasKey("textureSeed")) textureSeed = j.getFloat("textureSeed");
   if (j.hasKey("layerOrder")) {

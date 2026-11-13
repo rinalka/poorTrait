@@ -5,7 +5,9 @@ PoorTrait map maker
 Takes a photo and writes a folder of "information maps" that the
 procedural painter can use:
 
-    photo.png          the photo, resized - every map lines up with this exactly
+    photo.png          the photo, at its own size (or --size)
+    every map below is smaller - --map-scale of the photo's size (a quarter, to start with) - and
+    lines up with the photo when stretched to its size
     depth.png          near = white, far = black (8-bit, easy to load anywhere)
     depth16.png        same, but 16-bit for smoother gradients
     normal.png         surface direction as RGB (R = right, G = up, B = towards you)
@@ -23,7 +25,7 @@ procedural painter can use:
 
 Usage (from this folder):
     .venv\\Scripts\\python mapmaker.py ..\\leoTest.jpg
-    .venv\\Scripts\\python mapmaker.py ..\\*.jpg --size 1200 --light 300 40
+    .venv\\Scripts\\python mapmaker.py ..\\*.jpg --size 3000 --map-scale 0.5 --light 300 40
 Or double-click mapmaker.bat to pick photos in a window, or drag photos onto it.
 """
 
@@ -72,11 +74,23 @@ PART_COLOURS = np.array([
 # ----------------------------------------------------------------------------
 
 def load_photo(path, max_size):
-    """Open a photo, rotate it the right way up and shrink it to max_size."""
+    """Open a photo, rotate it the right way up and shrink it to max_size (0: keep its size)."""
     img = Image.open(path)
     img = ImageOps.exif_transpose(img).convert("RGB")   # phone photos store rotation separately
-    img.thumbnail((max_size, max_size), Image.LANCZOS)
+    if max_size > 0:
+        img.thumbnail((max_size, max_size), Image.LANCZOS)
     return img
+
+
+def map_size_photo(photo, scale, smallest):
+    """The photo shrunk to the maps' size: `scale` of it, but no smaller than `smallest` on its
+    longest side (the face finders need some pixels) - and never bigger than the photo."""
+    longest = max(photo.size)
+    target = min(longest, max(round(longest * scale), smallest))
+    if target >= longest:
+        return photo
+    k = target / longest
+    return photo.resize((max(1, round(photo.width * k)), max(1, round(photo.height * k))), Image.LANCZOS)
 
 
 def normalise(a, low_pct=1, high_pct=99):
@@ -218,7 +232,8 @@ def landmark_groups():
 
 def make_landmarks(img):
     """Returns a list of faces; each face is a list of 478 [x, y, z] points.
-    x, y are in pixels of photo.png; z is relative depth (smaller = nearer)."""
+    x, y are in pixels of the maps (landmarks.json says their size); z is relative depth
+    (smaller = nearer)."""
     import mediapipe as mp
     rgb = np.ascontiguousarray(np.asarray(img))
     result = get_landmarker().detect(mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb))
@@ -321,9 +336,10 @@ def process(path, args):
     os.makedirs(out, exist_ok=True)
     print(f"{name}")
 
-    img = load_photo(path, args.size)
-    img.save(os.path.join(out, "photo.png"))
-    print(f"  size {img.width} x {img.height}")
+    photo = load_photo(path, args.size)
+    photo.save(os.path.join(out, "photo.png"))
+    img = map_size_photo(photo, args.map_scale, args.map_min)   # everything below is made from this
+    print(f"  photo {photo.width} x {photo.height}, maps {img.width} x {img.height}")
 
     print("  depth ...")
     depth = make_depth(img)
@@ -399,7 +415,12 @@ def main():
     p.add_argument("photos", nargs="*",
                    help="photo files (wildcards like *.jpg are fine). Leave out to pick them in a window")
     p.add_argument("--out", default=os.path.join(HERE, "maps"), help="output folder")
-    p.add_argument("--size", type=int, default=1536, help="longest side in pixels (default 1536)")
+    p.add_argument("--size", type=int, default=0,
+                   help="the photo's longest side in pixels (default 0 = keep the photo's own size)")
+    p.add_argument("--map-scale", type=float, default=0.25,
+                   help="the maps' size as a share of the photo's (default 0.25 = a quarter)")
+    p.add_argument("--map-min", type=int, default=512,
+                   help="the maps' smallest longest side in pixels (default 512)")
     p.add_argument("--relief", type=float, default=3.0,
                    help="exaggerate (>1) or flatten (<1) the 3D shape for normals (default 3)")
     p.add_argument("--light", type=float, nargs=2, default=[120, 45], metavar=("AZIMUTH", "ELEVATION"),

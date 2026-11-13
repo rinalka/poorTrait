@@ -18,8 +18,8 @@
 // it prints in the alpha - and drawn turned. Pressing is never quite even, so every print differs
 // a little. The same chunk is used dip after dip, unless "a new chunk each dip". Its size is
 // picked from "size range" - once (again when the range changes), or every dip with "a new size
-// each dip" (a new size is a new chunk).
-// Stamps respect ABSTRACTION: a stamp doesn't land where it's protected.
+// each dip" or a map in the "by" row under it, which says where in the range (a new size is a new
+// chunk).
 
 float[] spongeHolds;               // the chunk: how much paint each pixel of its face holds, 0 = outside
 int spongeN = 0;                   // the chunk's picture is spongeN x spongeN
@@ -64,7 +64,6 @@ void spongeStamp(PGraphics g, int k) {
   spongeStamps++;
   float paint = spongePaint;
   spongePaint *= 1 - t("loss") / 100;
-  if (random(1) < protection(spongeX, spongeY)) return;
 
   PImage p = spongePrint(k, paint);
   float alpha = toolAlpha(spongeX, spongeY) * (0.55 + 0.45 * paint);
@@ -79,12 +78,22 @@ void spongeStamp(PGraphics g, int k) {
 }
 
 // its size, at a dip: a new one from the size range every dip if "a new size each dip", otherwise
-// one picked when the range changes and kept
+// one picked when the range changes and kept. With a map in the "by" row under the range, where in
+// the range comes from the map where it's dipped (dark the small end, light the big end, or the
+// other way with "invert") - "amount" of the way from a random size to that - and so it's picked
+// again every dip
 void pickSpongeSize() {
   float lo = t("sizeRange_lo"), hi = max(lo, t("sizeRange_hi"));
+  int by = (int) t("size_by");
   String range = lo + " " + hi;
-  if (t("sizeEachDip") > 0.5 || !range.equals(spongeRangeFor) || spongeSize <= 0) {
-    spongeSize = max(4, random(lo, hi));
+  if (by > 0 || t("sizeEachDip") > 0.5 || !range.equals(spongeRangeFor) || spongeSize <= 0) {
+    float size = random(lo, hi);
+    if (by > 0) {
+      float m = mapAt(by, spongeX, spongeY);
+      if (t("size_inv") > 0.5) m = 1 - m;
+      size = lerp(size, lerp(lo, hi, m), t("size_amt"));
+    }
+    spongeSize = max(4, size);
     spongeRangeFor = range;
   }
 }

@@ -10,7 +10,7 @@
 //
 // The picture can be the photo, the masses, or one of the maps (they're grey, so only their
 // brightness counts). "smoothing" blurs it first: none gives postContemp's nervous, kinked lines,
-// more gives long smooth swirls. Protected parts (ABSTRACTION) lift the line, as with the pencil.
+// more gives long smooth swirls.
 //
 // The line's colour comes from COLOUR: picked where it starts, or ("colour changes along the
 // line") picked up again as it goes and blended in, so the line slowly takes on the colours it
@@ -81,14 +81,13 @@ class FlowLine {
     float half = max(0.3, t("width") / 2 * press * ends);
     float nx = -sin(heading), ny = cos(heading);
     float ax = x + nx * half, ay = y + ny * half, bx = x - nx * half, by = y - ny * half;
-    boolean drawing = protection(x, y) < 0.5;
-    if (drawing && down) {
+    if (down) {
       g.fill(c, alpha);
       g.vertex(pax, pay); g.vertex(pbx, pby); g.vertex(ax, ay);
       g.vertex(pbx, pby); g.vertex(bx, by); g.vertex(ax, ay);
       markCount++;
     }
-    down = drawing;
+    down = true;
     pax = ax; pay = ay; pbx = bx; pby = by;
   }
 }

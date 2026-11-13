@@ -106,8 +106,8 @@ void finish(PGraphics c) {
   impastoShader.set("gloss", on ? v("impastoGloss") : 0);
   impastoShader.set("toLight", cos(from) * cos(up), -sin(from) * cos(up), sin(up));
   impastoShader.set("through", textured ? v("backdropThrough") : 0);
-  // a weave or paper is bumpy where it shows through; newspaper's print is flat
-  impastoShader.set("groundBumps", textured && v("backdropKind") != 3 ? v("backdropThrough") * (on ? 1 : 0) : 0);
+  // a weave or paper is bumpy where it shows through; a loaded picture is flat
+  impastoShader.set("groundBumps", textured && v("backdropKind") != BACKDROP_FILE ? v("backdropThrough") * (on ? 1 : 0) : 0);
   impastoShader.set("flipY", boxFlipY);
   finished.beginDraw();
   finished.shader(impastoShader);

@@ -1,8 +1,11 @@
 // One picture's maps from the map maker (../maps/<photo>/), and reading them - and making them
 // for a photo of your own.
 //
-// Every map is the photo's size, so (x, y) is the same spot in all of them. mapAt() gives any of
-// them as 0 .. 1 - the panel's "by" lists use these to turn amounts up and down from place to place.
+// The photo is painted at its own size; the maps are smaller (the map maker makes them a quarter
+// of the photo's size - older folders have them the photo's size). Everything here asks for a map
+// at a spot on the photo: mapAt() stretches the map to the photo's size, smoothly between its
+// pixels, and gives it as 0 .. 1 - the panel's "by" lists use these to turn amounts up and down
+// from place to place.
 //
 // SETUP 1's last item, "open a picture ...", asks for a photo. If it has maps already (a folder of
 // the same name), it's loaded; if not, the map maker (../mapmaker) is run on it in the background
@@ -13,7 +16,8 @@
 String mapsFolder = "../maps";
 String mapmakerFolder = "../mapmaker";
 String defaultFace = "leoTest";    // the picture loaded at the start (first in SETUP 1's list)
-int mapSize = 1536;                // the map maker makes a new picture this big (its longest side)
+int mapSize = 0;                   // the map maker keeps a new photo this big (its longest side; 0 = its own size)
+float mapScale = 0.25;             // ... and makes its maps this share of that
 volatile String mapStatus = "";    // what the map maker is doing, for the status line
 volatile boolean mapMaking = false;
 String[] mapNames = { "none", "importance", "curvature", "depth", "light", "photo lightness", "saturation" };
@@ -76,7 +80,7 @@ void makeMaps(final java.io.File photoFile, final String name) {
       try {
         java.io.File mm = new java.io.File(sketchPath(mapmakerFolder)).getCanonicalFile();
         ProcessBuilder pb = new ProcessBuilder(new java.io.File(mm, ".venv/Scripts/python.exe").getPath(), "-u",
-          new java.io.File(mm, "mapmaker.py").getPath(), photoFile.getPath(), "--out", mapsPath(), "--size", str(mapSize));
+          new java.io.File(mm, "mapmaker.py").getPath(), photoFile.getPath(), "--out", mapsPath(), "--size", str(mapSize), "--map-scale", str(mapScale));
         pb.directory(mm);
         pb.redirectErrorStream(true);
         Process p = pb.start();
@@ -128,6 +132,7 @@ void loadFace(String face, int smoothing) {
   }
   buildField(normalImg, smoothing);
   canvas = null;
+  println(face + ": maps " + normalImg.width + " x " + normalImg.height);
   previewing = false;
   massesImg = null;          // the Masses tab makes this picture's masses next frame
   int[] s = windowFor(photo.width, photo.height);
@@ -138,7 +143,7 @@ void loadFace(String face, int smoothing) {
 // a map, or a plain grey picture if the map maker didn't make it
 PImage loadMap(String path, int fallback) {
   if (new java.io.File(path).exists()) return loadImage(path);
-  PImage p = createImage(photo.width, photo.height, RGB);
+  PImage p = createImage(normalImg.width, normalImg.height, RGB);
   java.util.Arrays.fill(p.pixels, color(fallback));
   p.updatePixels();
   return p;
@@ -148,16 +153,26 @@ int pixelIndex(float x, float y) {
   return constrain((int) x, 0, photo.width - 1) + constrain((int) y, 0, photo.height - 1) * photo.width;
 }
 
-// map number m (see mapNames) at (x, y), 0 .. 1
+// map number m (see mapNames) at (x, y) on the photo, 0 .. 1
 float mapAt(int m, float x, float y) {
-  int i = pixelIndex(x, y);
   if (m == 6) {                     // saturation, worked out from the photo
-    int c = photo.pixels[i];
+    int c = photo.pixels[pixelIndex(x, y)];
     int r = c >> 16 & 255, g = c >> 8 & 255, b = c & 255;
     int hi = max(r, max(g, b)), lo = min(r, min(g, b));
     return hi == 0 ? 0 : (hi - lo) / (float) hi;
   }
-  return (maps[m].pixels[i] >> 16 & 255) / 255.0;
+  PImage p = maps[m];
+  int w = p.width, h = p.height;
+  if (w == photo.width && h == photo.height) return (p.pixels[pixelIndex(x, y)] >> 16 & 255) / 255.0;
+  // a smaller map: the spot on it, and a blend of the four pixels round it
+  float mx = constrain((x + 0.5) * w / photo.width - 0.5, 0, w - 1);
+  float my = constrain((y + 0.5) * h / photo.height - 0.5, 0, h - 1);
+  int i = (int) mx, j = (int) my;
+  float fx = mx - i, fy = my - j;
+  int i1 = min(i + 1, w - 1), j1 = min(j + 1, h - 1);
+  float a = lerp(p.pixels[i + j * w] >> 16 & 255, p.pixels[i1 + j * w] >> 16 & 255, fx);
+  float b = lerp(p.pixels[i + j1 * w] >> 16 & 255, p.pixels[i1 + j1 * w] >> 16 & 255, fx);
+  return lerp(a, b, fy) / 255.0;
 }
 
 color photoAt(float x, float y) {

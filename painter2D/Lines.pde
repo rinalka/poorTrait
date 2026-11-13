@@ -5,7 +5,7 @@
 // turning changes gradually, so it curves and wanders instead of jittering. Some lines (the
 // "share following the form") are also pulled along the direction field, so they follow contours;
 // the rest ignore the form. A line's width changes along it like pen pressure, thin at both ends,
-// and "broken" lines skip, leaving gaps. Lines respect ABSTRACTION.
+// and "broken" lines skip, leaving gaps.
 //
 // All the lines in a frame are drawn as one shape made of triangles, which is much faster than a
 // shape for each.
@@ -59,7 +59,7 @@ void fineLine(PGraphics g) {
     float half = max(0.3, w / 2 * (0.5 + 0.9 * noise(seed, t * 3)) * min(1, min(t, 1 - t) * 8 + 0.2));
     float nx = -sin(heading), ny = cos(heading);
     float ax = x + nx * half, ay = y + ny * half, bx = x - nx * half, by = y - ny * half;
-    if (st > 0 && !gap && random(1) >= protection(x, y)) {
+    if (st > 0 && !gap) {
       g.vertex(pax, pay); g.vertex(pbx, pby); g.vertex(ax, ay);
       g.vertex(pbx, pby); g.vertex(bx, by); g.vertex(ax, ay);
     }

@@ -19,8 +19,7 @@
 // The line is thin and grainy: how much colour it leaves is broken up by a paper grain that stays
 // put, so lines going over the same place catch the same grain, and it changes with pressure as
 // the hand presses harder and lighter. Each line is one colour, picked where it starts (COLOUR).
-// "Hatching" adds groups of short parallel strokes in the dark parts. Protected parts
-// (ABSTRACTION) lift the pencil.
+// "Hatching" adds groups of short parallel strokes in the dark parts.
 
 ArrayList<Pencil> pencils = new ArrayList<Pencil>();
 float[] pencilMap;                 // the chosen map, blurred so the pencils steer smoothly
@@ -130,9 +129,7 @@ class Pencil {
     float half = max(0.25, t("width") / 2 * (0.6 + 0.4 * press));
     float nx = -sin(heading), ny = cos(heading);
     float ax = x + nx * half, ay = y + ny * half, bx = x - nx * half, by = y - ny * half;
-    // protected parts lift the pencil
-    boolean drawing = protection(x, y) < 0.5;
-    if (drawing && down) {
+    if (down) {
       float a = alpha * (0.35 + 0.65 * min(1, press));
       grainVertex(g, pax, pay, a);
       grainVertex(g, pbx, pby, a);
@@ -142,7 +139,7 @@ class Pencil {
       grainVertex(g, ax, ay, a);
       markCount++;
     }
-    down = drawing;
+    down = true;
     pax = ax; pay = ay; pbx = bx; pby = by;
   }
 
@@ -212,7 +209,7 @@ void hatchGroup(PGraphics g) {
     y = s[1];
     m = pencilAt(x, y);
   }
-  if (m >= level || protection(x, y) >= 0.5) return;
+  if (m >= level) return;
   float dark = constrain((level - m) / max(level, 0.05), 0, 1);
   float ang = radians(t("hatchAngle")) + randomGaussian() * 0.08;
   float ca = cos(ang), sa = sin(ang);

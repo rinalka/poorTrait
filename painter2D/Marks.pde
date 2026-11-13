@@ -3,13 +3,6 @@
 //
 // Most amounts can be "modulated": the slider sets the amount, and a map chosen in the "by" list
 // under it (importance, curvature, depth ...) turns it down from place to place - see modulated().
-//
-// ABSTRACTION (design doc Stage 6) decides where the picture may be broken up. The importance map
-// says how much each spot matters for recognising the face; spots that matter more than the
-// abstraction slider allows are "protected" - see protection(). A mark landing on a protected
-// spot is either left out, so whatever is underneath (the masses, say) stays readable, or made a
-// careful mark: small, following the form, in the photo's exact colours. Anchors are the most
-// important few spots (eyes, nostrils, mouth), protected however high the abstraction goes.
 
 final int ONE = 0, START_END = 1, TWO = 2, CHUNK = 3, COPY = 4;   // the panel's "carry" choices
 final int PICK_RANDOM = 4;   // "pick up from: random" - each mark an accent colour (COLOUR's accent ranges)
@@ -35,12 +28,10 @@ void paintMark(PGraphics g) {
   float[] s = startPoint();
   if (s == null) return;
   float x = s[0], y = s[1];
-  boolean careful = random(1) < protection(x, y);
-  if (careful && v("protectWith") == 0) return;               // protected spots get no marks
-  float len = max(3, modulated("size", x, y) * random(0.5, 1) * (careful ? v("carefulSize") : 1));
+  float len = max(3, modulated("size", x, y) * random(0.5, 1));
   float wid = max(1, len * t("width") * random(0.7, 1.3));
-  float follow = careful ? max(0.9, modulated("follow", x, y)) : modulated("follow", x, y);
-  Paint p = careful ? carefulPaint(toolAlpha(x, y)) : newPaint(toolAlpha(x, y));
+  float follow = modulated("follow", x, y);
+  Paint p = newPaint(toolAlpha(x, y));
   if (tool.equals("brush")) paintStroke(g, x, y, len, wid, follow, p);
   else paintKnife(g, x, y, len, wid, follow, p);
   markCount++;
@@ -56,19 +47,6 @@ float modulated(String name, float x, float y) {
   float m = mapAt(by, x, y);
   if (t(name + "_inv") > 0.5) m = 1 - m;
   return base * lerp(1, m, t(name + "_amt"));
-}
-
-// how protected (x, y) is from being broken up, 0 .. 1: spots more important than the abstraction
-// slider allows, and the anchors whatever it says. At abstraction 0 everything that matters at all
-// is protected; at 1 only the anchors are
-float protection(float x, float y) {
-  if (v("abstractionOn") < 0.5) return 0;      // ABSTRACTION switched off: nothing is protected
-  float imp = mapAt(1, x, y);                   // the importance map
-  float t = v("abstraction") * 1.2;
-  float p = smoothstep(t - 0.15, t + 0.15, imp);
-  float a = v("anchors");
-  if (a > 0) p = max(p, smoothstep(0.95 - a * 0.6, 1.05 - a * 0.6, imp));
-  return p;
 }
 
 float smoothstep(float e0, float e1, float x) {
@@ -118,6 +96,17 @@ float[] startPoint() {
     return new float[] { constrain(mouseX / sc + randomGaussian() * t("spread"), 0, photo.width - 1),
                          constrain(mouseY / sc + randomGaussian() * t("spread"), 0, photo.height - 1) };
   }
+  if (mode == 4) {
+    // on the outline (SETUP 6): exactly on its line, anywhere along it - every bit of the line as
+    // likely as any other. Its points are every 2 pixels, so a random one is a random spot on it
+    String was = tool;
+    tool = "outline";
+    outlinePlanned();
+    tool = was;
+    if (outlineX == null || outlineX.length == 0) return null;   // no parts chosen: no marks
+    int i = (int) random(outlineX.length);
+    return new float[] { constrain(outlineX[i], 0, photo.width - 1), constrain(outlineY[i], 0, photo.height - 1) };
+  }
   return new float[] { random(photo.width), random(photo.height) };
 }
 
@@ -143,18 +132,6 @@ Paint newPaint(float alpha) {
   return p;
 }
 
-// a careful mark's paint: the photo's own colours, no jitter, no accent. Chunk would smear, so
-// it copies instead
-Paint carefulPaint(float alpha) {
-  Paint p = new Paint();
-  p.alpha = alpha;
-  p.carry = (int) t("carry") == CHUNK ? COPY : (int) t("carry");
-  p.pickup = 0;
-  p.exact = true;
-  p.tex = photo;
-  return p;
-}
-
 // What a brush carries, and how it puts it down.
 //   one colour     picked up once
 //   start to end   the colour where the mark starts, sliding into the colour where it ends
@@ -169,7 +146,6 @@ class Paint {
   int carry, pickup;
   float mix, alpha;
   boolean accent;
-  boolean exact;             // no jitter (careful marks)
   color accentColour;
   PImage tex;                // chunk and copy: the picture the paint comes from
   color c0, c1;              // the colours the brush loaded (the brush sets these)
@@ -193,7 +169,7 @@ class Paint {
   }
 
   color vary(color c) {
-    return exact ? c : jitter(c);
+    return jitter(c);
   }
 
   // one plain colour (the knife's streaks and ridge)

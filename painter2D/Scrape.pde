@@ -12,7 +12,7 @@
 //
 // The frame's scrapes are drawn first into a mask (solid where paint comes off), and the mask is
 // then taken off each layer above "down to" (Layers tab, eraseWith). Scrapes are placed by "start
-// at" like the other marks, and respect ABSTRACTION.
+// at" like the other marks.
 //
 // ERASE OUTSIDE THE OUTLINE (under the box) cuts one layer to the OUTLINE tool's line: each part
 // of the line with OUTLINE's parts as they're set is made a closed shape, and everything on the
@@ -42,7 +42,7 @@ void paintScrapes() {
   int made = 0;
   for (int i = 0; i < n; i++) {
     float[] s = startPoint();
-    if (s == null || random(1) < protection(s[0], s[1])) continue;
+    if (s == null) continue;
     if (t("kind") == 0) knifeScrape(scrapeMask, s[0], s[1]);
     else scratch(scrapeMask, s[0], s[1]);
     made++;
@@ -130,7 +130,7 @@ void cutOutsideOutline(int L) {
   outlinePlanned();
   tool = was;
   if (outlineShapes.isEmpty()) {
-    println("the outline has no parts - choose some in the OUTLINE box");
+    println("the outline has no parts - choose some in SETUP 6");
     return;
   }
   int w = photo.width, h = photo.height;

@@ -1,6 +1,7 @@
-// Outline: the face drawn in line, part by part - the panel's OUTLINE box.
+// Outline: the face drawn in line, part by part - the panel's OUTLINE tool, drawing the line
+// SETUP 6 chooses (which MOVEMENT's "along the outline" follows too: the Field tab).
 //
-// The line is planned once for the picture, from what the map maker found:
+// The line is planned once for the picture, from what the map maker found (SETUP 6 ticks which):
 //   silhouette      the edge of the whole figure - hair, ears, neck and shoulders (parts.png,
 //                   wherever it isn't background), leaving out where it runs off the picture
 //   hairline        where the hair meets the face (the edge of the hair in parts.png, only where
@@ -8,7 +9,7 @@
 //   neck & clothes  where the clothes meet the neck and skin
 //   face, brows, eyes (with the irises), nose, mouth
 //                   the face landmarks' outlines (landmarks.json)
-// Each part is smoothed ("smoothness"), and they're drawn in order: from the end of one part the
+// Each part is smoothed (SETUP 6's "smoothness"), and they're drawn in order: from the end of one part the
 // pen lifts and goes down again on the nearest part not drawn yet. With "one unbroken line" it
 // doesn't lift: it sweeps round to the next part in a curve, the way a one-line drawing travels
 // from feature to feature.
@@ -17,7 +18,7 @@
 // "passes" goes round the whole line again, a little off, like going over a drawing; "start
 // again when done" keeps it going for ever. A change to the parts or smoothness plans the line
 // again and starts over. The colour comes from COLOUR, picked once for each pass, or is COLOUR's
-// "one colour". ABSTRACTION doesn't lift this pen - the outline is the face.
+// "one colour".
 
 float[] outlineX, outlineY;        // every part's line, one after another, a point every 2 pixels
 int[] outlineFirst, outlineLast;   // for each point, the first and last points of its part
@@ -140,22 +141,28 @@ void planOutline() {
 
   // the parts picture: the silhouette, the hairline, the neck of the clothes
   if (new java.io.File(dir + "parts.png").exists() && (t("sil") > 0.5 || t("hair") > 0.5 || t("clothes") > 0.5)) {
+    // traced at the parts picture's own size (often smaller than the photo), then stretched to
+    // the photo's
     PImage pi = loadImage(dir + "parts.png");
-    if (pi.width != w || pi.height != h) pi.resize(w, h);
     pi.loadPixels();
-    int[] part = new int[w * h];
-    for (int i = 0; i < w * h; i++) part[i] = pi.pixels[i] >> 16 & 255;
-    boolean[] figure = new boolean[w * h], hair = new boolean[w * h], skin = new boolean[w * h], cloth = new boolean[w * h];
-    for (int i = 0; i < w * h; i++) {
-      int p = part[i];
+    int pw = pi.width, ph = pi.height;
+    boolean[] figure = new boolean[pw * ph], hair = new boolean[pw * ph], skin = new boolean[pw * ph], cloth = new boolean[pw * ph];
+    for (int i = 0; i < pw * ph; i++) {
+      int p = pi.pixels[i] >> 16 & 255;
       figure[i] = p != 0;
       hair[i] = p == 13 || p == 14;
       skin[i] = p == 1 || p == 6 || p == 7 || p == 8 || p == 9 || p == 17;
       cloth[i] = p == 18 || p == 16;
     }
-    if (t("sil") > 0.5) parts.addAll(edgeOf(figure, null, w, h));
-    if (t("hair") > 0.5) parts.addAll(edgeOf(hair, skin, w, h));
-    if (t("clothes") > 0.5) parts.addAll(edgeOf(cloth, skin, w, h));
+    ArrayList<OutlinePart> edges = new ArrayList<OutlinePart>();
+    if (t("sil") > 0.5) edges.addAll(edgeOf(figure, null, pw, ph));
+    if (t("hair") > 0.5) edges.addAll(edgeOf(hair, skin, pw, ph));
+    if (t("clothes") > 0.5) edges.addAll(edgeOf(cloth, skin, pw, ph));
+    float sx = w / (float) pw, sy = h / (float) ph;
+    for (OutlinePart e : edges) {
+      if (sx != 1 || sy != 1) for (int i = 0; i < e.size(); i++) { e.x.mult(i, sx); e.y.mult(i, sy); }
+    }
+    parts.addAll(edges);
   }
 
   // the landmarks' outlines
@@ -552,4 +559,23 @@ void resampleInto(FloatList x, FloatList y, float step) {
   x.clear(); y.clear();
   x.append(rx.array());
   y.append(ry.array());
+}
+
+// while SETUP 6 is open: the outline's parts in red over the picture, so you can see what it
+// traces (s: the window's pixels for each of the photo's)
+void drawOutlinePreview(float s) {
+  String was = tool;
+  tool = "outline";
+  outlinePlanned();
+  tool = was;
+  noFill();
+  stroke(230, 30, 30, 220);
+  strokeWeight(2 * ui);
+  for (OutlinePart p : outlineShapes) {
+    beginShape();
+    for (int i = 0; i < p.size(); i++) vertex(p.x.get(i) * s, p.y.get(i) * s);
+    if (p.closed) endShape(CLOSE);
+    else endShape();
+  }
+  noStroke();
 }

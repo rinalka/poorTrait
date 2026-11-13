@@ -10,7 +10,6 @@
 // Drops aren't circles: each has a wobbly outline, slightly different every time. Some drops
 // ("drips") are wet enough to run: paint hangs off the bottom of the drop and runs straight down,
 // thinning a little, and gathers in a blob at the end.
-// Splatters respect ABSTRACTION: no drop lands where it's protected.
 //
 // A cluster can be hundreds of drops, so the whole cluster is drawn as one shape made of
 // triangles - drawing each drop as a shape of its own is several times slower.
@@ -34,7 +33,7 @@ void splatter(PGraphics g) {
   g.beginShape(TRIANGLES);
 
   // the big splat in the middle (not always - some clusters are only drops)
-  if (random(1) < 0.7 && random(1) >= protection(cx, cy)) {
+  if (random(1) < 0.7) {
     drop(g, cx, cy, size * random(0.5, 1), dropColour(c), alpha);
   }
 
@@ -44,7 +43,6 @@ void splatter(PGraphics g) {
     float gx = randomGaussian(), gy = randomGaussian();
     float x = cx + gx * spread, y = cy + gy * spread;
     if (x < 0 || y < 0 || x >= photo.width || y >= photo.height) continue;
-    if (random(1) < protection(x, y)) continue;
     float far = constrain(sqrt(gx * gx + gy * gy) / 3, 0, 1);
     float r = max(0.7, size * 0.6 * pow(random(1), tail) * (1 - 0.6 * far));
     drop(g, x, y, r, dropColour(c), alpha * random(0.6, 1));
@@ -92,7 +90,6 @@ void drop(PGraphics g, float x, float y, float r, color c, float a) {
     int sats = (int) random(0, r / 3);
     for (int i = 0; i < sats; i++) {
       float ang = random(TWO_PI), dist = r * random(1.1, 1.9), sr = r * random(0.05, 0.18);
-      if (random(1) < protection(x + cos(ang) * dist, y + sin(ang) * dist)) continue;
       disc(g, x + cos(ang) * dist, y + sin(ang) * dist, sr, 6);
     }
   }
@@ -164,7 +161,7 @@ void trail(PGraphics g, float x, float y, float ang, float len, float w, color c
     }
     pax = ax; pay = ay; pbx = bx; pby = by;
   }
-  if (random(1) >= protection(x, y)) drop(g, x, y, w * random(0.4, 1), c, a);
+  drop(g, x, y, w * random(0.4, 1), c, a);
 }
 
 // a drop's colour: the cluster's, varied a little in lightness and hue

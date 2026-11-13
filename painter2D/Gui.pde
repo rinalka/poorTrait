@@ -2,11 +2,15 @@
 //
 // Four columns:
 //   SETUP 1 - 4                   the source picture, the masses, the backdrop and what the
-//                                 canvas starts with (and its colour), each a box whose square
+//                                 canvas starts with, each a box whose square
 //                                 turns from red to green once it's done - 1 and 2 are locked
 //                                 while a run is going
 //   SETUP 5  PALETTE GEN          a palette of 24 colours on a colour scheme - opened, it takes
 //                                 the place of SETUP 1 - 4 and RECOLOUR
+//   SETUP 6  OUTLINE              the face in one line: which parts it traces, and how smooth -
+//                                 for the OUTLINE tool and MOVEMENT's "along the outline".
+//                                 Opened, it takes the place of the others, and the painting
+//                                 window shows the line
 //   RECOLOUR                     under them: changing the painting's colours a few at a time -
 //                                 opened, it takes the place of the SETUP boxes
 //   the tools                     what does the drawing: brush, palette knife, splatter, lines,
@@ -14,9 +18,9 @@
 //                                 shape settings
 //   MOVEMENT, COLOUR, APPLY       how the chosen tool moves, where its colour comes from, and
 //                                 how solid it is
-//   ABSTRACTION, LAYERS,          where the face may be broken up, the five layers, the
-//   SHADOW BOX, IMPASTO           layers floating apart, lit from one side, and thick paint
-//                                 catching the light
+//   LAYER 1 - 5, CANVAS,          a box for each layer, the canvas and the backdrop's colours,
+//   BACKDROP, SHADOW BOX,         the layers floating apart, lit from one side, and thick paint
+//   IMPASTO                       catching the light
 // and along the bottom, VIEW (the MAPS and LAYERS lists) and DIRECTION FIELD under column 1, and RUN, one
 // strip under columns 2 - 4, at the very bottom.
 //
@@ -66,13 +70,16 @@ public class Panel extends PApplet {
   int[] layerItem = new int[LAYERS];              // each layer's tick box in layerRow's items
   String shownOrder = "";
   Toggle canvasShown, backdropShown;            // VIEW's LAYERS: the canvas, and the backdrop (always on)
-  Row[][] layerBands = new Row[LAYERS + 1][];   // LAYERS' first and last rows for each layer, then the canvas's
+  int[] layerSection = new int[LAYERS + 2];     // each layer's box, then the canvas's, then the backdrop's
+  // their colours: pastels, all with plenty of red
+  int[] LAYER_COLOURS = { 0xFFF5C4C4, 0xFFF6D5B4, 0xFFEEC3DE, 0xFFF2E1AE, 0xFFDDC6EF, 0xFFE8CFC2, 0xFFE9D6CB };
   int runGreen = 0xFF2E9E48, runGreenHover = 0xFF45B860, runRed = 0xFFCC3B2E, runRedHover = 0xFFE26A5E;
   int orange = 0xFFE08A1E, orangeHover = 0xFFF0A040;
   String[] startNames = { "plain", "masses", "photo" };
   // the setup boxes: their colour blocks, the line under each title, and whether each is done
   int sourceBox, massBox, backdropBox, startBox;
   Textlabel boxTitle, massTitle, sourceText, massText;
+  Textlabel backdropText;             // SETUP 3: the loaded picture's name and size
   volatile boolean sourceDone, massesDone, backdropDone, startDone;
   volatile boolean massesOpen = false;
   float showBefore;                   // put back when the masses box closes
@@ -106,6 +113,10 @@ public class Panel extends PApplet {
   // reads them from its own thread
   int paletteBox;
   volatile boolean paletteOpen = false;
+  // SETUP 6, OUTLINE: opened in place of the other boxes; done once it's been looked at
+  int outlineBox;
+  volatile boolean outlineOpen = false, outlineDone = false;
+  Textlabel outlineTitle, outlineText;
   volatile int[] paletteBase = new int[0];
   volatile float[][] paletteAdj = new float[0][];
   boolean[] palettePicked = new boolean[0];
@@ -204,11 +215,20 @@ public class Panel extends PApplet {
     button("massSeed", "NEW TEXTURE", 170, 110);
     onlyWhen("later");
     // the backdrop, under the canvas (the Backdrop tab) - always open, done once it's clicked,
-    // and it can change any time
+    // and it can change any time. "load ..." asks for a picture (CHOOSE FILE for another); one
+    // that isn't the photo's size is scaled to it or tiled
     backdropBox = setupBox("SETUP 3   BACKDROP");
     boxText("").setText("what the canvas sits on");
     row(28);
     list("backdropKind", backdropNames, 0, 0, 150);
+    button("backdropChoose", "CHOOSE FILE", 170, 110).setHeight(18);
+    cur.itemWhen.set(cur.itemWhen.size() - 1, "backdropFile");
+    row(22);
+    backdropText = cp5.addTextlabel("backdropText").setText("").setColorValue(dark);
+    put(backdropText, -4, 0);
+    onlyWhen("backdropFile");
+    radio("backdropFit", new String[] { "scale to fit", "tile  (from the middle)" }, 2, 0);
+    onlyWhen("backdropFile&backdropMismatch");
     slider("backdropAmount", "strength", 0, 1, 0.6);
     onlyWhen("backdropKind");
     slider("backdropThrough", "shows through the paint", 0, 1, 0.25);
@@ -219,9 +239,6 @@ public class Panel extends PApplet {
     startBox = setupBox("SETUP 4   START");
     boxText("").setText("start the canvas with  (at RUN and CLEAR)");
     radio("startWith", startNames, 3, 1);
-    live = false;
-    colourPicker("ground", "canvas colour  (fixed for a run)", color(222, 214, 200));
-    live = true;
     row(2);
     // SETUP 1 - 4 are hidden while PALETTE GEN is open, so it takes their place
     for (Row r : columns.get(columns.size() - 1)) r.when = r.when.equals("") ? "notPalette" : r.when + "&notPalette";
@@ -272,6 +289,31 @@ public class Panel extends PApplet {
     slider("paletteKeepLight", "keep the masses' lightness", 0, 1, 0.5);
     onlyWhen("paletteOpen&paletteMasses");
     row(2);
+
+    // SETUP 6, OUTLINE (the Outline tab plans it): the face in one line - which parts of the parts
+    // map and the face landmarks it traces, and how smooth. The OUTLINE tool draws it, and
+    // MOVEMENT's "along the outline" follows it. Clicking the box opens it in place of the others,
+    // with the line drawn over the picture; clicking its title again closes it
+    int outlineFrom = columns.get(columns.size() - 1).size();
+    outlineBox = setupBox("SETUP 6   OUTLINE");
+    outlineTitle = boxTitle;
+    outlineText = boxText("");
+    row(24);
+    toggle("outline_sil", "silhouette", true, 0);
+    toggle("outline_hair", "hairline", true, 100);
+    toggle("outline_clothes", "neck & clothes", true, 190);
+    onlyWhen("outlineOpen");
+    row(24);
+    toggle("outline_face", "face", true, 0);
+    toggle("outline_brows", "brows", true, 60);
+    toggle("outline_eyes", "eyes", true, 128);
+    toggle("outline_nose", "nose", true, 190);
+    toggle("outline_mouth", "mouth", true, 252);
+    onlyWhen("outlineOpen");
+    slider("outline_smooth", "smoothness", 0, 1, 0.5);
+    onlyWhen("outlineOpen");
+    row(2);
+    int outlineTo = columns.get(columns.size() - 1).size();
     // everything above is hidden while RECOLOUR is open, so it takes their place
     for (Row r : columns.get(columns.size() - 1)) r.when = r.when.equals("") ? "notRecolour" : r.when + "&notRecolour";
 
@@ -313,6 +355,13 @@ public class Panel extends PApplet {
     for (int i = recolourFrom; i < col1.size(); i++) {
       Row r = col1.get(i);
       r.when = r.when.equals("") ? "notPalette" : r.when + "&notPalette";
+    }
+    // an open OUTLINE box takes the place of everything else in the column; an open PALETTE GEN
+    // hides it too
+    for (int i = 0; i < col1.size(); i++) {
+      Row r = col1.get(i);
+      String w = i >= outlineFrom && i < outlineTo ? "notPalette" : "notOutlineBox";
+      r.when = r.when.equals("") ? w : r.when + "&" + w;
     }
 
     // ---------------------------------------------------- along the bottom: VIEW, CAMERA and RUN
@@ -389,7 +438,7 @@ public class Panel extends PApplet {
     // settings
     column();
     toolBox(0, false);
-    toolSlider("perFrame", "marks per frame", 0, 400, 20).setDecimalPrecision(0);
+    toolSlider("perFrame", "marks per frame", 1, 400, 20).setDecimalPrecision(0);
     toolSlider("size", "size (pixels, longest)", 4, 400, 110).setDecimalPrecision(0);
     toolModRow("size", 1, 0.8, true);
     toolSlider("width", "width (share of length)", 0.05, 1, 0.35);
@@ -398,7 +447,7 @@ public class Panel extends PApplet {
     toolSlider("curving", "bend along the form", 0, 1, 0.5);
 
     toolBox(1, true);
-    toolSlider("perFrame", "marks per frame", 0, 400, 20).setDecimalPrecision(0);
+    toolSlider("perFrame", "marks per frame", 1, 400, 20).setDecimalPrecision(0);
     toolSlider("size", "size (pixels, longest)", 4, 400, 110).setDecimalPrecision(0);
     toolModRow("size", 1, 0.8, true);
     toolSlider("width", "width (share of length)", 0.05, 1, 0.35);
@@ -484,20 +533,11 @@ public class Panel extends PApplet {
     onlyWhen("on flow");
 
     // outline (the Outline tab): the face in one line - which parts it takes in, and the pen
+    // (which parts it traces, and how smooth, are in SETUP 6)
     toolBox(7, false);
-    row(24);
-    toggle("outline_sil", "silhouette", true, 0);
-    toggle("outline_hair", "hairline", true, 100);
-    toggle("outline_clothes", "neck & clothes", true, 190);
+    row(20);
+    label("the line itself: SETUP 6  OUTLINE", 0);
     onlyWhen("on outline");
-    row(24);
-    toggle("outline_face", "face", true, 0);
-    toggle("outline_brows", "brows", true, 60);
-    toggle("outline_eyes", "eyes", true, 128);
-    toggle("outline_nose", "nose", true, 190);
-    toggle("outline_mouth", "mouth", true, 252);
-    onlyWhen("on outline");
-    toolSlider("smooth", "smoothness", 0, 1, 0.5);
     toolSlider("speed", "speed  (pixels a frame)", 2, 200, 20).setDecimalPrecision(0);
     toolSlider("passes", "passes", 1, 6, 1).setDecimalPrecision(0);
     toolSlider("wobble", "wobble", 0, 1, 0.3);
@@ -514,6 +554,8 @@ public class Panel extends PApplet {
     // its size: one picked from this range - kept, or a new one every dip
     range("sponge_sizeRange", "size range  (pixels across)", 10, 300, 50, 90);
     onlyWhen("on sponge");
+    // or where in the range by a map at the dip: dark the small end, light the big end
+    toolModRow("size", 0, 1, false);
     row(24);
     toggle("sponge_sizeEachDip", "a new size each dip", false, 0);
     onlyWhen("on sponge");
@@ -592,13 +634,13 @@ public class Panel extends PApplet {
           modRow(n + "_follow", 0, 0.5, false);
           onlyWhen("edit " + n);
         }
-        radio(n + "_around", new String[] { "around the form", "across it" }, 2, 0);
+        radio(n + "_around", new String[] { "around the form", "across it", "along the outline" }, 2, 0);
         onlyWhen("edit " + n);
       }
       row(20);
       label("start at", 0);
       onlyWhen("edit " + n);
-      radio(n + "_startAt", new String[] { "random", "weighted by map", "grid", "mouse (2D, hold button)" }, 2, 0);
+      radio(n + "_startAt", new String[] { "random", "weighted by map", "grid", "mouse (2D, hold button)", "on the outline  (SETUP 6)" }, 2, 0);
       onlyWhen("edit " + n);
       // the grid: one pass from the top left, started again by RUN and CARRY ON
       slider(n + "_gridSize", "grid spacing  (x the usual)", 0.2, 5, 1);
@@ -702,52 +744,46 @@ public class Panel extends PApplet {
       onlyWhen("edit " + n);
     }
 
-    // ---------------------------------------------------- column 4: ABSTRACTION, LAYERS, SHADOW BOX, IMPASTO
+    // ---------------------------------------------------- column 4: LAYER 1 - 5, CANVAS, BACKDROP, SHADOW BOX, IMPASTO
     column();
-    header("ABSTRACTION");
-    row(26);
-    toggle("abstractionOn", "on  (off: nothing is protected)", false, 0);      // always starts off
-    slider("abstraction", "abstraction", 0, 1, 0.6);
-    onlyWhen("abstraction");
-    slider("anchors", "anchors (always kept)", 0, 1, 0.3);
-    onlyWhen("abstraction");
-    row(20);
-    label("protected parts get", 0);
-    onlyWhen("abstraction");
-    radio("protectWith", new String[] { "no marks", "careful marks" }, 2, 1);
-    onlyWhen("abstraction");
-    slider("carefulSize", "careful mark size", 0.1, 1, 0.35);
-    onlyWhen("careful");
-    row(26);
-    toggle("showProtected", "show protected parts (red)", false, 0);
-    onlyWhen("abstraction");
-    row(6);
 
-    // the five layers (the Layers tab): how it's combined with the layers under it, a button to
-    // empty it, how see-through it is, and how much IMPASTO's light catches its paint - and the
-    // canvas, which can only be made see-through (showing the backdrop). Layers 1, 3 and 5 have a
-    // darker band behind them, drawn in draw(). (Whether each shows is in VIEW's
-    // LAYERS list; which layer each tool paints on is in its APPLY)
-    header("LAYERS");
+    // a box for each of the five layers (the Layers tab), each its own pastel (LAYER_COLOURS):
+    // CLEAR empties it; how see-through it is and how it's combined with the layers under it; its
+    // SHADOW BOX gap, shadow, softness and lit edges; and how much IMPASTO's light catches its
+    // paint. (Whether each shows is in VIEW's LAYERS list; which layer each tool paints on is in
+    // its APPLY)
+    // (the boxes are kept tight so the column ends above RUN's strip)
     for (int i = 0; i < LAYERS; i++) {
-      row(28);
-      Row first = cur;
-      label("layer " + (i + 1), 0);
-      list("layerBlend" + i, layerBlendNames, 0, 60, 110);
+      layerSection[i] = layerHeader("LAYER " + (i + 1));
       button("clearLayer" + i, "CLEAR", 240, 64).setHeight(18);
-      row(26);
-      sliderAt("layerSeeThrough" + i, "transparency", 0, 1, 0, 0, 0, 100);
-      sliderAt("layerImpasto" + i, "impasto", 0, 1, 1, 200, 0, 70);
-      layerBands[i] = new Row[] { first, cur };
+      cur.dy.set(cur.dy.size() - 1, 4);
+      row(24);
+      sliderAt("layerSeeThrough" + i, "transparency", 0, 1, 0, 0, 1, 100);
+      list("layerBlend" + i, layerBlendNames, 0, 200, 110);
+      row(34);
+      boxSlider("layerGap" + i, "gap", 0, 60, 12, 0).setDecimalPrecision(0);
+      boxSlider("boxShadow" + i, "shadow", 0, 1, 0.6, 80);
+      boxSlider("boxSoftness" + i, "softness", 0, 1, 0.4, 160);
+      boxSlider("boxRim" + i, "lit edges", 0, 1, 0.4, 240);
+      slider("layerImpasto" + i, "impasto", 0, 1, 1);
+      row(2);
     }
-    row(30);
-    label("canvas", 0);
-    sliderAt("canvasSeeThrough", "transparency", 0, 1, 0, 60, 2, 100);
-    layerBands[LAYERS] = new Row[] { cur, cur };
-    row(6);
+    // the canvas, which can only be made see-through (showing the backdrop)
+    layerSection[LAYERS] = layerHeader("CANVAS");
+    row(24);
+    sliderAt("canvasSeeThrough", "transparency", 0, 1, 0, 0, 1, 100);
+    row(2);
+    // the backdrop's colours (SETUP 3 chooses what it is): a hue shift, and its saturation and
+    // brightness multiplied
+    layerSection[LAYERS + 1] = layerHeader("BACKDROP");
+    row(34);
+    boxSlider("backdropHue", "hue  (degrees)", -180, 180, 0, 0).setDecimalPrecision(0);
+    boxSlider("backdropSat", "saturation", 0, 2, 1, 100);
+    boxSlider("backdropBri", "brightness", 0, 2, 1, 200);
+    row(2);
 
     // the layers floating apart, lit from one side (the Layers tab's composite). The light is the
-    // same for all; each layer has its own gap, shadow and lit edges - a row each, under headings
+    // same for all; each layer's gap, shadow and lit edges are in its own box above
     header("SHADOW BOX");
     row(26);
     toggle("boxOn", "on  (the layers float apart)", false, 0);
@@ -755,21 +791,6 @@ public class Panel extends PApplet {
     onlyWhen("box");
     slider("lightHeight", "light height", 10, 80, 45).setDecimalPrecision(0);
     onlyWhen("box");
-    row(20);
-    label("gap", 54);
-    label("shadow", 120);
-    label("softness", 186);
-    label("lit edges", 252);
-    onlyWhen("box");
-    for (int i = 0; i < LAYERS; i++) {
-      row(22);
-      label("layer " + (i + 1), 0);
-      shadowSlider("layerGap" + i, 0, 60, 12, 54).setDecimalPrecision(0);
-      shadowSlider("boxShadow" + i, 0, 1, 0.6, 120);
-      shadowSlider("boxSoftness" + i, 0, 1, 0.4, 186);
-      shadowSlider("boxRim" + i, 0, 1, 0.4, 252);
-      onlyWhen("box");
-    }
     row(6);
 
     // thick paint catching a raking light (the Impasto tab); how thick each tool's paint is is in
@@ -811,6 +832,7 @@ public class Panel extends PApplet {
       blockColour[i] = color((hue + i * 0.382) % 1, random(0.10, 0.22), random(0.78, 0.86));
     }
     colorMode(RGB, 255);
+    for (int i = 0; i < layerSection.length; i++) blockColour[layerSection[i]] = LAYER_COLOURS[i];
     layout();
     ready = true;
   }
@@ -849,20 +871,13 @@ public class Panel extends PApplet {
       rect(block[i][0] - 8, block[i][1], (i == runSection ? 3 * colW : colW) - 12, block[i][2] - block[i][1], 8);
     }
     // each setup box's square, before its title: red, then green once it's done
-    int[] setupBoxes = { sourceBox, massBox, backdropBox, startBox, paletteBox };
-    boolean[] setupDone = { sourceDone, massesDone, backdropDone, startDone, paletteBase.length > 0 };
+    int[] setupBoxes = { sourceBox, massBox, backdropBox, startBox, paletteBox, outlineBox };
+    boolean[] setupDone = { sourceDone, massesDone, backdropDone, startDone, paletteBase.length > 0, outlineDone };
     for (int k = 0; k < setupBoxes.length; k++) {
       float[] b = block[setupBoxes[k]];
       if (b == null) continue;
       fill(setupDone[k] ? doneGreen : notDoneRed);
       rect(b[0] - 1, b[1] + 9, 15, 15, 3);
-    }
-    // LAYERS: a darker band behind layers 1, 3 and 5
-    for (int i = 0; i <= LAYERS; i += 2) {
-      Row a = layerBands[i][0], z = layerBands[i][1];
-      if (a.y < 0 || block[a.section] == null) continue;
-      fill(lerpColor(blockColour[a.section], color(0), 0.12));
-      rect(block[a.section][0] - 4, a.y - 2, colW - 20, z.y + z.h - a.y, 5);
     }
     drawSwatches();
     drawPaletteSwatches();
@@ -905,7 +920,15 @@ public class Panel extends PApplet {
     buttonColour(stepButton, color(60), color(70, 130, 200), !(isRunning && isPaused) || mapShown);
     paceSlider.getValueLabel().setText(paceText(paceRate(value("pace"))));
     canvasShown.setCaptionLabel("canvas  (" + startNames[(int) value("startWith")] + ")");
-    backdropShown.setCaptionLabel("backdrop  (" + backdropNames[(int) value("backdropKind")] + ")");
+    boolean fromFile = value("backdropKind") == BACKDROP_FILE;
+    PImage bf = backdropFile;
+    backdropShown.setCaptionLabel("backdrop  (" + (!fromFile ? backdropNames[(int) value("backdropKind")]
+      : bf == null ? "no picture" : backdropFileName) + ")");
+    if (fromFile) {
+      backdropText.setText(bf == null ? "no picture loaded  -  CHOOSE FILE"
+        : backdropFileName + "   " + bf.width + " x " + bf.height
+          + (backdropMismatch() ? "   (picture " + photo.width + " x " + photo.height + ")" : "   (the picture's size)"));
+    }
     backdropShown.setValue(1);
     backdropShown.setLock(true);
     if (!editing.equals(shownEditing)) {
@@ -922,6 +945,8 @@ public class Panel extends PApplet {
       : "click to make the masses");
     paletteTitle.setText(paletteOpen ? "SETUP 5   PALETTE GEN     click here to close" : "SETUP 5   PALETTE GEN");
     paletteText.setText(paletteStatus());
+    outlineTitle.setText(outlineOpen ? "SETUP 6   OUTLINE     click here to close" : "SETUP 6   OUTLINE");
+    outlineText.setText(outlineStatus());
 
     cp5.draw();
     // with every tool off, columns 3 - 4 still show the last tool's settings, under a grey cover
@@ -965,9 +990,9 @@ public class Panel extends PApplet {
     if (eraseSwatchClicked()) return;
     if (inBlock(startBox, 0)) startDone = true;
     if (inBlock(backdropBox, 0)) backdropDone = true;
-    for (int b : new int[] { sourceBox, massBox, paletteBox }) {
-      // an open palette box only counts its title - its controls take their own clicks
-      if (inBlock(b, b == paletteBox && paletteOpen ? 34 : 0)) {
+    for (int b : new int[] { sourceBox, massBox, paletteBox, outlineBox }) {
+      // an open palette or outline box only counts its title - its controls take their own clicks
+      if (inBlock(b, (b == paletteBox && paletteOpen) || (b == outlineBox && outlineOpen) ? 34 : 0)) {
         pressedIn = b;
         return;
       }
@@ -1003,6 +1028,10 @@ public class Panel extends PApplet {
       // opening it the first time makes a palette
       if (!paletteOpen && paletteBase.length == 0) newPalette();
       paletteOpen = !paletteOpen;
+      layoutWanted = true;
+    } else if (b == outlineBox) {
+      outlineOpen = !outlineOpen;
+      if (!outlineOpen) outlineDone = true;      // closing it says it looks right
       layoutWanted = true;
     } else if (!isRunning) {
       ScrollableList l = (ScrollableList) all.get("source");
@@ -1241,6 +1270,15 @@ public class Panel extends PApplet {
     return out;
   }
 
+  // the line under SETUP 6's title: how many parts it traces, and how smooth
+  String outlineStatus() {
+    int on = 0;
+    for (String p : outlineParts) if (value("outline_" + p) > 0.5) on++;
+    String s = on + " of " + outlineParts.length + " parts,  smoothness " + nf(value("outline_smooth"), 0, 2);
+    if (outlineOpen) return s + "   (red on the picture)";
+    return outlineDone ? "done  -  " + s : "click to choose what the outline traces";
+  }
+
   String paletteStatus() {
     if (paletteBase.length == 0) return "click to make a palette of " + PALETTE_SIZE + " colours";
     int chosen = 0;
@@ -1477,7 +1515,11 @@ public class Panel extends PApplet {
       }
     }
     else if (n.equals("startWith")) startDone = true;
-    else if (n.equals("backdropKind")) backdropDone = true;
+    else if (n.equals("backdropKind")) {
+      backdropDone = true;
+      if (e.getValue() == BACKDROP_FILE && backdropFile == null) command("backdropChoose");
+    }
+    else if (n.equals("backdropChoose")) command("backdropChoose");
     else if (n.equals("smoothing")) command("field");
     else if (n.equals("showWhat")) command("show");
     else if (n.equals("layMasses")) command("layMasses");
@@ -1518,6 +1560,8 @@ public class Panel extends PApplet {
     if (when.equals("notRecolour")) return value("recolourOpen") < 0.5;
     if (when.equals("paletteOpen")) return paletteOpen;
     if (when.equals("notPalette")) return !paletteOpen;
+    if (when.equals("outlineOpen")) return outlineOpen;
+    if (when.equals("notOutlineBox")) return !outlineOpen;
     if (when.equals("paletteMasses")) return value("paletteMasses") > 0.5;
     if (when.equals("notOutline")) return !editing.equals("outline");
     if (when.equals("flowColour")) return value("flow_src") < 2;     // the photo or the masses
@@ -1532,11 +1576,11 @@ public class Panel extends PApplet {
     if (when.startsWith("weighted ")) return value(when.substring(9) + "_startAt") == 1;
     if (when.startsWith("mouse ")) return value(when.substring(6) + "_startAt") == 3;
     if (when.startsWith("grid ")) return value(when.substring(5) + "_startAt") == 2;
-    if (when.equals("abstraction")) return value("abstractionOn") > 0.5;
     if (when.equals("box")) return value("boxOn") > 0.5;
     if (when.equals("impasto")) return value("impastoOn") > 0.5;
     if (when.equals("backdropKind")) return value("backdropKind") > 0;
-    if (when.equals("careful")) return value("abstractionOn") > 0.5 && value("protectWith") == 1;
+    if (when.equals("backdropFile")) return value("backdropKind") == BACKDROP_FILE;
+    if (when.equals("backdropMismatch")) return backdropMismatch();
     if (when.startsWith("map ")) return value(when.substring(4) + "_by") > 0;   // a "by" row with a map chosen
     return true;
   }
@@ -1987,10 +2031,19 @@ public class Panel extends PApplet {
     radioAt(name, new String[] { "1", "2", "3", "4", "5" }, chosen, 110, 44);
   }
 
-  // one of a SHADOW BOX layer's small sliders, under its heading (so no caption of its own)
-  Slider shadowSlider(String name, float lo, float hi, float value, float dx) {
-    Slider s = sliderAt(name, "", lo, hi, value, dx, 0, 60);
-    s.getCaptionLabel().setVisible(false);
+  // a layer box's title: a shorter header row than header()'s. Returns its section
+  int layerHeader(String text) {
+    sections++;
+    row(26);
+    Textlabel t = cp5.addTextlabel("header " + text).setText(text).setColorValue(color(20));
+    put(t, -4, 8);
+    return sections - 1;
+  }
+
+  // one of a layer box's small SHADOW BOX sliders, its caption above it
+  Slider boxSlider(String name, String caption, float lo, float hi, float value, float dx) {
+    Slider s = sliderAt(name, caption, lo, hi, value, dx, 14, 70);
+    s.getCaptionLabel().align(ControlP5.LEFT, ControlP5.TOP_OUTSIDE).setPaddingX(0);
     return s;
   }
 

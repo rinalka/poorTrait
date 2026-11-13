@@ -23,7 +23,9 @@ The first run downloads about 450 MB of models; after that a photo takes a few s
 
 | Option | Default | What it does |
 |---|---|---|
-| `--size` | 1536 | Longest side of the output in pixels |
+| `--size` | 0 | Longest side of `photo.png` in pixels (0 = keep the photo's own size) |
+| `--map-scale` | 0.25 | The maps' size as a share of the photo's |
+| `--map-min` | 512 | The maps are never smaller than this on their longest side (or than the photo) |
 | `--relief` | 3 | Exaggerate (higher) or flatten (lower) the 3D shape. Affects normals, curvature and shading |
 | `--light AZ EL` | 120 45 | Light direction for `light_shaded.png`. Azimuth: 0 = right, 90 = above, 180 = left, 270 = below. Elevation: 0 = grazing, 90 = head-on |
 | `--curve-scale` | 4 | Size of forms the curvature map responds to: small = fine detail, large = broad forms |
@@ -33,11 +35,11 @@ The first run downloads about 450 MB of models; after that a photo takes a few s
 
 ## The maps
 
-Every map is exactly the same size as `photo.png`, so pixel (x, y) means the same spot in all of them.
+Every map is the same size as the others, and smaller than `photo.png` (`--map-scale`, a quarter to start with). Stretched to the photo's size, they all line up with it.
 
 | File | Meaning |
 |---|---|
-| `photo.png` | The photo, resized and turned the right way up |
+| `photo.png` | The photo, turned the right way up, at its own size (or `--size`) |
 | `depth.png` / `depth16.png` | White = near, black = far. Relative only (the nose is in front of the cheeks, but not by how many cm). 16-bit version has smoother gradients |
 | `normal.png` | Which way the surface faces. R = right, G = up, B = towards you. Decode with `n = colour / 255 * 2 - 1` |
 | `light_photo.png` | Lightness of the original photo |

@@ -3,11 +3,11 @@
 //
 // Under them is the canvas (`startLayer`): solid, the canvas colour with the masses or the photo
 // on it (SETUP 4), made at RUN and CLEAR and never painted on. Under that, at the very bottom, is
-// the backdrop (SETUP 3, the Backdrop tab): white, a canvas weave, paper or newspaper, which shows
+// the backdrop (SETUP 3, the Backdrop tab): white, a canvas weave, paper or a picture of your own, which shows
 // where the canvas is made see-through or hidden. The backdrop and the canvas stay at the bottom.
 // The layers start empty; they're stacked in `layerOrder`, layer 1 at the bottom to start with,
 // and VIEW's LAYERS list can change the order. Each tool chooses the layer it paints on in its
-// APPLY, and in the panel's LAYERS block each layer (and the canvas) can be made see-through, and
+// APPLY, and in its own box on the panel each layer (and the canvas) can be made see-through, and
 // each layer combined with the ones under it in a different way (multiply, screen ...); VIEW's
 // LAYERS list hides and shows them (the backdrop always shows). SCRAPE takes paint off the layers
 // above a chosen layer, or all of them, showing what's underneath.
@@ -15,7 +15,7 @@
 // SHADOW BOX fakes the layers floating apart: each has a gap above the stack under it, and a
 // light from one side makes it cast a soft shadow on what's under it (further and softer with a
 // bigger gap) and lights up its edges that face the light, like cut paper in a shadow box. Each
-// layer has its own gap, shadow darkness, softness and lit edges. It's done here, as the layers
+// layer has its own gap, shadow darkness, softness and lit edges, in its box. It's done here, as the layers
 // are combined.
 //
 // Each layer also has a height - how thick its paint is - for IMPASTO (the Impasto tab).

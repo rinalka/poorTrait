@@ -303,9 +303,22 @@ void updatePaletteMatch() {
 }
 
 // the masses in the palette's colours, matched as the tool painting now asks (null if there are
-// no masses or no palette yet)
+// no masses yet). A tool picking up from the palette before SETUP 5 has made one makes one, as
+// clicking SETUP 5 does - otherwise it would quietly paint the masses' colours, which look like
+// the photo's
+boolean paletteMassesWarned = false;
+
 PImage paletteMatchedMasses() {
-  if (massShown == null) return null;
+  if (massShown == null) {
+    if (!paletteMassesWarned) println("palette: the masses aren't ready yet - using the photo's colours until they are");
+    paletteMassesWarned = true;
+    return null;
+  }
+  paletteMassesWarned = false;
+  if (panel.paletteBase.length == 0) {
+    panel.newPalette();
+    println("palette: SETUP 5 hadn't made one yet - made one (open SETUP 5 to change it)");
+  }
   int order = constrain((int) t("palOrder"), 0, MATCH_ORDER.length - 1);
   float tol = t("palTolerance");
   int key = order * 100000 + round(tol * 10000);

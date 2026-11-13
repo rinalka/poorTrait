@@ -1,7 +1,7 @@
 // Backdrop: what the painting is painted on (design doc, "Additions": ground / substrate layer).
 //
-// SETUP 3 chooses it: nothing (plain white), a canvas weave, paper or a collage of newspaper
-// cuttings. It's the bottom of the stack (the Layers tab), under the canvas the painting starts
+// SETUP 3 chooses it: nothing (plain white), a canvas weave, paper, or a picture of your own
+// ("load ..."). It's the bottom of the stack (the Layers tab), under the canvas the painting starts
 // with: it shows wherever the canvas is made see-through (or hidden) in LAYERS. "strength" fades
 // it towards white. "shows through the paint" lets it come through everything above it as well,
 // the way a coarse canvas's weave does (that part is in the Impasto tab's finishing pass, and a
@@ -9,50 +9,116 @@
 //
 // It can change at any time. A texture is made the first time it's needed (and again for another
 // choice or picture size).
+//
+// A loaded picture that isn't the photo's size is either scaled to it (each way on its own, so it
+// may be stretched) or tiled: one tile in the middle, the others round it, cut off at the edges.
+// SAVE keeps where it came from, so LOAD SETTINGS can load it again.
 
-String[] backdropNames = { "none", "canvas weave", "paper", "newspaper" };
+String[] backdropNames = { "none", "canvas weave", "paper", "load ..." };
+final int BACKDROP_FILE = 3;
 PImage backdropImg;          // the texture, at full strength
+volatile PImage backdropFile;                  // the picture loaded for "load ...", at its own size
+volatile String backdropFilePath = "", backdropFileName = "";
 PGraphics backdropLayer;     // the backdrop as drawn: the texture at SETUP 3's strength
 String backdropKey = "", backdropLayerKey = "";
 
 // the texture for SETUP 3's choice, made if it isn't already
 PImage backdropTexture() {
   int kind = (int) v("backdropKind");
+  PImage file = backdropFile;
+  boolean tile = v("backdropFit") > 0.5;
   String key = kind + " " + photo.width + " " + photo.height;
+  if (kind == BACKDROP_FILE) key += " " + System.identityHashCode(file) + " " + tile;
   if (!key.equals(backdropKey)) {
     backdropKey = key;
     backdropImg = kind == 1 ? weave(photo.width, photo.height)
                 : kind == 2 ? paper(photo.width, photo.height)
-                : kind == 3 ? newspaper(photo.width, photo.height)
+                : kind == BACKDROP_FILE && file != null ? fitted(file, photo.width, photo.height, tile)
                 : blank(photo.width, photo.height);
   }
   return backdropImg;
 }
 
-// the backdrop, faded towards white as "strength" says. Not while another picture is being drawn
-// on: drawing on two at once upsets OpenGL
+// the backdrop with the BACKDROP box's hue, saturation and brightness, faded towards white as
+// "strength" says - on the graphics card (data/backdropAdjust.glsl), so the sliders are quick on
+// a big picture. Not while another picture is being drawn on: drawing on two at once upsets OpenGL
+PShader backdropShader;
+
 PGraphics backdropGraphics() {
   backdropTexture();
-  String key = backdropKey + " " + nf(v("backdropAmount"), 0, 2);
+  String key = backdropKey + " " + nf(v("backdropAmount"), 0, 3) + " " + nf(v("backdropHue"), 0, 1)
+    + " " + nf(v("backdropSat"), 0, 3) + " " + nf(v("backdropBri"), 0, 3);
   if (!key.equals(backdropLayerKey)) {
     backdropLayerKey = key;
-    PImage t = backdropImg.copy();
-    float s = v("backdropAmount");
-    t.loadPixels();
-    for (int i = 0; i < t.pixels.length; i++) {
-      int c = t.pixels[i];
-      int r = round(lerp(255, c >> 16 & 255, s)), gr = round(lerp(255, c >> 8 & 255, s)), b = round(lerp(255, c & 255, s));
-      t.pixels[i] = 0xFF000000 | r << 16 | gr << 8 | b;
-    }
-    t.updatePixels();
+    if (backdropShader == null) backdropShader = loadShader("backdropAdjust.glsl");
+    backdropShader.set("hueShift", v("backdropHue") / 360);
+    backdropShader.set("sat", v("backdropSat"));
+    backdropShader.set("bri", v("backdropBri"));
+    backdropShader.set("strength", v("backdropAmount"));
     backdropLayer = photoSized(backdropLayer);
     backdropLayer.beginDraw();
     backdropLayer.blendMode(REPLACE);
-    backdropLayer.image(t, 0, 0);
+    backdropLayer.shader(backdropShader);
+    backdropLayer.image(backdropImg, 0, 0);
+    backdropLayer.resetShader();
     backdropLayer.blendMode(BLEND);
     backdropLayer.endDraw();
   }
   return backdropLayer;
+}
+
+// "load ...": choose a picture
+void chooseBackdrop() {
+  selectInput("Choose a backdrop picture", "backdropChosen", new java.io.File(sketchPath("..") + "/x.jpg"));
+}
+
+// (on selectInput's own thread) a picture was chosen
+void backdropChosen(java.io.File f) {
+  if (f != null) loadBackdropFile(f.getAbsolutePath());
+}
+
+boolean loadBackdropFile(String path) {
+  PImage p = new java.io.File(path).exists() ? loadImage(path) : null;
+  if (p == null || p.width <= 0) {
+    println("couldn't load the backdrop " + path);
+    return false;
+  }
+  p.loadPixels();
+  backdropFilePath = path;
+  backdropFileName = new java.io.File(path).getName();
+  backdropFile = p;
+  println("backdrop " + backdropFileName + ": " + p.width + " x " + p.height
+    + (backdropMismatch() ? "  (the picture is " + photo.width + " x " + photo.height + ")" : ""));
+  if (panel != null) panel.layoutWanted = true;     // the scale / tile choice may show or hide
+  return true;
+}
+
+// whether the loaded picture is a different size from the photo
+boolean backdropMismatch() {
+  PImage f = backdropFile;
+  return f != null && photo != null && (f.width != photo.width || f.height != photo.height);
+}
+
+// the loaded picture made w x h: scaled (each way on its own), or tiled - the first tile in the
+// middle, the rest round it, cut off at the edges
+PImage fitted(PImage f, int w, int h, boolean tile) {
+  if (f.width == w && f.height == h) return f.copy();
+  if (!tile) {
+    PImage p = f.copy();
+    p.resize(w, h);
+    return p;
+  }
+  int tw = f.width, th = f.height;
+  int x0 = (w - tw) / 2, y0 = (h - th) / 2;      // the middle tile's top left (may be off the picture)
+  PImage p = createImage(w, h, RGB);
+  p.loadPixels();
+  f.loadPixels();
+  for (int y = 0; y < h; y++) {
+    int row = Math.floorMod(y - y0, th) * tw;
+    for (int x = 0; x < w; x++) p.pixels[y * w + x] = f.pixels[row + Math.floorMod(x - x0, tw)];
+  }
+  p.updatePixels();
+  return p;
 }
 
 PImage blank(int w, int h) {
@@ -132,64 +198,4 @@ PImage paper(int w, int h) {
   }
   img.updatePixels();
   return img;
-}
-
-// Newspaper: cuttings stuck down overlapping, each a little crooked - columns of small print
-// with now and then a headline, on yellowed newsprint, each cutting a slightly different shade.
-// They're spread over a rough grid so they cover most of the picture
-PImage newspaper(int w, int h) {
-  PGraphics g = createGraphics(w, h);
-  PFont body = createFont("Georgia", 11, true), head = createFont("Georgia Bold", 26, true);
-  g.beginDraw();
-  g.background(255);
-  g.noStroke();
-  int across = 3, down = 4;
-  for (int c = 0; c < across * down; c++) {
-    float cw = random(0.3, 0.55) * w, ch = random(0.18, 0.32) * h;
-    g.pushMatrix();
-    g.translate(((c % across) + random(-0.3, 0.5)) * w / across - cw * 0.15, ((c / across) + random(-0.3, 0.5)) * h / down - ch * 0.15);
-    g.rotate(random(-0.12, 0.12));
-    g.clip(0, 0, cw, ch);
-    float tone = random(205, 235);
-    g.fill(tone + 12, tone + 8, tone - 8);
-    g.rect(0, 0, cw, ch);
-    // columns of print, a headline over some of them
-    int columns = max(1, round(cw / 150));
-    float colW = (cw - 16) / columns;
-    for (int k = 0; k < columns; k++) {
-      float x = 8 + k * colW, y = 10;
-      g.fill(45, 42, 40);
-      if (random(1) < 0.5) {
-        g.textFont(head);
-        g.text(words(2 + (int) random(3)), x, y, colW - 8, 70);
-        y += 66;
-      }
-      g.textFont(body);
-      g.textLeading(13);
-      g.fill(60, 56, 52);
-      StringBuilder s = new StringBuilder();
-      while (s.length() < (ch - y) * colW / 30) s.append(words(8 + (int) random(10))).append(". ");
-      g.text(s.toString(), x, y, colW - 10, ch - y - 6);
-    }
-    g.noClip();
-    g.popMatrix();
-  }
-  g.endDraw();
-  return g.get();
-}
-
-String[] newsWords = { "the", "council", "said", "on", "monday", "that", "plans", "for", "a", "new", "bridge",
-  "would", "go", "ahead", "despite", "local", "concerns", "about", "cost", "and", "traffic", "residents",
-  "of", "street", "were", "told", "in", "letter", "last", "week", "market", "prices", "rose", "sharply",
-  "after", "weather", "harvest", "minister", "will", "visit", "town", "hall", "spring", "fair", "police",
-  "report", "late", "night", "returned", "home", "winning", "goal", "season", "museum", "opens", "doors" };
-
-String words(int n) {
-  StringBuilder s = new StringBuilder();
-  for (int k = 0; k < n; k++) {
-    String w = newsWords[(int) random(newsWords.length)];
-    if (k == 0) w = Character.toUpperCase(w.charAt(0)) + w.substring(1);
-    s.append(k > 0 ? " " : "").append(w);
-  }
-  return s.toString();
 }

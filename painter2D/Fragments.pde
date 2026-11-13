@@ -4,7 +4,7 @@
 // Each fragment is placed by "start at" like the other marks, or, with "clumping", near the one
 // before it, so they gather in little drifts. Sizes are mostly small with a few bigger ones.
 // "Lined up with the form" turns that share of them along the direction field; the rest point
-// anywhere. Fragments respect ABSTRACTION.
+// anywhere.
 //
 // All the fragments in a frame are one shape made of triangles.
 
@@ -33,7 +33,6 @@ void paintFragments(PGraphics g) {
       x = s[0];
       y = s[1];
     }
-    if (random(1) < protection(x, y)) continue;
     lastX = x;
     lastY = y;
     fragment(g, x, y, kinds.get((int) random(kinds.size())));
