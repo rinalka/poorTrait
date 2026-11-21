@@ -78,7 +78,7 @@ int countFor(float rate) {
   return (int) rate + (random(1) < rate - (int) rate ? 1 : 0);
 }
 
-// the colour for a splatter, line or fragment, from the tool's COLOUR settings: the accent now and
+// the colour for a splatter, line, from the tool's COLOUR settings: the accent now and
 // then (accent chance) or always (pick up from random), otherwise picked up where it lands,
 // jittered - then pushed away from the photo's lightness there by "contrast", so dark spots get
 // light marks and light spots dark ones

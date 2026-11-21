@@ -18,6 +18,10 @@
 // of the line with OUTLINE's parts as they're set is made a closed shape, and everything on the
 // layer outside all of them comes off. See cutOutsideOutline().
 //
+// ERASE WHAT ISN'T AN OBJECT (a test) empties the same layer wherever the map maker's objects.png
+// has no object - or has one bigger than the slider above it says, which counts as background.
+// See cutOutsideObjects().
+//
 // ERASE THAT COLOUR'S PLACES (under that) takes one of SETUP 5's palette colours, clicked in the
 // strip, and empties one layer wherever the masses in the palette's colours are that colour. See
 // erasePaletteColour() in the Palette Gen tab.
@@ -49,6 +53,7 @@ void paintScrapes() {
   }
   scrapeMask.endDraw();
   if (made == 0) return;
+  areaClipMask(scrapeMask);                    // THE AREA (the Area tab)
   if (one) {
     int L = (int) t("only");
     eraseWith(layers[L], scrapeMask);
@@ -157,6 +162,45 @@ void cutOutsideOutline(int L) {
   eraseWith(layers[L], mask);
   eraseWith(heights[L], mask);          // the paint's thickness goes with it (Impasto)
   println("layer " + (L + 1) + " cut to the outline (" + outlineShapes.size() + " parts)");
+}
+
+// Layer L emptied wherever there's no object: objects.png's 0, or an object covering more than
+// `background` of the picture (0 .. 1). objects.png is smaller than the photo, so the mask is
+// stretched to the photo's size, smoothly, which softens its edge by a pixel or two
+void cutOutsideObjects(int L, float background) {
+  if (layers[L] == null) {
+    println("nothing painted yet - RUN first");
+    return;
+  }
+  String path = mapsPath() + "/" + faceName + "/objects.png";
+  if (!new java.io.File(path).exists()) {
+    println("no objects.png for " + faceName + " - make its maps again with the map maker");
+    return;
+  }
+  PImage oi = loadImage(path);
+  oi.loadPixels();
+  int n = oi.width * oi.height;
+  int[] count = new int[256];
+  for (int i = 0; i < n; i++) count[oi.pixels[i] >> 16 & 255]++;
+  PImage small = createImage(oi.width, oi.height, ARGB);
+  small.loadPixels();
+  int kept = 0, erased = 0;
+  for (int k = 1; k < 256; k++) if (count[k] > 0 && count[k] <= background * n) kept++;
+  for (int i = 0; i < n; i++) {
+    int k = oi.pixels[i] >> 16 & 255;
+    boolean object = k > 0 && count[k] <= background * n;
+    small.pixels[i] = object ? 0 : 0xFFFFFFFF;          // the mask is solid where paint comes off
+    if (!object) erased++;
+  }
+  small.updatePixels();
+  PGraphics mask = createGraphics(photo.width, photo.height);
+  mask.beginDraw();
+  mask.clear();
+  mask.image(small, 0, 0, photo.width, photo.height);
+  mask.endDraw();
+  eraseWith(layers[L], mask);
+  eraseWith(heights[L], mask);          // the paint's thickness goes with it (Impasto)
+  println("layer " + (L + 1) + ": " + kept + " objects kept, " + round(100.0 * erased / n) + "% of the picture erased");
 }
 
 // the way from the end of a part back to its start: along the picture's edge if both are near it

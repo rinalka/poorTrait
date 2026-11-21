@@ -9,6 +9,8 @@
 //   neck & clothes  where the clothes meet the neck and skin
 //   face, brows, eyes (with the irises), nose, mouth
 //                   the face landmarks' outlines (landmarks.json)
+//   objects         the edges between the things the map maker's object finder (SAM 2) cut the
+//                   picture into (objects.png) - a horse, a house, the sky, a hat - each edge once
 // Each part is smoothed (SETUP 6's "smoothness"), and they're drawn in order: from the end of one part the
 // pen lifts and goes down again on the nearest part not drawn yet. With "one unbroken line" it
 // doesn't lift: it sweeps round to the next part in a curve, the way a one-line drawing travels
@@ -33,7 +35,7 @@ boolean outlineRestart = true;     // CLEAR and RUN start the pen again from the
 float opax, opay, opbx, opby;
 final float OUTLINE_STEP = 2;
 
-String[] outlineParts = { "sil", "hair", "clothes", "face", "brows", "eyes", "nose", "mouth" };
+String[] outlineParts = { "sil", "hair", "clothes", "face", "brows", "eyes", "nose", "mouth", "objects" };
 
 void resetOutline() {
   outlineAt = 0;
@@ -163,6 +165,33 @@ void planOutline() {
       if (sx != 1 || sy != 1) for (int i = 0; i < e.size(); i++) { e.x.mult(i, sx); e.y.mult(i, sy); }
     }
     parts.addAll(edges);
+  }
+
+  // the objects picture: each pixel is the number of the object it belongs to (0: none). Each
+  // object's edge is kept only where it meets a lower number (or nothing), so an edge two objects
+  // share is drawn once
+  if (t("objects") > 0.5 && new java.io.File(dir + "objects.png").exists()) {
+    PImage oi = loadImage(dir + "objects.png");
+    oi.loadPixels();
+    int pw = oi.width, ph = oi.height;
+    int[] id = new int[pw * ph];
+    int most = 0;
+    for (int i = 0; i < pw * ph; i++) {
+      id[i] = oi.pixels[i] >> 16 & 255;
+      most = max(most, id[i]);
+    }
+    boolean[] in = new boolean[pw * ph], below = new boolean[pw * ph];
+    float sx = w / (float) pw, sy = h / (float) ph;
+    for (int k = 1; k <= most; k++) {
+      for (int i = 0; i < pw * ph; i++) {
+        in[i] = id[i] == k;
+        below[i] = id[i] < k;
+      }
+      for (OutlinePart e : edgeOf(in, below, pw, ph)) {
+        if (sx != 1 || sy != 1) for (int i = 0; i < e.size(); i++) { e.x.mult(i, sx); e.y.mult(i, sy); }
+        parts.add(e);
+      }
+    }
   }
 
   // the landmarks' outlines

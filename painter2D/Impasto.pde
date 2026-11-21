@@ -98,7 +98,7 @@ boolean finishing() {
 // the window's size
 void finish(PGraphics c) {
   boolean on = v("impastoOn") > 0.5;
-  boolean textured = v("backdropKind") > 0;
+  boolean textured = v("backdropKind") > 0 && v("backdropOn") > 0.5;   // (hidden in VIEW: nothing shows through)
   float from = radians(v("impastoFrom")), up = radians(v("impastoHeight"));
   impastoShader.set("heights", heightAll);
   impastoShader.set("groundTex", backdropGraphics());

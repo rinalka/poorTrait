@@ -17,6 +17,9 @@ procedural painter can use:
     parts.png          face-part label per pixel (values 0-18, see PART_NAMES below)
     parts_preview.png  the same, in colour, so you can see it
     importance.png     how much each area matters for recognising the face (white = keep)
+    objects.png        every object in the picture, faces or not (SAM 2): each pixel is its
+                       object's number, 1, 2, 3 ... (0 = none) - the painter's OUTLINE traces them
+    objects_preview.png  the same, in colour
     landmarks.json     478 3D points on each face, plus named groups (eyes, lips, ...)
     landmarks_preview.png
     mesh_face.obj      3D model of just the person (see mesh.py)
@@ -45,6 +48,7 @@ MODELS_DIR = os.path.join(HERE, "models")
 
 DEPTH_MODEL = "depth-anything/Depth-Anything-V2-Small-hf"   # Apache-2.0
 PARTS_MODEL = "jonathandinu/face-parsing"                   # SegFormer trained on CelebAMask-HQ
+OBJECTS_MODEL = "facebook/sam2.1-hiera-small"               # Segment Anything 2.1, Apache-2.0
 LANDMARK_MODEL_URL = ("https://storage.googleapis.com/mediapipe-models/face_landmarker/"
                       "face_landmarker/float16/latest/face_landmarker.task")
 
@@ -305,6 +309,89 @@ def make_importance(labels, softness):
 
 
 # ----------------------------------------------------------------------------
+# Objects (Segment Anything 2) - anything in the picture, not just faces
+# ----------------------------------------------------------------------------
+
+_sam = None
+
+def make_objects(img, grid, min_area=0.0005, max_objects=200):
+    """Cut the picture into objects. SAM 2 doesn't know what things are, only where one thing
+    ends and the next begins: we ask it "what's here?" at a grid x grid of points, keep the
+    answers it's sure of, drop the repeats, and lay them on top of each other biggest first
+    (so a hat sits on a man who stands in a field). Returns an array of object numbers,
+    0 = none. Objects smaller than min_area of the picture are left out."""
+    global _sam
+    import torch
+    from transformers import Sam2Model, Sam2Processor
+    from transformers.utils import logging as tlog
+    if _sam is None:
+        tlog.set_verbosity_error()    # it warns that the checkpoint is the video model's; that's fine
+        _sam = (Sam2Processor.from_pretrained(OBJECTS_MODEL),
+                Sam2Model.from_pretrained(OBJECTS_MODEL).to(pick_device()).eval())
+        tlog.set_verbosity_warning()
+    processor, model = _sam
+    w, h = img.width, img.height
+    with torch.no_grad():
+        pixels = processor(images=img, return_tensors="pt")["pixel_values"].to(model.device)
+        embeddings = model.get_image_embeddings(pixels)
+
+    points = [[(i + 0.5) / grid * w, (j + 0.5) / grid * h] for j in range(grid) for i in range(grid)]
+    found = []   # (how sure, mask)
+    for b in range(0, len(points), 64):
+        chunk = points[b:b + 64]
+        inputs = processor(images=img, input_points=[[[p] for p in chunk]],
+                           input_labels=[[[1]] * len(chunk)], return_tensors="pt")
+        with torch.no_grad():
+            out = model(image_embeddings=embeddings, input_points=inputs["input_points"].to(model.device),
+                        input_labels=inputs["input_labels"].to(model.device), multimask_output=True)
+        logits = processor.post_process_masks(out.pred_masks.cpu(), inputs["original_sizes"],
+                                              binarize=False)[0]
+        iou = out.iou_scores[0].cpu()
+        for k in range(len(chunk)):
+            for m in range(3):                # SAM's three guesses: part, thing, bigger thing
+                if iou[k, m] < 0.7:
+                    continue
+                lg = logits[k, m]
+                mask = lg > 0
+                area = int(mask.sum())
+                if area < min_area * w * h or area > 0.95 * w * h:
+                    continue
+                # a mask that changes a lot when the threshold moves is a vague one
+                stable = float((lg > 1).sum()) / max(1.0, float((lg > -1).sum()))
+                if stable < 0.85:
+                    continue
+                found.append((float(iou[k, m]) * stable, mask.numpy()))
+
+    found.sort(key=lambda f: -f[0])
+    kept = []
+    for _, mask in found:
+        a = mask.sum()
+        if all((mask & k).sum() / (a + k.sum() - (mask & k).sum()) < 0.7 for k in kept):
+            kept.append(mask)
+            if len(kept) >= max_objects:
+                break
+    kept.sort(key=lambda m: -m.sum())
+    stacked = np.zeros((h, w), np.int32)
+    for i, mask in enumerate(kept):
+        stacked[mask] = i + 1
+    # numbered again, leaving out what's hardly showing once the smaller ones are on top
+    labels = np.zeros((h, w), np.uint8)
+    n = 0
+    for i in range(1, len(kept) + 1):
+        here = stacked == i
+        if here.sum() >= min_area * w * h * 0.5:
+            n += 1
+            labels[here] = n
+    return labels
+
+
+def objects_preview(img, labels):
+    colours = np.random.default_rng(1).integers(40, 255, (256, 3)).astype(np.uint8)
+    colours[0] = 0
+    return (np.asarray(img) * 0.4 + colours[labels] * 0.6).astype(np.uint8)
+
+
+# ----------------------------------------------------------------------------
 # Overview contact sheet
 # ----------------------------------------------------------------------------
 
@@ -375,16 +462,28 @@ def process(path, args):
     importance = make_importance(labels, args.softness)
     save_grey(os.path.join(out, "importance.png"), importance)
 
+    objects_rgb = None
+    if args.objects_grid > 0:
+        print("  objects ...")
+        objects = make_objects(img, args.objects_grid)
+        cv2.imwrite(os.path.join(out, "objects.png"), objects)
+        objects_rgb = objects_preview(img, objects)
+        save_rgb(os.path.join(out, "objects_preview.png"), objects_rgb)
+        print(f"  found {objects.max()} object(s)")
+
     print("  3D models ...")
     from mesh import make_mesh
     make_mesh(out, depth_scale=args.depth_scale)
 
     to8 = lambda a: (a * 255).astype(np.uint8)
-    sheet = make_overview([
+    tiles = [
         ("photo", np.asarray(img)), ("depth", to8(depth)), ("normal", normal_rgb),
         ("curvature", to8(curvature)), ("light_photo", to8(light_photo)),
         ("light_shaded", to8(light_shaded)), ("parts", parts_preview),
-        ("importance", to8(importance)), ("landmarks", landmarks_preview)])
+        ("importance", to8(importance)), ("landmarks", landmarks_preview)]
+    if objects_rgb is not None:
+        tiles.append(("objects", objects_rgb))
+    sheet = make_overview(tiles)
     cv2.imwrite(os.path.join(out, "overview.jpg"), cv2.cvtColor(sheet, cv2.COLOR_RGB2BGR),
                 [cv2.IMWRITE_JPEG_QUALITY, 90])
     print(f"  -> {out}")
@@ -431,6 +530,9 @@ def main():
                    help="how deep the 3D models are, as a fraction of their width (default 0.4)")
     p.add_argument("--softness", type=float, default=8.0,
                    help="how much to blur the importance map edges (default 8, 0 = hard)")
+    p.add_argument("--objects-grid", type=int, default=32,
+                   help="how closely to look for objects: a grid of N x N points (default 32; "
+                        "more finds smaller things but is slower; 0 = skip objects.png)")
     args = p.parse_args()
 
     if not args.photos:

@@ -114,7 +114,7 @@ void composite() {
   }
   canvas.beginDraw();
   canvas.background(255);
-  canvas.image(back, 0, 0);
+  if (v("backdropOn") > 0.5) canvas.image(back, 0, 0);    // off in VIEW's LAYERS: plain white
   if (v("canvasOn") > 0.5) {
     canvas.tint(255, 255 * (1 - v("canvasSeeThrough")));
     canvas.image(startLayer, 0, 0);

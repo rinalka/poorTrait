@@ -13,6 +13,9 @@
 // straight back down where it was dipped, unturned: a broken-up copy of what was there. The paint
 // in the sponge smears a little more with every stamp ("smearing"), so the later ones, moved and
 // turned, are blurrier and blurrier versions of it. (An accent dip is all one accent colour.)
+// With "copy" on, every stamp prints the picture right under it instead (from "pick up from",
+// turned with the stamp so it lines up) - nothing is carried or smeared, and the sponge's shape,
+// pores and the paint running out are all that change it.
 //
 // Each print is made as a small picture of the sponge's face - the paint it carries, how much of
 // it prints in the alpha - and drawn turned. Pressing is never quite even, so every print differs
@@ -43,6 +46,7 @@ void paintSponges(PGraphics g) {
 }
 
 void spongeStamp(PGraphics g, int k) {
+  boolean copy = t("copy") > 0.5;
   if (spongePaint < 0.03 || spongeStamps >= (int) t("stamps")) {
     // dip it
     float[] s = startPoint();
@@ -51,11 +55,11 @@ void spongeStamp(PGraphics g, int k) {
     spongeY = s[1];
     pickSpongeSize();
     makeSponge(t("fresh") > 0.5);
-    soakUp(spongeX, spongeY);
+    soakUp(spongeX, spongeY, 0);
     spongePaint = t("load") / 100;
     spongeStamps = 0;
   } else {
-    smearSponge(t("smear"));
+    if (!copy) smearSponge(t("smear"));
     // the next stamp, a little way on
     float a = random(TWO_PI), d = t("step") * spongeSize * random(0.5, 1.2);
     spongeX = constrain(spongeX + cos(a) * d, 0, photo.width - 1);
@@ -64,12 +68,15 @@ void spongeStamp(PGraphics g, int k) {
   spongeStamps++;
   float paint = spongePaint;
   spongePaint *= 1 - t("loss") / 100;
+  float turn = spongeStamps > 1 ? radians(random(-1, 1) * t("turn")) : 0;    // the first goes back as it was
+  // copy: the paint is the picture right under this stamp, turned with it so it lines up
+  if (copy && spongeStamps > 1) soakUp(spongeX, spongeY, turn);
 
   PImage p = spongePrint(k, paint);
   float alpha = toolAlpha(spongeX, spongeY) * (0.55 + 0.45 * paint);
   g.pushMatrix();
   g.translate(spongeX, spongeY);
-  if (spongeStamps > 1) g.rotate(radians(random(-1, 1) * t("turn")));    // the first goes back as it was
+  g.rotate(turn);
   g.tint(255, alpha);
   g.image(p, -spongeN / 2.0, -spongeN / 2.0);
   g.noTint();
@@ -136,10 +143,11 @@ void makeSponge(boolean fresh) {
   spongeN = n;
 }
 
-// dipping it at (x, y): every pixel of its face takes the colour under it
-void soakUp(float x, float y) {
+// dipping it at (x, y): every pixel of its face takes the colour under it - with the face turned
+// by `turn`, as it will be when it's stamped there
+void soakUp(float x, float y, float turn) {
   int n = spongeN;
-  float c = n / 2.0;
+  float c = n / 2.0, ca = cos(turn), sa = sin(turn);
   Paint p = new Paint();
   p.pickup = (int) t("pickup");
   p.mix = t("mix");
@@ -152,7 +160,8 @@ void soakUp(float x, float y) {
   spongeB = new float[n * n];
   for (int i = 0; i < n * n; i++) {
     if (spongeHolds[i] <= 0) continue;
-    color col = p.pickRaw(constrain(x + i % n - c, 0, photo.width - 1), constrain(y + i / n - c, 0, photo.height - 1));
+    float dx = i % n - c, dy = i / n - c;
+    color col = p.pickRaw(constrain(x + dx * ca - dy * sa, 0, photo.width - 1), constrain(y + dx * sa + dy * ca, 0, photo.height - 1));
     spongeR[i] = col >> 16 & 255;
     spongeG[i] = col >> 8 & 255;
     spongeB[i] = col & 255;

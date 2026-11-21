@@ -104,6 +104,7 @@ void draw() {
   String c;
   while ((c = commands.poll()) != null) todo.add(c);
   params = panel.snapshot();
+  applyAutomation();         // AUTOMATION's waves over the tools' sizes (the Automation tab)
   for (String t : todo) handle(t);
   updateMasses();
   updatePaletteMasses();
@@ -202,7 +203,8 @@ void handle(String c) {
   else if (c.equals("backdropChoose")) chooseBackdrop();
   else if (c.equals("field")) buildField(normalImg, (int) v("smoothing"));
   else if (c.equals("cutOutside")) cutOutsideOutline((int) v("cut_layer"));
-  else if (c.equals("eraseColour")) erasePaletteColour((int) v("eraseColourLayer"), panel.erasePick);
+  else if (c.equals("cutObjects")) cutOutsideObjects((int) v("cut_layer"), v("cut_background") / 100);
+  else if (c.equals("eraseColour")) erasePaletteColour((int) v("eraseColourLayer"), panel.erasePicks);
   else if (c.equals("layMasses")) layMasses(v("layOpacity"));
   else if (c.startsWith("clearLayer")) clearLayer(int(c.substring(10)));
   else if (c.startsWith("moveLayer")) {
@@ -312,6 +314,8 @@ void paintFrame() {
       PGraphics g = layers[L];
       float thick = t("thickness");
       if (thick > 0) snapLayer(g);
+      boolean clip = areaClipping();          // THE AREA (the Area tab)
+      if (clip) areaSnapLayer(g);
       g.beginDraw();
       g.blendMode(blendModes[constrain((int) t("blend"), 0, blendModes.length - 1)]);
       if (i <= 1) {
@@ -323,10 +327,10 @@ void paintFrame() {
       else if (TOOLS[i].equals("pencil")) paintPencils(g);
       else if (TOOLS[i].equals("flow")) paintFlows(g);
       else if (TOOLS[i].equals("outline")) paintOutline(g);
-      else if (TOOLS[i].equals("sponge")) paintSponges(g);
-      else paintFragments(g);
+      else paintSponges(g);
       g.blendMode(BLEND);
       g.endDraw();
+      if (clip) areaClip(g);
       if (thick > 0) addHeight(L, thick);
     }
   }
@@ -403,7 +407,7 @@ void draw2D() {
     around = t("around") == 0;
     alongOutline = t("around") == 2;
   }
-  if (panel.outlineOpen) drawOutlinePreview(width / (float) photo.width);
+  if (panel.outlineOpen || v("viewOutline") > 0.5) drawOutlinePreview(width / (float) photo.width);
   if (canvas == null) {
     fill(255, 200);
     textSize(14);
@@ -495,6 +499,27 @@ void settingsChosen(java.io.File f) {
 
 
 // ---------------------------------------------------------------- mouse and keys
+
+// a click in this window while a PICK ON THE MASSES is on (until it's pressed again) turns the
+// palette colour of the mass under it on or off - one of SCRAPE's colours to erase, or one of
+// THE AREA's - and isn't a "start at: mouse" mark
+boolean pickClick = false;
+
+void mousePressed() {
+  int p = panel.picking;
+  if (p == panel.PICK_NONE) return;
+  pickClick = true;
+  int pick = paletteColourAt(mouseX * photo.width / (float) width, mouseY * photo.height / (float) height);
+  if (pick < 0 || pick >= PALETTE_SIZE) return;
+  boolean[] picks = p == panel.PICK_ERASE ? panel.erasePicks : panel.areaPick;
+  picks[pick] = !picks[pick];
+  println((p == panel.PICK_ERASE ? "SCRAPE's colours to erase: " : "THE AREA: ") + "palette colour " + (pick + 1)
+    + (picks[pick] ? " added" : " taken out"));
+}
+
+void mouseReleased() {
+  pickClick = false;
+}
 
 void keyPressed() {
   if (key == TAB) panel.toFront();

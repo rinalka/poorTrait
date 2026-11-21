@@ -7,15 +7,28 @@
 // conspicuously big. Big drops have satellite droplets round their edge, and some clusters fling
 // long thin trails out from the centre, tapering as they go and ending in a drop.
 //
-// Drops aren't circles: each has a wobbly outline, slightly different every time. Some drops
+// The drops can be of four kinds, chosen at the top of the box: round splatter drops, dots,
+// dashes and triangles (the old FRAGMENTS tool), any mix of them - each drop is one of the chosen
+// kinds at random, and the splat in the middle and a trail's end drop too. All of them share the
+// cluster settings, drips included; only the round drops have satellite droplets.
+//
+// Splatter drops aren't circles: each has a wobbly outline, slightly different every time. Some drops
 // ("drips") are wet enough to run: paint hangs off the bottom of the drop and runs straight down,
 // thinning a little, and gathers in a blob at the end.
 //
 // A cluster can be hundreds of drops, so the whole cluster is drawn as one shape made of
 // triangles - drawing each drop as a shape of its own is several times slower.
 
+IntList splatKinds = new IntList();             // 0 splatter drops, 1 dots, 2 dashes, 3 triangles
+
 void paintSplatters(PGraphics g) {
   if (t("on") < 0.5) return;
+  splatKinds.clear();
+  if (t("kSplat") > 0.5) splatKinds.append(0);
+  if (t("kDots") > 0.5) splatKinds.append(1);
+  if (t("kDashes") > 0.5) splatKinds.append(2);
+  if (t("kTris") > 0.5) splatKinds.append(3);
+  if (splatKinds.size() == 0) return;
   // clusters per frame can be a fraction: 0.3 means a cluster on about 3 frames in 10
   int n = countFor(t("rate"));
   for (int i = 0; i < n; i++) splatter(g);
@@ -34,7 +47,7 @@ void splatter(PGraphics g) {
 
   // the big splat in the middle (not always - some clusters are only drops)
   if (random(1) < 0.7) {
-    drop(g, cx, cy, size * random(0.5, 1), dropColour(c), alpha);
+    anyDrop(g, cx, cy, size * random(0.5, 1), dropColour(c), alpha);
   }
 
   // drops round it: nearer the middle they're bigger
@@ -45,7 +58,7 @@ void splatter(PGraphics g) {
     if (x < 0 || y < 0 || x >= photo.width || y >= photo.height) continue;
     float far = constrain(sqrt(gx * gx + gy * gy) / 3, 0, 1);
     float r = max(0.7, size * 0.6 * pow(random(1), tail) * (1 - 0.6 * far));
-    drop(g, x, y, r, dropColour(c), alpha * random(0.6, 1));
+    anyDrop(g, x, y, r, dropColour(c), alpha * random(0.6, 1));
   }
 
   // trails flung out from the middle
@@ -81,11 +94,9 @@ void drop(PGraphics g, float x, float y, float r, color c, float a) {
     g.vertex(rx[j], ry[j]);
   }
   // a drip, more likely from a bigger drop, hanging off its lowest point
-  if (r > 3 && random(1) < t("drip") * min(1, 0.3 + r / max(1, t("size")))) {
-    int low = 0;
-    for (int i = 1; i < pts; i++) if (ry[i] > ry[low]) low = i;
-    drip(g, lerp(rx[low], x, 0.25), ry[low], r);
-  }
+  int low = 0;
+  for (int i = 1; i < pts; i++) if (ry[i] > ry[low]) low = i;
+  maybeDrip(g, lerp(rx[low], x, 0.25), ry[low], r);
   if (r > 5) {
     int sats = (int) random(0, r / 3);
     for (int i = 0; i < sats; i++) {
@@ -93,6 +104,46 @@ void drop(PGraphics g, float x, float y, float r, color c, float a) {
       disc(g, x + cos(ang) * dist, y + sin(ang) * dist, sr, 6);
     }
   }
+}
+
+// one drop of a kind chosen at random from the box's ticked kinds, r about its radius
+void anyDrop(PGraphics g, float x, float y, float r, color c, float a) {
+  int kind = splatKinds.get((int) random(splatKinds.size()));
+  if (kind == 0) drop(g, x, y, r, c, a);
+  else fragment(g, x, y, r, kind, c, a);
+}
+
+// a dot, a dash (a short thin bar) or a triangle (never quite regular), about r across, pointing
+// anywhere. Like a round drop, it can drip from its lowest point
+void fragment(PGraphics g, float x, float y, float r, int kind, color c, float a) {
+  g.fill(c, a);
+  float ang = random(TWO_PI), ca = cos(ang), sa = sin(ang);
+  float lowX = x, lowY = y;
+  if (kind == 1) {
+    disc(g, x, y, max(0.6, r), 7);
+    lowY = y + r;
+  } else if (kind == 2) {
+    float l = max(0.8, r * random(1.2, 3)), w = max(0.4, r * random(0.15, 0.4));
+    float ax = ca * l, ay = sa * l, bx = -sa * w, by = ca * w;
+    float[] px = { x - ax - bx, x + ax - bx, x + ax + bx, x - ax + bx };
+    float[] py = { y - ay - by, y + ay - by, y + ay + by, y - ay + by };
+    g.vertex(px[0], py[0]); g.vertex(px[1], py[1]); g.vertex(px[2], py[2]);
+    g.vertex(px[0], py[0]); g.vertex(px[2], py[2]); g.vertex(px[3], py[3]);
+    for (int k = 0; k < 4; k++) if (py[k] > lowY) { lowX = px[k]; lowY = py[k]; }
+  } else {
+    for (int k = 0; k < 3; k++) {
+      float a3 = ang + TWO_PI * k / 3 + random(-0.4, 0.4), rr = max(0.8, r * random(1, 1.75));
+      float px = x + cos(a3) * rr, py = y + sin(a3) * rr;
+      g.vertex(px, py);
+      if (py > lowY) { lowX = px; lowY = py; }
+    }
+  }
+  maybeDrip(g, lerp(lowX, x, 0.25), lowY, r);
+}
+
+// a drip off a drop r across, from (x, y), its lowest point: more likely from a bigger drop
+void maybeDrip(PGraphics g, float x, float y, float r) {
+  if (r > 3 && random(1) < t("drip") * min(1, 0.3 + r / max(1, t("size")))) drip(g, x, y, r);
 }
 
 // paint running straight down from (x, y), the bottom of a drop r across: it leaves the drop
@@ -161,7 +212,7 @@ void trail(PGraphics g, float x, float y, float ang, float len, float w, color c
     }
     pax = ax; pay = ay; pbx = bx; pby = by;
   }
-  drop(g, x, y, w * random(0.4, 1), c, a);
+  anyDrop(g, x, y, w * random(0.4, 1), c, a);
 }
 
 // a drop's colour: the cluster's, varied a little in lightness and hue

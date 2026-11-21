@@ -14,8 +14,9 @@
 //   RECOLOUR                     under them: changing the painting's colours a few at a time -
 //                                 opened, it takes the place of the SETUP boxes
 //   the tools                     what does the drawing: brush, palette knife, splatter, lines,
-//                                 fragments, pencil, flow, outline, scrape - one at a time, with its
-//                                 shape settings
+//                                 pencil, flow, outline, scrape - one at a time, with its
+//                                 shape settings - and under them AUTOMATION, the chosen tool's
+//                                 size or length moved up and down by a wave (the Automation tab)
 //   MOVEMENT, COLOUR, APPLY       how the chosen tool moves, where its colour comes from, and
 //                                 how solid it is
 //   LAYER 1 - 5, CANVAS,          a box for each layer, the canvas and the backdrop's colours,
@@ -69,7 +70,7 @@ public class Panel extends PApplet {
   Row layerRow;                                   // VIEW's lists, with the layers' tick boxes
   int[] layerItem = new int[LAYERS];              // each layer's tick box in layerRow's items
   String shownOrder = "";
-  Toggle canvasShown, backdropShown;            // VIEW's LAYERS: the canvas, and the backdrop (always on)
+  Toggle canvasShown, backdropShown;            // VIEW's LAYERS: the canvas, and the backdrop
   int[] layerSection = new int[LAYERS + 2];     // each layer's box, then the canvas's, then the backdrop's
   // their colours: pastels, all with plenty of red
   int[] LAYER_COLOURS = { 0xFFF5C4C4, 0xFFF6D5B4, 0xFFEEC3DE, 0xFFF2E1AE, 0xFFDDC6EF, 0xFFE8CFC2, 0xFFE9D6CB };
@@ -126,12 +127,26 @@ public class Panel extends PApplet {
   Textlabel paletteTitle, paletteText;
   boolean paletteSyncing = false;     // the chosen-colour sliders are being set to show a swatch
   final int PAL_COLS = 6, PAL_H = 34;
-  // SCRAPE's ERASE A PALETTE COLOUR: the strip of the palette's colours, and the one chosen (-1: none)
+  // SCRAPE's ERASE A PALETTE COLOUR: the strip of the palette's colours, and the ones chosen (any
+  // number - each click turns one on or off)
   Row eraseStrip;
   // (never give a variable here the same name as a control: controlP5 sets a variable with a
   // control's name whenever that control is used - the ERASE button was once called the same as
   // this, and every press set it to 1)
-  volatile int erasePick = -1;
+  volatile boolean[] erasePicks = new boolean[PALETTE_SIZE];
+  // ... or picked by clicking the masses in the output window: PICK ON THE MASSES shows them there,
+  // and each click turns the colour under it on or off (the output window's mousePressed) until
+  // the button is pressed again; then the view goes back. The same for the AREA's colours
+  // (MOVEMENT). `picking` is what the clicks are for
+  final int PICK_NONE = 0, PICK_ERASE = 1, PICK_AREA = 2;
+  volatile int picking = PICK_NONE;
+  int pickingShown = PICK_NONE;       // what the panel has switched the view for
+  float viewBeforePick;
+  Button erasePickButton, areaPickButton;
+  // THE AREA (MOVEMENT, the Area tab): the palette colours it's made of - the places the masses in
+  // the palette's colours are one of them. Each tool can draw only in it, or only outside it
+  volatile boolean[] areaPick = new boolean[PALETTE_SIZE];
+  Row areaStrip;
   volatile float[] paletteUse = new float[0];   // each palette colour's share of the masses (from the painter)
   final int ERASE_COLS = 12, ERASE_H = 22;
   int colW = 340;            // width of a column
@@ -145,7 +160,8 @@ public class Panel extends PApplet {
   int toolOff = 0xFFCC3B2E, toolOffHover = 0xFFE26A5E, toolOn = 0xFF2E9E48;   // a tool's on / off box
   int[] toolSection = new int[TOOLS.length];   // each tool box's colour block
   String curTool;            // the tool whose box is being built
-  Textlabel moveHeader, colourHeader, applyHeader;
+  Textlabel moveHeader, colourHeader, applyHeader, autoHeader;
+  Row autoWave;              // the row AUTOMATION's wave is drawn in
 
   // one row of controls, and when it's shown (see shown())
   class Row {
@@ -282,12 +298,9 @@ public class Panel extends PApplet {
     button("paletteResetPicked", "RESET CHOSEN", 122, 112);
     button("paletteResetAll", "RESET ALL", 240, 80);
     onlyWhen("paletteOpen");
-    // a second masses picture in the palette's colours (VIEW's "masses (palette)")
-    row(26);
-    toggle("paletteMasses", "masses in these colours  (VIEW: masses (palette))", false, 0);
-    onlyWhen("paletteOpen");
+    // there's always a second masses picture in the palette's colours (VIEW's "masses (palette)")
     slider("paletteKeepLight", "keep the masses' lightness", 0, 1, 0.5);
-    onlyWhen("paletteOpen&paletteMasses");
+    onlyWhen("paletteOpen");
     row(2);
 
     // SETUP 6, OUTLINE (the Outline tab plans it): the face in one line - which parts of the parts
@@ -309,6 +322,9 @@ public class Panel extends PApplet {
     toggle("outline_eyes", "eyes", true, 128);
     toggle("outline_nose", "nose", true, 190);
     toggle("outline_mouth", "mouth", true, 252);
+    onlyWhen("outlineOpen");
+    row(24);
+    toggle("outline_objects", "objects  (the edges between everything in objects.png)", false, 0);
     onlyWhen("outlineOpen");
     slider("outline_smooth", "smoothness", 0, 1, 0.5);
     onlyWhen("outlineOpen");
@@ -384,7 +400,8 @@ public class Panel extends PApplet {
     put(r, 0, 4);
     // the stack, top first, as in Photoshop: the five layers, which can be hidden and moved up
     // and down (layerOrder, the Layers tab), then the canvas (SETUP 4's start), which can be
-    // hidden, and the backdrop (SETUP 3), always shown - those two stay at the bottom. A layer's
+    // hidden, and the backdrop (SETUP 3), which can be hidden too (plain white under the canvas) -
+    // those two stay at the bottom. Under them, a tick box for SETUP 6's outline over the view. A layer's
     // tick box moves to its place in draw(); the up / down buttons stay put
     layerRow = cur;
     for (int i = 0; i < LAYERS; i++) {
@@ -399,9 +416,13 @@ public class Panel extends PApplet {
     toggle("canvasOn", "canvas", true, 160);
     cur.dy.set(cur.dy.size() - 1, 4 + 22 * LAYERS);
     canvasShown = (Toggle) all.get("canvasOn");
-    backdropShown = cp5.addToggle("backdropShown").setSize(16, 16).setValue(true).lock();
-    backdropShown.getCaptionLabel().align(ControlP5.RIGHT_OUTSIDE, ControlP5.CENTER).setPaddingX(6);
-    put(backdropShown, 160, 4 + 22 * (LAYERS + 1));
+    // the backdrop: off, the canvas sits on plain white instead
+    toggle("backdropOn", "backdrop", true, 160);
+    cur.dy.set(cur.dy.size() - 1, 4 + 22 * (LAYERS + 1));
+    backdropShown = (Toggle) all.get("backdropOn");
+    // SETUP 6's outline in red over whatever's showing (the painting or a map), a line apart
+    toggle("viewOutline", "outline over it  (SETUP 6)", false, 160);
+    cur.dy.set(cur.dy.size() - 1, 4 + 22 * (LAYERS + 3));
 
     header("DIRECTION FIELD");
     row(26);
@@ -457,7 +478,15 @@ public class Panel extends PApplet {
     toolSlider("leaf", "leaf shapes", 0, 1, 0.35);
     toolSlider("ridge", "ridge along the edge", 0, 1, 0.5);
 
+    // the splatter: what its drops are - any mix of round splatter drops, dots, dashes and
+    // triangles - then the cluster settings they all share
     toolBox(2, false);
+    row(26);
+    toggle("splat_kSplat", "splatter", true, 0);
+    toggle("splat_kDots", "dots", false, 84);
+    toggle("splat_kDashes", "dashes", false, 150);
+    toggle("splat_kTris", "triangles", false, 230);
+    onlyWhen("on splat");
     toolSlider("rate", "clusters per frame", 0.05, 10, 0.5);
     toolSlider("drops", "drops per cluster", 0, 200, 40).setDecimalPrecision(0);
     toolSlider("size", "size (biggest splat)", 2, 120, 24).setDecimalPrecision(0);
@@ -475,19 +504,8 @@ public class Panel extends PApplet {
     toolSlider("wander", "wander", 0, 1, 0.4);
     toolSlider("broken", "broken", 0, 1, 0.2);
 
-    toolBox(4, false);
-    toolSlider("rate", "fragments per frame", 0.1, 100, 10).setDecimalPrecision(1);
-    toolSlider("size", "size", 1, 60, 8).setDecimalPrecision(1);
-    toolSlider("clump", "clumping", 0, 1, 0.5);
-    row(26);
-    toggle("frag_dots", "dots", true, 0);
-    toggle("frag_dashes", "dashes", true, 66);
-    toggle("frag_tris", "triangles", true, 146);
-    toggle("frag_shards", "shards", true, 236);
-    onlyWhen("on frag");
-
     // the pencil (the Pencil tab): how it steers, on which map, and the hand
-    toolBox(5, false);
+    toolBox(4, false);
     radio("pencil_kind", new String[] { "trace the edges", "flow from the map", "wander" }, 2, 0);
     onlyWhen("on pencil");
     row(28);
@@ -513,7 +531,7 @@ public class Panel extends PApplet {
     onlyWhen("on pencil&pencilHatch");
 
     // flow (the Flow tab): postContemp's continuous flow - which picture steers it, and the line
-    toolBox(6, false);
+    toolBox(5, false);
     row(28);
     label("steered by", 0);
     list("flow_src", flowSources, 0, 70, 120);
@@ -534,7 +552,7 @@ public class Panel extends PApplet {
 
     // outline (the Outline tab): the face in one line - which parts it takes in, and the pen
     // (which parts it traces, and how smooth, are in SETUP 6)
-    toolBox(7, false);
+    toolBox(6, false);
     row(20);
     label("the line itself: SETUP 6  OUTLINE", 0);
     onlyWhen("on outline");
@@ -549,7 +567,7 @@ public class Panel extends PApplet {
     onlyWhen("on outline");
 
     // the sponge (the Sponge tab): the chunk, and how it's dabbed
-    toolBox(8, false);
+    toolBox(7, false);
     toolSlider("rate", "stamps per frame", 0.05, 20, 2);
     // its size: one picked from this range - kept, or a new one every dip
     range("sponge_sizeRange", "size range  (pixels across)", 10, 300, 50, 90);
@@ -571,8 +589,12 @@ public class Panel extends PApplet {
     row(24);
     toggle("sponge_fresh", "a new chunk each dip", false, 0);
     onlyWhen("on sponge");
+    // copy: every stamp prints the picture right under it (COLOUR's "pick up from"), not paint carried
+    row(24);
+    toggle("sponge_copy", "copy  (each stamp prints the picture under it)", false, 0);
+    onlyWhen("on sponge");
 
-    toolBox(9, false);
+    toolBox(8, false);
     radio("scrape_kind", new String[] { "knife scrape", "scratches" }, 2, 0);
     onlyWhen("on scrape");
     toolSlider("rate", "scrapes per frame", 0.05, 20, 1);
@@ -604,11 +626,21 @@ public class Panel extends PApplet {
     row(32);
     button("cutOutside", "ERASE OUTSIDE THE OUTLINE", 0, 200);
     onlyWhen("on scrape");
+    // (a test) the same layer emptied wherever there's no object in objects.png - or only one
+    // bigger than "background" (the sky, a field), which counts as no object (Scrape tab)
+    slider("cut_background", "objects bigger than this (% of picture) are background", 1, 100, 20).setDecimalPrecision(0);
+    onlyWhen("on scrape");
+    row(32);
+    button("cutObjects", "ERASE WHAT ISN'T AN OBJECT", 0, 200);
+    onlyWhen("on scrape");
     row(22);
     label("erase where this colour is  (numbers: % of picture)", 0);
     onlyWhen("on scrape");
     row(2 * ERASE_H + 4);
     eraseStrip = cur;
+    onlyWhen("on scrape");
+    row(32);
+    erasePickButton = button("erasePickMasses", "PICK ON THE MASSES", 0, 200);
     onlyWhen("on scrape");
     row(24);
     label("from layer", 0);
@@ -618,10 +650,38 @@ public class Panel extends PApplet {
     button("eraseColour", "ERASE THAT COLOUR'S PLACES", 0, 200);
     onlyWhen("on scrape");
 
+    // AUTOMATION (the Automation tab), under the tools: the chosen tool's size (or length) moved
+    // up and down by a sine wave while it paints, between its shortest and longest. Each tool has
+    // its own; only the chosen one's shows
+    autoHeader = header("AUTOMATION");
+    for (int i = 0; i < TOOLS.length; i++) {
+      String n = TOOLS[i];
+      String what = AUTO_TARGET[i].equals("length") ? "length" : AUTO_TARGET[i].equals("width") ? "width" : "size";
+      String lo = what.equals("length") ? "shortest" : what.equals("width") ? "thinnest" : "smallest";
+      String hi = what.equals("length") ? "longest" : what.equals("width") ? "thickest" : "largest";
+      row(26);
+      toggle(n + "_autoOn", "on  -  the " + what + " follows a wave", false, 0);
+      onlyWhen("edit " + n);
+      Slider a = slider(n + "_autoMin", lo, AUTO_LIMITS[i][0], AUTO_LIMITS[i][1], AUTO_DEFAULT[i][0]);
+      onlyWhen("edit " + n);
+      Slider b = slider(n + "_autoMax", hi, AUTO_LIMITS[i][0], AUTO_LIMITS[i][1], AUTO_DEFAULT[i][1]);
+      onlyWhen("edit " + n);
+      if (!what.equals("width")) {
+        a.setDecimalPrecision(0);
+        b.setDecimalPrecision(0);
+      }
+      slider(n + "_autoSpeed", "speed  (waves a second)", 0.01, 3, 0.25);
+      onlyWhen("edit " + n);
+    }
+    // the wave, with where it is now (drawn in drawAutoWave())
+    row(30);
+    autoWave = cur;
+    row(4);
+
     // ---------------------------------------------------- column 3: MOVEMENT, COLOUR, APPLY
     // ... of the tool chosen in column 2. Every tool has its own set; only the chosen one's shows
     column();
-    float[] followDefault = { 0.6, 0.6, 0, 0.5, 0.3, 0.3, 0, 0, 0, 0.5 };
+    float[] followDefault = { 0.6, 0.6, 0, 0.5, 0.3, 0, 0, 0, 0.5 };
     moveHeader = header("MOVEMENT");
     onlyWhen("notOutline");
     for (int i = 0; i < TOOLS.length; i++) {
@@ -652,13 +712,34 @@ public class Panel extends PApplet {
       onlyWhen("edit " + n + "&weighted " + n);
       slider(n + "_spread", "spread round the mouse", 0, 300, 60).setDecimalPrecision(0);
       onlyWhen("edit " + n + "&mouse " + n);
+      // THE AREA (the Area tab): draw anywhere, only in it or only outside it. Marks only start
+      // where they may; "clip" also cuts off paint that runs over the edge
+      row(20);
+      label("draw  (THE AREA, below)", 0);
+      onlyWhen("edit " + n);
+      radio(n + "_area", new String[] { "anywhere", "in the area", "outside it" }, 3, 0);
+      onlyWhen("edit " + n);
+      row(24);
+      toggle(n + "_areaClip", "clip at the area's edge  (slower)", true, 0);
+      onlyWhen("edit " + n + "&area " + n);
     }
+    // THE AREA, shared by every tool: palette colours, chosen in the strip or on the masses
+    row(22);
+    label("THE AREA: where the masses are these colours", 0);
+    onlyWhen("areaUsed");
+    row(2 * ERASE_H + 4);
+    areaStrip = cur;
+    onlyWhen("areaUsed");
+    row(32);
+    areaPickButton = button("areaPickMasses", "PICK ON THE MASSES", 0, 200);
+    button("areaClear", "CLEAR", 210, 90);
+    onlyWhen("areaUsed");
     row(6);
     onlyWhen("notOutline");
 
     colourHeader = header("COLOUR");
     onlyWhen("notScrape");
-    float[] contrastDefault = { 0, 0, 0.5, 0.6, 0.5, 0.55, 0, 0.9, 0 };
+    float[] contrastDefault = { 0, 0, 0.5, 0.6, 0.55, 0, 0.9, 0 };
     for (int i = 0; i < TOOLS.length - 1; i++) {
       String n = TOOLS[i];
       // flow and outline can draw in one colour of your own instead
@@ -674,13 +755,7 @@ public class Panel extends PApplet {
       onlyWhen("edit " + n);
       radio(n + "_pickup", new String[] { "photo", "canvas (wet)", "mix", "masses", "random  (accent ranges)", "palette  (SETUP 5)" }, 2, 0);
       onlyWhen("edit " + n);
-      // palette: the masses' colour, matched to the palette in this order (the Palette Gen tab)
-      row(28);
-      label("match by", 0);
-      list(n + "_palOrder", matchOrders, 4, 66, 200);
-      onlyWhen("edit " + n + "&palette " + n);
-      slider(n + "_palTolerance", "how close counts as a match", 0, 0.5, 0.1);
-      onlyWhen("edit " + n + "&palette " + n);
+      // (palette: the palette colour of the mass under the point, exactly - the Palette Gen tab)
       slider(n + "_mix", "mix: share from the canvas", 0, 1, 0.5);
       onlyWhen("edit " + n + "&mix " + n);
       if (i <= 1) {
@@ -720,10 +795,10 @@ public class Panel extends PApplet {
 
     applyHeader = header("APPLY");
     onlyWhen("notScrape");
-    float[] opacityDefault = { 0.9, 0.9, 0.9, 0.8, 0.9, 0.9, 0.9, 0.95, 0.9 };
-    float[] washesDefault = { 0.15, 0.15, 0, 0, 0, 0, 0, 0, 0 };
-    int[] layerDefault = { 1, 1, 3, 2, 2, 3, 2, 3, 2 };
-    float[] thicknessDefault = { 0.5, 0.8, 0.4, 0.1, 0.25, 0, 0.2, 0, 0.15 };
+    float[] opacityDefault = { 0.9, 0.9, 0.9, 0.8, 0.9, 0.9, 0.95, 0.9 };
+    float[] washesDefault = { 0.15, 0.15, 0, 0, 0, 0, 0, 0 };
+    int[] layerDefault = { 1, 1, 3, 2, 3, 2, 3, 2 };
+    float[] thicknessDefault = { 0.5, 0.8, 0.4, 0.1, 0, 0.2, 0, 0.15 };
     for (int i = 0; i < TOOLS.length - 1; i++) {
       String n = TOOLS[i];
       row(24);
@@ -839,6 +914,7 @@ public class Panel extends PApplet {
 
   public void draw() {
     background(38);
+    if (picking != pickingShown) showPicking(picking);
     if (sourcesChanged) {
       sourcesChanged = false;
       ScrollableList l = (ScrollableList) all.get("source");
@@ -883,6 +959,7 @@ public class Panel extends PApplet {
     drawPaletteSwatches();
     drawEraseSwatches();
     drawAccentBar();
+    drawAutoWave();
     // a frame round the box of the tool that's on
     int ch = toolSection[max(0, java.util.Arrays.asList(TOOLS).indexOf(editing))];
     if (block[ch] != null && value(editing + "_on") > 0.5) {
@@ -929,14 +1006,13 @@ public class Panel extends PApplet {
         : backdropFileName + "   " + bf.width + " x " + bf.height
           + (backdropMismatch() ? "   (picture " + photo.width + " x " + photo.height + ")" : "   (the picture's size)"));
     }
-    backdropShown.setValue(1);
-    backdropShown.setLock(true);
     if (!editing.equals(shownEditing)) {
       shownEditing = editing;
       int e = java.util.Arrays.asList(TOOLS).indexOf(editing);
       moveHeader.setText("MOVEMENT  -  " + toolTitles[e].toLowerCase());
       colourHeader.setText("COLOUR  -  " + toolTitles[e].toLowerCase());
       applyHeader.setText("APPLY  -  " + toolTitles[e].toLowerCase());
+      autoHeader.setText("AUTOMATION  -  " + toolTitles[e].toLowerCase());
     }
     String locked = shownRunning ? "   (locked while running)" : "";
     sourceText.setText(sourceDone ? faces[min((int) value("source"), faces.length - 1)] + locked : "click to choose a picture");
@@ -988,6 +1064,7 @@ public class Panel extends PApplet {
     if (swatchClicked()) return;
     if (paletteSwatchClicked()) return;
     if (eraseSwatchClicked()) return;
+    if (areaSwatchClicked()) return;
     if (inBlock(startBox, 0)) startDone = true;
     if (inBlock(backdropBox, 0)) backdropDone = true;
     for (int b : new int[] { sourceBox, massBox, paletteBox, outlineBox }) {
@@ -1208,6 +1285,35 @@ public class Panel extends PApplet {
     }
   }
 
+  // AUTOMATION's wave for the chosen tool: one whole wave, shortest at the bottom and longest at
+  // the top, a dot where it is now, and the value now beside it. Faint while it's off
+  void drawAutoWave() {
+    if (autoWave == null || autoWave.y < 0 || block[autoWave.section] == null) return;
+    int i = java.util.Arrays.asList(TOOLS).indexOf(editing);
+    if (i < 0) return;
+    boolean on = value(editing + "_autoOn") > 0.5;
+    float x = block[autoWave.section][0], y = autoWave.y + 2, w = 170, h = 24;
+    noFill();
+    stroke(dark, on ? 255 : 90);
+    strokeWeight(1.5);
+    beginShape();
+    for (int k = 0; k <= 60; k++) {
+      float p = k / 60.0;
+      vertex(x + p * w, y + h - autoShape(p) * h);
+    }
+    endShape();
+    float p = autoPhase[i];
+    noStroke();
+    fill(on ? color(204, 59, 46) : color(dark, 90));
+    ellipse(x + p * w, y + h - autoShape(p) * h, 9, 9);
+    float[] now = autoNow;
+    fill(dark, on ? 255 : 120);
+    textAlign(LEFT, CENTER);
+    String val = AUTO_TARGET[i].equals("width") ? nf(now[i], 0, 1) : str(round(now[i]));
+    text(on ? "now  " + val : "off", x + w + 12, y + h / 2);
+    textAlign(LEFT, BASELINE);
+  }
+
   void drawSwatches() {
     if (value("recolourOpen") < 0.5 || recolourGrid == null || recolourGrid.y < 0) return;
     float[] b = block[recolourGrid.section];
@@ -1393,34 +1499,47 @@ public class Panel extends PApplet {
     textAlign(LEFT, BASELINE);
   }
 
-  // SCRAPE's strip of the palette's colours: the one under the mouse, or -1
-  int eraseSwatchAt(float mx, float my) {
-    if (eraseStrip == null || eraseStrip.y < 0) return -1;
-    float[] b = block[eraseStrip.section];
+  // a strip of the palette's colours (SCRAPE's, THE AREA's): the one under the mouse, or -1
+  int stripSwatchAt(Row strip, float mx, float my) {
+    if (strip == null || strip.y < 0) return -1;
+    float[] b = block[strip.section];
     if (b == null) return -1;
     float w = (colW - 28) / (float) ERASE_COLS;
-    int col = floor((mx - b[0]) / w), row = floor((my - eraseStrip.y) / ERASE_H);
+    int col = floor((mx - b[0]) / w), row = floor((my - strip.y) / ERASE_H);
     if (col < 0 || col >= ERASE_COLS || row < 0 || row > 1) return -1;
     int i = row * ERASE_COLS + col;
     return i < paletteBase.length ? i : -1;
   }
 
   boolean eraseSwatchClicked() {
-    int i = eraseSwatchAt(mouseX, mouseY);
+    int i = stripSwatchAt(eraseStrip, mouseX, mouseY);
     if (i < 0) return false;
-    erasePick = erasePick == i ? -1 : i;    // clicking the chosen one again un-chooses it
+    erasePicks[i] = !erasePicks[i];
+    return true;
+  }
+
+  // THE AREA's strip: any number chosen, each click turns one on or off
+  boolean areaSwatchClicked() {
+    int i = stripSwatchAt(areaStrip, mouseX, mouseY);
+    if (i < 0 || i >= areaPick.length) return false;
+    areaPick[i] = !areaPick[i];
     return true;
   }
 
   void drawEraseSwatches() {
-    if (eraseStrip == null || eraseStrip.y < 0) return;
-    float[] b = block[eraseStrip.section];
+    drawStrip(eraseStrip, erasePicks);
+    drawStrip(areaStrip, areaPick);
+  }
+
+  void drawStrip(Row strip, boolean[] chosen) {
+    if (strip == null || strip.y < 0) return;
+    float[] b = block[strip.section];
     if (b == null) return;
     int[] now = paletteFinal();
     if (now.length == 0) {
       fill(dark);
       textAlign(LEFT, TOP);
-      text("no palette yet - make one in SETUP 5", b[0], eraseStrip.y + 4);
+      text("no palette yet - make one in SETUP 5", b[0], strip.y + 4);
       textAlign(LEFT, BASELINE);
       return;
     }
@@ -1430,7 +1549,7 @@ public class Panel extends PApplet {
     float w = (colW - 28) / (float) ERASE_COLS;
     textSize(10);
     for (int i = 0; i < now.length; i++) {
-      float x = b[0] + (i % ERASE_COLS) * w, y = eraseStrip.y + (i / ERASE_COLS) * ERASE_H;
+      float x = b[0] + (i % ERASE_COLS) * w, y = strip.y + (i / ERASE_COLS) * ERASE_H;
       noStroke();
       fill(now[i]);
       rect(x, y, w - 3, ERASE_H - 3);
@@ -1447,7 +1566,7 @@ public class Panel extends PApplet {
         line(x + w - 6, y + 3, x + 3, y + ERASE_H - 6);
         noStroke();
       }
-      if (i == erasePick) {
+      if (i < chosen.length && chosen[i]) {
         noFill();
         stroke(20);
         strokeWeight(3);
@@ -1460,6 +1579,23 @@ public class Panel extends PApplet {
     }
     textSize(12);
     textAlign(LEFT, BASELINE);
+  }
+
+  // picking on the masses starts (the output window shows the masses in the palette's colours) or
+  // ends (the view as it was, unless it's been changed meanwhile)
+  void showPicking(int p) {
+    RadioButton show = (RadioButton) all.get("showWhat");
+    int pm = java.util.Arrays.asList(showNames).indexOf("masses (palette)");
+    if (p != PICK_NONE && pickingShown == PICK_NONE) {
+      viewBeforePick = show.getValue();
+      show.activate(pm);
+    } else if (p == PICK_NONE) {
+      if (show.getValue() == pm && viewBeforePick != pm) show.activate((int) viewBeforePick);
+    }
+    pickingShown = p;
+    String waiting = "CLICK THE MASSES  (HERE: DONE)", ready = "PICK ON THE MASSES";
+    erasePickButton.setCaptionLabel(p == PICK_ERASE ? waiting : ready);
+    areaPickButton.setCaptionLabel(p == PICK_AREA ? waiting : ready);
   }
 
   // opening the masses box shows the masses; closing it puts the view back and marks them done
@@ -1498,6 +1634,11 @@ public class Panel extends PApplet {
     else if (n.equals("saveNow")) command("save");
     else if (n.equals("printView")) command("print");
     else if (n.equals("cutOutside")) command("cutOutside");
+    else if (n.equals("cutObjects")) command("cutObjects");
+    // pressed again: don't pick
+    else if (n.equals("erasePickMasses")) picking = picking == PICK_ERASE ? PICK_NONE : PICK_ERASE;
+    else if (n.equals("areaPickMasses")) picking = picking == PICK_AREA ? PICK_NONE : PICK_AREA;
+    else if (n.equals("areaClear")) areaPick = new boolean[PALETTE_SIZE];
     else if (n.equals("eraseColour")) command("eraseColour");
     else if (n.equals("loadSettings")) command("load");
     else if (n.equals("nudge")) nudgeAll();
@@ -1562,7 +1703,6 @@ public class Panel extends PApplet {
     if (when.equals("notPalette")) return !paletteOpen;
     if (when.equals("outlineOpen")) return outlineOpen;
     if (when.equals("notOutlineBox")) return !outlineOpen;
-    if (when.equals("paletteMasses")) return value("paletteMasses") > 0.5;
     if (when.equals("notOutline")) return !editing.equals("outline");
     if (when.equals("flowColour")) return value("flow_src") < 2;     // the photo or the masses
     if (when.equals("scrapeDown")) return value("scrape_which") == 0;
@@ -1576,6 +1716,8 @@ public class Panel extends PApplet {
     if (when.startsWith("weighted ")) return value(when.substring(9) + "_startAt") == 1;
     if (when.startsWith("mouse ")) return value(when.substring(6) + "_startAt") == 3;
     if (when.startsWith("grid ")) return value(when.substring(5) + "_startAt") == 2;
+    if (when.startsWith("area ")) return value(when.substring(5) + "_area") > 0;
+    if (when.equals("areaUsed")) return value(editing + "_area") > 0;
     if (when.equals("box")) return value("boxOn") > 0.5;
     if (when.equals("impasto")) return value("impastoOn") > 0.5;
     if (when.equals("backdropKind")) return value("backdropKind") > 0;
@@ -1691,6 +1833,10 @@ public class Panel extends PApplet {
     po.setInt("scheme", paletteSchemeMade);
     po.setInt("hue", paletteHueMade);
     j.setJSONObject("paletteGen", po);
+    // THE AREA's palette colours
+    JSONArray ap = new JSONArray();
+    for (int i = 0; i < areaPick.length; i++) if (areaPick[i]) ap.append(i);
+    j.setJSONArray("areaColours", ap);
     return j;
   }
 
@@ -1715,6 +1861,12 @@ public class Panel extends PApplet {
       ((Range) all.get("accentHue")).setRangeValues(max(0, hsb[0] * 360 - 5), min(360, hsb[0] * 360 + 5));
       ((Range) all.get("accentSat")).setRangeValues(max(0, hsb[1] * 100 - 5), min(100, hsb[1] * 100 + 5));
       ((Range) all.get("accentBri")).setRangeValues(max(0, hsb[2] * 100 - 5), min(100, hsb[2] * 100 + 5));
+    }
+    if (j.hasKey("areaColours")) {
+      boolean[] ap = new boolean[PALETTE_SIZE];
+      JSONArray a = j.getJSONArray("areaColours");
+      for (int i = 0; i < a.size(); i++) if (a.getInt(i) >= 0 && a.getInt(i) < ap.length) ap[a.getInt(i)] = true;
+      areaPick = ap;
     }
     if (j.hasKey("recolourLayers")) {
       JSONArray layersJ = j.getJSONArray("recolourLayers");

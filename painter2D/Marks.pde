@@ -16,8 +16,8 @@ void restartGrid() {
 // The tools (the panel's column 2), in the order they paint. Each has its own settings - its
 // shape in its box, and its MOVEMENT, COLOUR and APPLY - named with the tool's name in front:
 // "knife_size", "splat_drops" ... `tool` is the one painting now, and t("size") reads its setting.
-String[] TOOLS = { "brush", "knife", "splat", "line", "frag", "pencil", "flow", "outline", "sponge", "scrape" };
-String[] toolTitles = { "BRUSH", "PALETTE KNIFE", "SPLATTER", "LINES", "FRAGMENTS", "PENCIL", "FLOW", "OUTLINE", "SPONGE", "SCRAPE" };
+String[] TOOLS = { "brush", "knife", "splat", "line", "pencil", "flow", "outline", "sponge", "scrape" };
+String[] toolTitles = { "BRUSH", "PALETTE KNIFE", "SPLATTER", "LINES", "PENCIL", "FLOW", "OUTLINE", "SPONGE", "SCRAPE" };
 String tool = "brush";
 
 float t(String name) {
@@ -54,8 +54,9 @@ float smoothstep(float e0, float e1, float x) {
   return t * t * (3 - 2 * t);
 }
 
-// where the next mark starts, or null for no mark this time
-float[] startPoint() {
+// where the next mark starts, or null for no mark this time - before THE AREA has its say (see
+// startPoint() in the Area tab)
+float[] startPointAnywhere() {
   int mode = (int) t("startAt");
   if (mode == 1) {
     // weighted by a map: try spots until the map says yes - light places get more marks
@@ -91,7 +92,7 @@ float[] startPoint() {
   }
   if (mode == 3) {
     // round the mouse, only while a button is held down in the output window
-    if (!mousePressed) return null;
+    if (!mousePressed || pickClick) return null;
     float sc = width / (float) photo.width;
     return new float[] { constrain(mouseX / sc + randomGaussian() * t("spread"), 0, photo.width - 1),
                          constrain(mouseY / sc + randomGaussian() * t("spread"), 0, photo.height - 1) };
