@@ -75,7 +75,7 @@ void drawField(float x0, float y0, float s) {
 
 // MOVEMENT's "along the outline": the way the nearest bit of the OUTLINE tool's line goes, at every
 // spot - so marks run alongside the drawing, like echoes of it further out. It's the outline
-// SETUP 6 chooses (its parts and smoothness), made on a coarse grid (the longest side 512 cells)
+// SETUP 3 chooses (its parts and smoothness), made on a coarse grid (the longest side 512 cells)
 // and smoothed a little, so where two parts' directions meet they blend - and count for less
 // there. Made again when the outline changes.
 float[] olineCos, olineSin;        // twice each cell's angle (so a line has no front or back)
@@ -112,7 +112,7 @@ void outlineFieldReady() {
     queue.append(k);
   }
   if (queue.size() == 0) {
-    if (!olineWarned) println("along the outline: the outline has no parts - choose some in SETUP 6");
+    if (!olineWarned) println("along the outline: the outline has no parts - choose some in SETUP 3");
     olineWarned = true;
     return;
   }

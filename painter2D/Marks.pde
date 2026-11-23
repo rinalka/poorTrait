@@ -5,6 +5,7 @@
 // under it (importance, curvature, depth ...) turns it down from place to place - see modulated().
 
 final int ONE = 0, START_END = 1, TWO = 2, CHUNK = 3, COPY = 4;   // the panel's "carry" choices
+final int PICK_MESH = 6;     // "pick up from: mesh" (the Mesh tab)
 final int PICK_RANDOM = 4;   // "pick up from: random" - each mark an accent colour (COLOUR's accent ranges)
 HashMap<String, Integer> gridAt = new HashMap<String, Integer>();   // how far each tool's grid start has got
 
@@ -98,7 +99,7 @@ float[] startPointAnywhere() {
                          constrain(mouseY / sc + randomGaussian() * t("spread"), 0, photo.height - 1) };
   }
   if (mode == 4) {
-    // on the outline (SETUP 6): exactly on its line, anywhere along it - every bit of the line as
+    // on the outline (SETUP 3): exactly on its line, anywhere along it - every bit of the line as
     // likely as any other. Its points are every 2 pixels, so a random one is a random spot on it
     String was = tool;
     tool = "outline";
@@ -108,8 +109,23 @@ float[] startPointAnywhere() {
     int i = (int) random(outlineX.length);
     return new float[] { constrain(outlineX[i], 0, photo.width - 1), constrain(outlineY[i], 0, photo.height - 1) };
   }
+  if (mode >= 5 && mode <= 7) {
+    // a mesh corner, the middle of a mesh triangle, or the middle of a mass: any one of them as
+    // likely as any other, so marks crowd where the shapes are small (where there's detail)
+    float[] pts = mode == 5 ? meshVertices() : mode == 6 ? meshTriangleMiddles() : blobMiddles();
+    if (pts == null || pts.length == 0) {
+      String why = mode == 7 ? "the masses aren't ready - SETUP 2" : "the mesh isn't ready - SETUP 4";
+      if (!why.equals(startWarned)) println(tool + ": start at " + (mode == 5 ? "vertex" : mode == 6 ? "tri" : "blob") + " - " + why);
+      startWarned = why;
+      return null;
+    }
+    startWarned = "";
+    int i = (int) random(pts.length / 2);
+    return new float[] { constrain(pts[i * 2], 0, photo.width - 1), constrain(pts[i * 2 + 1], 0, photo.height - 1) };
+  }
   return new float[] { random(photo.width), random(photo.height) };
 }
+String startWarned = "";
 
 Paint newPaint(float alpha) {
   Paint p = new Paint();
@@ -124,7 +140,8 @@ Paint newPaint(float alpha) {
   }
   if (p.textured()) {
     boolean fromCanvas = p.pickup == 1 || (p.pickup == 2 && random(1) < p.mix);
-    p.tex = fromCanvas && canvasSnap != null ? canvasSnap : p.pickup == 3 && massesImg != null ? massesImg : photo;
+    p.tex = fromCanvas && canvasSnap != null ? canvasSnap : p.pickup == 3 && massesImg != null ? massesImg
+      : p.pickup == PICK_MESH && meshImg != null ? meshImg : photo;
     if (p.pickup == PICK_PALETTE) {
       PImage m = paletteMatchedMasses();
       p.tex = m != null ? m : massesImg != null ? massesImg : photo;
@@ -162,6 +179,7 @@ class Paint {
     if (pickup == 2) return lerpColor(photoAt(x, y), canvasAt(x, y), mix);
     if (pickup == 3) return massesAt(x, y);
     if (pickup == PICK_PALETTE) return paletteAt(x, y);
+    if (pickup == PICK_MESH) return meshAt(x, y);
     return photoAt(x, y);
   }
 

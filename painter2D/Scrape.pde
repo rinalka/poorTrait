@@ -14,9 +14,10 @@
 // then taken off each layer above "down to" (Layers tab, eraseWith). Scrapes are placed by "start
 // at" like the other marks.
 //
-// ERASE OUTSIDE THE OUTLINE (under the box) cuts one layer to the OUTLINE tool's line: each part
+// ERASE OUTSIDE THE LINE (under the box) cuts one layer to the OUTLINE tool's line: each part
 // of the line with OUTLINE's parts as they're set is made a closed shape, and everything on the
-// layer outside all of them comes off. See cutOutsideOutline().
+// layer outside all of them comes off. ERASE INSIDE THE LINE, beside it, takes off what's inside
+// them instead. See cutOutsideOutline().
 //
 // ERASE WHAT ISN'T AN OBJECT (a test) empties the same layer wherever the map maker's objects.png
 // has no object - or has one bigger than the slider above it says, which counts as background.
@@ -119,13 +120,14 @@ void scratch(PGraphics m, float x, float y) {
 }
 
 
-// ---------------------------------------------------------------- erase outside the outline
+// ---------------------------------------------------------------- erase outside (or inside) the outline
 
 // Layer L cut to the outline: the OUTLINE tool's parts (as its settings are now - whether or not
-// it has painted), each made a closed shape, and the paint outside all of them taken off. A part
+// it has painted), each made a closed shape, and the paint outside all of them taken off - or,
+// `outside` false, the paint inside them. A part
 // that doesn't close is closed: if both its ends run off the picture (the silhouette, where the
 // shoulders leave it) along the picture's edge, the short way round; if not, straight across
-void cutOutsideOutline(int L) {
+void cutOutsideOutline(int L, boolean outside) {
   if (layers[L] == null) {
     println("nothing painted yet - RUN first");
     return;
@@ -135,7 +137,7 @@ void cutOutsideOutline(int L) {
   outlinePlanned();
   tool = was;
   if (outlineShapes.isEmpty()) {
-    println("the outline has no parts - choose some in SETUP 6");
+    println("the outline has no parts - choose some in SETUP 3");
     return;
   }
   int w = photo.width, h = photo.height;
@@ -154,14 +156,14 @@ void cutOutsideOutline(int L) {
   }
   inside.endDraw();
   inside.loadPixels();
-  // the mask is solid outside
+  // the mask is solid where paint comes off: outside, or inside
   PImage mask = createImage(w, h, ARGB);
   mask.loadPixels();
-  for (int i = 0; i < w * h; i++) mask.pixels[i] = (inside.pixels[i] >>> 24) > 127 ? 0 : 0xFFFFFFFF;
+  for (int i = 0; i < w * h; i++) mask.pixels[i] = ((inside.pixels[i] >>> 24) > 127) != outside ? 0xFFFFFFFF : 0;
   mask.updatePixels();
   eraseWith(layers[L], mask);
   eraseWith(heights[L], mask);          // the paint's thickness goes with it (Impasto)
-  println("layer " + (L + 1) + " cut to the outline (" + outlineShapes.size() + " parts)");
+  println("layer " + (L + 1) + ": " + (outside ? "outside" : "inside") + " the outline erased (" + outlineShapes.size() + " parts)");
 }
 
 // Layer L emptied wherever there's no object: objects.png's 0, or an object covering more than

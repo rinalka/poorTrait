@@ -49,11 +49,11 @@ volatile boolean isRunning = false, isPaused = false;
 volatile int markCount = 0;
 volatile float outputFps = 0;
 int runSeed = 0;
-color ground = 0xFFDED6C8;   // the canvas colour for SETUP 4's "plain" (222, 214, 200)
+color ground = 0xFFDED6C8;   // the canvas colour for SETUP 6's "plain" (its colour sliders, set every frame)
 boolean around = true;       // used by the Field tab: marks go around the form, or across it
 boolean alongOutline = false; // ... or along the outline (MOVEMENT's third choice)
 
-String[] showNames = { "painting", "photo", "normal", "importance", "curvature", "depth", "light", "masses", "masses (palette)" };
+String[] showNames = { "painting", "photo", "importance", "curvature", "depth", "light", "masses", "masses (palette)", "mesh", "mesh (palette)" };
 String[] blendNames = { "normal", "multiply", "screen", "lightest", "darkest", "add", "subtract" };
 int[] blendModes = { BLEND, MULTIPLY, SCREEN, LIGHTEST, DARKEST, ADD, SUBTRACT };
 
@@ -103,11 +103,14 @@ void draw() {
   ArrayList<String> todo = new ArrayList<String>();
   String c;
   while ((c = commands.poll()) != null) todo.add(c);
+  autoStep();                // a script painting instead of the panel (the Auto tab) - only if one's given
   params = panel.snapshot();
   applyAutomation();         // AUTOMATION's waves over the tools' sizes (the Automation tab)
   for (String t : todo) handle(t);
   updateMasses();
   updatePaletteMasses();
+  updatePaletteMesh();
+  if (params.containsKey("startHue")) ground = hsbColour(v("startHue"), v("startSat"), v("startBri"));   // SETUP 6's plain colour
   updatePaletteMatch();
   updatePaletteUse();
   // nothing paints while a map is showing (VIEW's MAPS) - you couldn't see what it's doing
@@ -179,6 +182,7 @@ void handle(String c) {
       loadFace(name, (int) v("smoothing"));
       panel.sourceDone = true;
       panel.massesDone = false;
+      panel.meshDone = false;
     }
     panel.newSources(isRunning ? -1 : i);
   }
@@ -202,7 +206,8 @@ void handle(String c) {
   else if (c.equals("load")) selectInput("Choose a settings file (.json)", "settingsChosen", new java.io.File(sketchPath("saved") + "/x.json"));
   else if (c.equals("backdropChoose")) chooseBackdrop();
   else if (c.equals("field")) buildField(normalImg, (int) v("smoothing"));
-  else if (c.equals("cutOutside")) cutOutsideOutline((int) v("cut_layer"));
+  else if (c.equals("cutOutside")) cutOutsideOutline((int) v("cut_layer"), true);
+  else if (c.equals("cutInside")) cutOutsideOutline((int) v("cut_layer"), false);
   else if (c.equals("cutObjects")) cutOutsideObjects((int) v("cut_layer"), v("cut_background") / 100);
   else if (c.equals("eraseColour")) erasePaletteColour((int) v("eraseColourLayer"), panel.erasePicks);
   else if (c.equals("layMasses")) layMasses(v("layOpacity"));
@@ -238,9 +243,9 @@ void startRun() {
   println("run: " + faceName + ", seed " + runSeed);
 }
 
-// Before the first RUN on a picture, once SETUP 4 is done, the window shows what the painting
-// will start on: the backdrop (SETUP 3) and the canvas with the plain colour, the masses or the
-// photo (SETUP 4), with the canvas colour and the LAYERS settings as they are. It follows changes
+// Before the first RUN on a picture, once SETUP 6 is done, the window shows what the painting
+// will start on: the backdrop (SETUP 7) and the canvas with the plain colour, the masses or the
+// photo (SETUP 6), with the canvas colour and the LAYERS settings as they are. It follows changes
 // to them. After a run the painting stays instead, until the next RUN or another picture
 boolean previewing = false;  // the canvas holds that preview, not a painting
 String previewKey = "";
@@ -254,7 +259,8 @@ void previewStart() {
     previewing = true;
     previewKey = "";
   }
-  String key = faceName + " " + v("startWith") + " " + ground + " " + System.identityHashCode(massesImg);
+  String key = faceName + " " + v("startWith") + " " + ground + " " + System.identityHashCode(massesImg) + " "
+    + System.identityHashCode(meshImg) + " " + System.identityHashCode(paletteMassesImg) + " " + System.identityHashCode(paletteMeshImg);
   if (!key.equals(previewKey)) {
     previewKey = key;
     clearStart();
@@ -388,10 +394,11 @@ PImage currentView() {
   int s = (int) v("showWhat");
   if (s == 0) return canvas != null ? canvas : photo;
   if (s == 1) return photo;
-  if (s == 2) return normalImg;
-  if (s == 7) return massesImg != null ? massesImg : photo;
-  if (s == 8) return paletteMassesImg != null ? paletteMassesImg : massesImg != null ? massesImg : photo;
-  return maps[s - 2];        // importance, curvature, depth, light
+  if (s == 6) return massesImg != null ? massesImg : photo;
+  if (s == 7) return paletteMassesImg != null ? paletteMassesImg : massesImg != null ? massesImg : photo;
+  if (s == 8) return meshImg != null ? meshImg : photo;
+  if (s == 9) return paletteMeshImg != null ? paletteMeshImg : meshImg != null ? meshImg : photo;
+  return maps[s - 1];        // importance, curvature, depth, light
 }
 
 void draw2D() {
@@ -408,12 +415,7 @@ void draw2D() {
     alongOutline = t("around") == 2;
   }
   if (panel.outlineOpen || v("viewOutline") > 0.5) drawOutlinePreview(width / (float) photo.width);
-  if (canvas == null) {
-    fill(255, 200);
-    textSize(14);
-    textAlign(CENTER, BOTTOM);
-    text("pick a picture and press RUN on the panel", width / 2, height - 12);
-  }
+  if (panel.meshOpen) drawMeshPreview(width / (float) photo.width);     // the mesh's triangles
 }
 
 
@@ -506,10 +508,20 @@ void settingsChosen(java.io.File f) {
 boolean pickClick = false;
 
 void mousePressed() {
+  // (for finding a fault - take out once "start at: mouse" works) what the painter is doing
+  String s = "painting click " + mouseX + "," + mouseY + "  running=" + isRunning + " paused=" + isPaused
+    + " view=" + showNames[constrain((int) v("showWhat"), 0, showNames.length - 1)] + " picking=" + panel.picking + "  tools on:";
+  for (int i = 0; i < TOOLS.length; i++) if (toolOn(i)) {
+    String n = TOOLS[i];
+    s += "  " + n + " (start at " + (int) v(n + "_startAt") + ", draw " + (int) v(n + "_area") + ", layer " + ((int) v(n + "_layer") + 1)
+      + (v("layerOn" + (int) v(n + "_layer")) < 0.5 ? " HIDDEN" : "") + ")";
+  }
+  println(s);
   int p = panel.picking;
   if (p == panel.PICK_NONE) return;
   pickClick = true;
-  int pick = paletteColourAt(mouseX * photo.width / (float) width, mouseY * photo.height / (float) height);
+  float px = mouseX * photo.width / (float) width, py = mouseY * photo.height / (float) height;
+  int pick = p == panel.PICK_AREA && v("areaFrom") == 1 ? meshPaletteColourAt(px, py) : paletteColourAt(px, py);
   if (pick < 0 || pick >= PALETTE_SIZE) return;
   boolean[] picks = p == panel.PICK_ERASE ? panel.erasePicks : panel.areaPick;
   picks[pick] = !picks[pick];

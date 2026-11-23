@@ -16,6 +16,8 @@
 //
 // The masses can start the canvas (MASSES "start the canvas with"), be laid over it at any time
 // (LAY ON NOW), and be where the brushes pick up their paint (COLOUR "pick up from: masses").
+//
+// The mesh (the Mesh tab) is a second picture of the same kind, made of triangles, beside these.
 
 // The masses always have 24 paints, one for each of SETUP 5's palette colours (the Palette Gen
 // tab), so the masses in the palette's colours use every one of them
@@ -51,13 +53,14 @@ float[] massSettings() {
 // true until the masses for this picture and these settings are made and showing
 boolean massesPending() {
   return massBusy || massesImg == null || massShown == null || !massShown.face.equals(faceName)
-    || !java.util.Arrays.equals(massSettings(), massAsked);
+    || !java.util.Arrays.equals(massSettings(), massAsked) || meshPending();
 }
 
 // Every frame: start new masses if the settings or the picture changed (but not while a panel
 // slider is still being dragged), and show finished ones.
 void updateMasses() {
   float[] want = massSettings();
+  updateMesh();                // the mesh too (the Mesh tab)
   boolean changed = massAsked == null || !java.util.Arrays.equals(want, massAsked) || !faceName.equals(massAskedFace);
   if (changed && !massBusy && !panel.mousePressed && !isRunning) {
     massAsked = want;
@@ -69,7 +72,9 @@ void updateMasses() {
     new Thread(new Runnable() {
       public void run() {
         try {
-          massResult = makeMasses(src, face, want);
+          synchronized (massLock) {
+            massResult = makeMasses(src, face, want);
+          }
         } catch (Exception e) {
           println("masses failed: " + e);
           e.printStackTrace();
@@ -99,6 +104,9 @@ String mFace;
 int[] mLabels, mSmoothed;
 int mBlobCount, mRegions;
 float[] mHave;
+// the masses and the mesh are made in threads of their own, one at a time: blobStats and
+// joinBlobs (the Join tab) keep their workings in shared variables
+final Object massLock = new Object();
 
 MassResult makeMasses(PImage src, String face, float[] s) {
   int t0 = millis();
@@ -245,6 +253,47 @@ int rgbOf(long r, long g, long b) {
 
 float labDist2(float[] p, float[] q) {
   return sq(p[0] - q[0]) + sq(p[1] - q[1]) + sq(p[2] - q[2]);
+}
+
+
+// MOVEMENT's "start at blob": the middle of each mass (region), as x, y, ... in the photo's
+// pixels - its centre, or, where that falls outside it (a crescent, a ring), the mass's pixel
+// nearest its centre. Made again when the masses change; null without them
+float[] blobPts;
+MassResult blobPtsFor;
+
+float[] blobMiddles() {
+  MassResult r = massShown;
+  if (r == blobPtsFor) return blobPts;
+  blobPtsFor = r;
+  blobPts = null;
+  if (r == null) return null;
+  int n = 0;
+  for (int k : r.regionOf) n = max(n, k + 1);
+  double[] sx = new double[n], sy = new double[n];
+  int[] count = new int[n];
+  for (int i = 0; i < r.regionOf.length; i++) {
+    int k = r.regionOf[i];
+    sx[k] += i % r.w;
+    sy[k] += i / r.w;
+    count[k]++;
+  }
+  float[] best = new float[n];
+  int[] at = new int[n];
+  java.util.Arrays.fill(best, Float.MAX_VALUE);
+  for (int i = 0; i < r.regionOf.length; i++) {
+    int k = r.regionOf[i];
+    float d = sq((float) (i % r.w - sx[k] / count[k])) + sq((float) (i / r.w - sy[k] / count[k]));
+    if (d < best[k]) { best[k] = d; at[k] = i; }
+  }
+  FloatList p = new FloatList();
+  for (int k = 0; k < n; k++) {
+    if (count[k] == 0) continue;
+    p.append((at[k] % r.w + 0.5) * photo.width / r.w);
+    p.append((at[k] / r.w + 0.5) * photo.height / r.h);
+  }
+  blobPts = p.array();
+  return blobPts;
 }
 
 

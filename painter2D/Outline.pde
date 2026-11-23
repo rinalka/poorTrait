@@ -1,7 +1,9 @@
 // Outline: the face drawn in line, part by part - the panel's OUTLINE tool, drawing the line
-// SETUP 6 chooses (which MOVEMENT's "along the outline" follows too: the Field tab).
+// SETUP 3 chooses (which MOVEMENT's "along the outline" follows too: the Field tab).
 //
-// The line is planned once for the picture, from what the map maker found (SETUP 6 ticks which):
+// The line is planned once for the picture, from what the map maker found (SETUP 3 says which):
+// SETUP 3 chooses a face or objects:
+//   face - any of these:
 //   silhouette      the edge of the whole figure - hair, ears, neck and shoulders (parts.png,
 //                   wherever it isn't background), leaving out where it runs off the picture
 //   hairline        where the hair meets the face (the edge of the hair in parts.png, only where
@@ -9,9 +11,11 @@
 //   neck & clothes  where the clothes meet the neck and skin
 //   face, brows, eyes (with the irises), nose, mouth
 //                   the face landmarks' outlines (landmarks.json)
-//   objects         the edges between the things the map maker's object finder (SAM 2) cut the
-//                   picture into (objects.png) - a horse, a house, the sky, a hat - each edge once
-// Each part is smoothed (SETUP 6's "smoothness"), and they're drawn in order: from the end of one part the
+//   objects - the edges between the things the map maker's object finder (SAM 2) cut the
+//                   picture into (objects.png) - a horse, a house, a hat - each edge once. Objects
+//                   bigger than "leave out over" (the sky, a field) or smaller than "leave out
+//                   under" are left out (their edges with a kept object stay)
+// Each part is smoothed (SETUP 3's "smoothness"), and they're drawn in order: from the end of one part the
 // pen lifts and goes down again on the nearest part not drawn yet. With "one unbroken line" it
 // doesn't lift: it sweeps round to the next part in a curve, the way a one-line drawing travels
 // from feature to feature.
@@ -35,7 +39,7 @@ boolean outlineRestart = true;     // CLEAR and RUN start the pen again from the
 float opax, opay, opbx, opby;
 final float OUTLINE_STEP = 2;
 
-String[] outlineParts = { "sil", "hair", "clothes", "face", "brows", "eyes", "nose", "mouth", "objects" };
+String[] outlineParts = { "sil", "hair", "clothes", "face", "brows", "eyes", "nose", "mouth" };   // a face's
 
 void resetOutline() {
   outlineAt = 0;
@@ -47,7 +51,7 @@ void resetOutline() {
 // the line planned again if the picture or the parts or smoothness have changed (the outline tool
 // has to be the one t() reads)
 void outlinePlanned() {
-  String key = faceName + " " + nf(t("smooth"), 0, 2) + " " + t("join");
+  String key = faceName + " " + nf(t("smooth"), 0, 2) + " " + t("join") + " " + t("kind") + " " + t("bigObj") + " " + t("smallObj");
   for (String p : outlineParts) key += t(p) > 0.5 ? "1" : "0";
   if (!key.equals(outlineFor)) {
     outlineFor = key;
@@ -142,7 +146,8 @@ void planOutline() {
   int w = photo.width, h = photo.height;
 
   // the parts picture: the silhouette, the hairline, the neck of the clothes
-  if (new java.io.File(dir + "parts.png").exists() && (t("sil") > 0.5 || t("hair") > 0.5 || t("clothes") > 0.5)) {
+  boolean face = t("kind") == 0;
+  if (face && new java.io.File(dir + "parts.png").exists() && (t("sil") > 0.5 || t("hair") > 0.5 || t("clothes") > 0.5)) {
     // traced at the parts picture's own size (often smaller than the photo), then stretched to
     // the photo's
     PImage pi = loadImage(dir + "parts.png");
@@ -168,24 +173,31 @@ void planOutline() {
   }
 
   // the objects picture: each pixel is the number of the object it belongs to (0: none). Each
-  // object's edge is kept only where it meets a lower number (or nothing), so an edge two objects
-  // share is drawn once
-  if (t("objects") > 0.5 && new java.io.File(dir + "objects.png").exists()) {
+  // object's edge is kept only where it meets a lower number (or nothing, or an object left out),
+  // so an edge two objects share is drawn once
+  if (!face && !new java.io.File(dir + "objects.png").exists()) println("outline: no objects.png for " + faceName + " - make its maps again with the map maker");
+  if (!face && new java.io.File(dir + "objects.png").exists()) {
     PImage oi = loadImage(dir + "objects.png");
     oi.loadPixels();
     int pw = oi.width, ph = oi.height;
     int[] id = new int[pw * ph];
     int most = 0;
+    int[] count = new int[256];
     for (int i = 0; i < pw * ph; i++) {
       id[i] = oi.pixels[i] >> 16 & 255;
       most = max(most, id[i]);
+      count[id[i]]++;
     }
+    boolean[] out = new boolean[256];
+    out[0] = true;
+    for (int k = 1; k < 256; k++) out[k] = count[k] > t("bigObj") / 100 * pw * ph || count[k] < t("smallObj") / 100 * pw * ph;
     boolean[] in = new boolean[pw * ph], below = new boolean[pw * ph];
     float sx = w / (float) pw, sy = h / (float) ph;
     for (int k = 1; k <= most; k++) {
+      if (out[k]) continue;
       for (int i = 0; i < pw * ph; i++) {
         in[i] = id[i] == k;
-        below[i] = id[i] < k;
+        below[i] = id[i] < k || out[id[i]];
       }
       for (OutlinePart e : edgeOf(in, below, pw, ph)) {
         if (sx != 1 || sy != 1) for (int i = 0; i < e.size(); i++) { e.x.mult(i, sx); e.y.mult(i, sy); }
@@ -195,7 +207,7 @@ void planOutline() {
   }
 
   // the landmarks' outlines
-  if (new java.io.File(dir + "landmarks.json").exists()) {
+  if (face && new java.io.File(dir + "landmarks.json").exists()) {
     JSONObject lm = loadJSONObject(dir + "landmarks.json");
     JSONArray faces = lm.getJSONArray("faces");
     if (faces.size() > 0) {
@@ -590,7 +602,7 @@ void resampleInto(FloatList x, FloatList y, float step) {
   y.append(ry.array());
 }
 
-// while SETUP 6 is open: the outline's parts in red over the picture, so you can see what it
+// while SETUP 3 is open: the outline's parts in red over the picture, so you can see what it
 // traces (s: the window's pixels for each of the photo's)
 void drawOutlinePreview(float s) {
   String was = tool;

@@ -1,9 +1,9 @@
 // Area: THE AREA (in MOVEMENT) - a part of the picture the tools can be kept in, or kept out of.
 //
 // It's made of palette colours (SETUP 5): the places where the masses in the palette's colours
-// (VIEW's "masses (palette)") are one of the chosen colours. They're chosen in the strip under
-// MOVEMENT - click to turn each on or off - or with PICK ON THE MASSES, clicking the masses in
-// the output window. The area is shared by every tool; each tool's "draw" says what it does with
+// (VIEW's "masses (palette)") - or, with "from: mesh", the mesh in them (VIEW's "mesh (palette)")
+// - are one of the chosen colours. They're chosen in the strip under MOVEMENT - click to turn each
+// on or off - or with PICK ON THE MASSES / MESH, clicking that picture in the output window. The area is shared by every tool; each tool's "draw" says what it does with
 // it: anywhere (the area doesn't matter), only in the area, or only outside it.
 //
 // Two things keep a tool where it should be:
@@ -40,28 +40,40 @@ boolean makeArea() {
   boolean[] picks = panel.areaPick;
   boolean any = false;
   for (boolean b : picks) any |= b;
+  boolean fromMesh = v("areaFrom") == 1;
   MassResult r = massShown;
-  if (!any || pal.length == 0 || r == null) {
-    if (!areaWarned) println("THE AREA: " + (!any ? "no colours chosen" : pal.length == 0 ? "no palette yet" : "the masses aren't ready")
+  MeshResult mr = meshShown;
+  int[] mIdx = meshPalIndex;
+  boolean ready = fromMesh ? mr != null && mIdx != null : r != null;
+  if (!any || pal.length == 0 || !ready) {
+    if (!areaWarned) println("THE AREA: " + (!any ? "no colours chosen" : pal.length == 0 ? "no palette yet"
+      : fromMesh ? "the mesh in palette colours isn't ready" : "the masses aren't ready")
       + " - drawing anywhere");
     areaWarned = true;
     return false;
   }
   areaWarned = false;
-  String key = System.identityHashCode(r) + " " + java.util.Arrays.toString(lookShown) + " "
+  String key = (fromMesh ? "mesh " + System.identityHashCode(mr) + " " + System.identityHashCode(mIdx) : System.identityHashCode(r) + " " + java.util.Arrays.toString(lookShown)) + " "
     + java.util.Arrays.toString(pal) + " " + java.util.Arrays.toString(picks) + " " + photo.width + "x" + photo.height;
   if (key.equals(areaFor)) return true;
   areaFor = key;
-  int[] choice = paletteMassChoice(r, pal);
-  areaW = r.w;
-  areaH = r.h;
-  areaIn = new boolean[r.w * r.h];
-  PImage in = createImage(r.w, r.h, ARGB), out = createImage(r.w, r.h, ARGB);
+  // each pixel's palette colour: its mass's, or its mesh shape's
+  int w = fromMesh ? mr.w : r.w, h = fromMesh ? mr.h : r.h;
+  int[] colourOf = new int[w * h];
+  if (fromMesh) for (int i = 0; i < colourOf.length; i++) colourOf[i] = mIdx[mr.regionOf[i]];
+  else {
+    int[] choice = paletteMassChoice(r, pal);
+    for (int i = 0; i < colourOf.length; i++) colourOf[i] = choice[r.paintOf[i]];
+  }
+  areaW = w;
+  areaH = h;
+  areaIn = new boolean[w * h];
+  PImage in = createImage(w, h, ARGB), out = createImage(w, h, ARGB);
   in.loadPixels();
   out.loadPixels();
   int n = 0;
   for (int i = 0; i < areaIn.length; i++) {
-    int c = choice[r.paintOf[i]];
+    int c = colourOf[i];
     areaIn[i] = c >= 0 && c < picks.length && picks[c];
     in.pixels[i] = areaIn[i] ? 0xFFFFFFFF : 0;
     out.pixels[i] = areaIn[i] ? 0 : 0xFFFFFFFF;

@@ -1,29 +1,24 @@
 // The control panel: a second window, built with controlP5.
 //
 // Four columns:
-//   SETUP 1 - 4                   the source picture, the masses, the backdrop and what the
-//                                 canvas starts with, each a box whose square
-//                                 turns from red to green once it's done - 1 and 2 are locked
-//                                 while a run is going
-//   SETUP 5  PALETTE GEN          a palette of 24 colours on a colour scheme - opened, it takes
-//                                 the place of SETUP 1 - 4 and RECOLOUR
-//   SETUP 6  OUTLINE              the face in one line: which parts it traces, and how smooth -
-//                                 for the OUTLINE tool and MOVEMENT's "along the outline".
-//                                 Opened, it takes the place of the others, and the painting
-//                                 window shows the line
-//   RECOLOUR                     under them: changing the painting's colours a few at a time -
-//                                 opened, it takes the place of the SETUP boxes
+//   SETUP 1 - 7                   source, masses, outline, mesh, palette, canvas, backdrop: a box
+//                                 each, two lines (a square, red until it's done and then green,
+//                                 with the title; and where it's got to). Clicking one opens it
+//                                 over the boxes below; clicking its title closes it and marks it
+//                                 done. Until all seven are done the rest of the panel (but VIEW) is greyed
+//                                 out and locked
 //   the tools                     what does the drawing: brush, palette knife, splatter, lines,
-//                                 pencil, flow, outline, scrape - one at a time, with its
+//                                 pencil, flow, outline, sponge, scrape - one at a time, with its
 //                                 shape settings - and under them AUTOMATION, the chosen tool's
-//                                 size or length moved up and down by a wave (the Automation tab)
+//                                 size or length moved up and down by a wave (the Automation tab),
+//                                 and RECOLOUR, changing the painting's colours a few at a time
 //   MOVEMENT, COLOUR, APPLY       how the chosen tool moves, where its colour comes from, and
 //                                 how solid it is
 //   LAYER 1 - 5, CANVAS,          a box for each layer, the canvas and the backdrop's colours,
 //   BACKDROP, SHADOW BOX,         the layers floating apart, lit from one side, and thick paint
 //   IMPASTO                       catching the light
-// and along the bottom, VIEW (the MAPS and LAYERS lists) and DIRECTION FIELD under column 1, and RUN, one
-// strip under columns 2 - 4, at the very bottom.
+// and along the bottom, VIEW (the MAPS and LAYERS lists, and the direction field) under column
+// 1, and RUN, one strip under columns 2 - 4, at the very bottom.
 //
 // Every tool has its own MOVEMENT, COLOUR and APPLY settings, named with the tool in front
 // ("knife_follow", "splat_opacity" ...). Only one tool is on at a time: switching one on (its
@@ -61,6 +56,7 @@ public class Panel extends PApplet {
   IntList colLevel = new IntList();    // a bottom column whose top this one's is level with, or -1
   int topColumns = 0;
   Row cur;                   // the row being built
+  int curBand = 0;           // the band rows being built go in (Row's band)
   boolean live;              // whether the controls being built can change while running
   volatile boolean layoutWanted = true;
   boolean shownRunning = false;
@@ -76,11 +72,26 @@ public class Panel extends PApplet {
   int[] LAYER_COLOURS = { 0xFFF5C4C4, 0xFFF6D5B4, 0xFFEEC3DE, 0xFFF2E1AE, 0xFFDDC6EF, 0xFFE8CFC2, 0xFFE9D6CB };
   int runGreen = 0xFF2E9E48, runGreenHover = 0xFF45B860, runRed = 0xFFCC3B2E, runRedHover = 0xFFE26A5E;
   int orange = 0xFFE08A1E, orangeHover = 0xFFF0A040;
-  String[] startNames = { "plain", "masses", "photo" };
-  // the setup boxes: their colour blocks, the line under each title, and whether each is done
-  int sourceBox, massBox, backdropBox, startBox;
-  Textlabel boxTitle, massTitle, sourceText, massText;
-  Textlabel backdropText;             // SETUP 3: the loaded picture's name and size
+  String[] startNames = { "plain", "masses", "photo", "mesh", "masses  (palette colours)", "mesh  (palette colours)" };
+  // the setup boxes (1 SOURCE, 2 MASSES, 3 OUTLINE, 4 MESH, 5 PALETTE GEN, 6 CANVAS, 7 BACKDROP): their colour blocks, the line under each title, and whether each is done.
+  // S_SRC ... are their numbers (SETUP 1 is 0); one at a time is open (openSetup, -1: none)
+  final int S_SRC = 0, S_MASS = 1, S_OUTL = 2, S_MESH = 3, S_PAL = 4, S_START = 5, S_BACK = 6, S_COUNT = 7;
+  int sourceBox, massBox, meshBox, backdropBox, startBox;
+  int[] boxRowFrom = new int[S_COUNT + 1], boxContentFrom = new int[S_COUNT];   // their rows in column 1
+  Textlabel[] boxTitles = new Textlabel[S_COUNT], boxTexts = new Textlabel[S_COUNT];
+  String[] boxNames = new String[S_COUNT];
+  volatile int openSetup = -1;
+  volatile boolean meshOpen = false, meshDone = false, paletteDone = false;
+  boolean inSetup = false;            // the controls being built are in a setup box
+  boolean inView = false;             // ... or in VIEW, which is never greyed out
+  java.util.HashSet<String> viewGroup = new java.util.HashSet<String>();
+  boolean gated = false;              // the rest of the panel is greyed out (not every box done yet)
+  java.util.HashSet<String> setupGroup = new java.util.HashSet<String>();
+  int viewSection;
+  float shownFor = -1;                // the view an open box switched to
+  int boxRed = 0xFFD9B8B4, boxGreen = 0xFFBBD3B6;   // a setup box's block: not done, done
+  Textlabel boxTitle, massTitle, sourceText, massText, meshText;
+  Textlabel backdropText;             // SETUP 7: the loaded picture's name and size
   volatile boolean sourceDone, massesDone, backdropDone, startDone;
   volatile boolean massesOpen = false;
   float showBefore;                   // put back when the masses box closes
@@ -114,7 +125,7 @@ public class Panel extends PApplet {
   // reads them from its own thread
   int paletteBox;
   volatile boolean paletteOpen = false;
-  // SETUP 6, OUTLINE: opened in place of the other boxes; done once it's been looked at
+  // SETUP 3, OUTLINE: done once it's been looked at
   int outlineBox;
   volatile boolean outlineOpen = false, outlineDone = false;
   Textlabel outlineTitle, outlineText;
@@ -148,6 +159,7 @@ public class Panel extends PApplet {
   volatile boolean[] areaPick = new boolean[PALETTE_SIZE];
   Row areaStrip;
   volatile float[] paletteUse = new float[0];   // each palette colour's share of the masses (from the painter)
+  volatile float[] meshPaletteUse = new float[0];   // ... and of the mesh in palette colours
   final int ERASE_COLS = 12, ERASE_H = 22;
   int colW = 340;            // width of a column
   int runSection = -1;       // RUN's strip, three columns wide
@@ -160,7 +172,7 @@ public class Panel extends PApplet {
   int toolOff = 0xFFCC3B2E, toolOffHover = 0xFFE26A5E, toolOn = 0xFF2E9E48;   // a tool's on / off box
   int[] toolSection = new int[TOOLS.length];   // each tool box's colour block
   String curTool;            // the tool whose box is being built
-  Textlabel moveHeader, colourHeader, applyHeader, autoHeader;
+  Textlabel moveHeader, colourHeader, applyHeader;
   Row autoWave;              // the row AUTOMATION's wave is drawn in
 
   // one row of controls, and when it's shown (see shown())
@@ -169,6 +181,7 @@ public class Panel extends PApplet {
     float h;
     float y = -1;            // where layout() put it, or -1 if it's hidden
     int section;
+    int band;                // 0, or a part of its section drawn a shade lighter or darker (drawBands)
     ArrayList<ControllerInterface> items = new ArrayList<ControllerInterface>();
     ArrayList<String> itemWhen = new ArrayList<String>();
     FloatList dx = new FloatList(), dy = new FloatList();
@@ -195,21 +208,32 @@ public class Panel extends PApplet {
     cp5.setColorActive(color(110, 170, 240));
     cp5.setColorBackground(color(60));
 
-    // ---------------------------------------------------- column 1: SETUP 1 - 4
-    // The setup is four boxes, done in order: click one to choose. Each has a square before its
-    // title, red until it's done and then green. 1 and 2 are locked while a run is going (all but
-    // the masses' palette sliders)
+    // ---------------------------------------------------- column 1: SETUP 1 - 7
+    // Seven boxes, each two lines - a square (red, then green once it's done) with the title, and
+    // a line saying where it's got to. They all start not done. Clicking a box opens it, over the
+    // boxes below it (and VIEW); clicking its title again closes it and marks it done (SOURCE and
+    // CANVAS close themselves once a choice is made). Until every box is done, the rest of the
+    // panel is greyed out. While a run is going they're all locked (and can't be opened). See
+    // openBox() and closeBox()
     column();
     live = false;
+    inSetup = true;
+    setupStart(S_SRC);
     sourceBox = setupBox("SETUP 1   SOURCE");
+    boxTitles[S_SRC] = boxTitle;
     sourceText = boxText("source");
+    boxTexts[S_SRC] = sourceText;
     setupList("source", sourceItems());
-    // the masses (the Masses tab): clicking the box opens these and shows the masses; clicking
-    // its title again closes them. They're made again when one of the sliders is let go, and RUN
-    // waits for them
+    setupContent(S_SRC);
+
+    // the masses (the Masses tab): opening the box shows them. They're made again when one of the
+    // sliders is let go, and RUN waits for them
+    setupStart(S_MASS);
     massBox = setupBox("SETUP 2   MASSES");
-    massTitle = boxTitle;
+    boxTitles[S_MASS] = boxTitle;
     massText = boxText("");
+    boxTexts[S_MASS] = massText;
+    setupContent(S_MASS);
     massSlider("massBlobs", "blobs", 200, 6000, 1500).setDecimalPrecision(0);
     massSlider("massRound", "roundness", 1, 40, 10).setDecimalPrecision(1);
     massSlider("massJoin", "join similar neighbours", 0, 40, 8).setDecimalPrecision(1);
@@ -220,7 +244,6 @@ public class Panel extends PApplet {
     massSlider("massSat", "palette saturation", 0, 2, 1);
     massSlider("massBri", "palette brightness", 0, 2, 1);
     row(6);
-    onlyWhen("massesOpen");
     // for later: laying the masses on during a run, and textured paint (never shown for now)
     row(32);
     button("layMasses", "LAY ON NOW", 0, 110);
@@ -230,15 +253,122 @@ public class Panel extends PApplet {
     toggle("massTexture", "textured paint", false, 0);
     button("massSeed", "NEW TEXTURE", 170, 110);
     onlyWhen("later");
-    // the backdrop, under the canvas (the Backdrop tab) - always open, done once it's clicked,
-    // and it can change any time. "load ..." asks for a picture (CHOOSE FILE for another); one
-    // that isn't the photo's size is scaled to it or tiled
-    backdropBox = setupBox("SETUP 3   BACKDROP");
-    boxText("").setText("what the canvas sits on");
+
+    // SETUP 3, OUTLINE (the Outline tab plans it): the face in one line - which parts of the parts
+    // map and the face landmarks it traces, and how smooth. The OUTLINE tool draws it, and
+    // MOVEMENT's "along the outline" follows it. Open, the line is drawn over the picture
+    setupStart(S_OUTL);
+    outlineBox = setupBox("SETUP 3   OUTLINE");
+    boxTitles[S_OUTL] = boxTitle;
+    outlineText = boxText("");
+    boxTexts[S_OUTL] = outlineText;
+    setupContent(S_OUTL);
+    // a face (its parts, from parts.png and the landmarks) or the objects (objects.png) - only
+    // the chosen one's options show
+    radio("outline_kind", new String[] { "face", "objects" }, 2, 0);
+    row(24);
+    toggle("outline_sil", "silhouette", true, 0);
+    toggle("outline_hair", "hairline", true, 100);
+    toggle("outline_clothes", "neck & clothes", true, 190);
+    onlyWhen("outlineFace");
+    row(24);
+    toggle("outline_face", "face", true, 0);
+    toggle("outline_brows", "brows", true, 60);
+    toggle("outline_eyes", "eyes", true, 128);
+    toggle("outline_nose", "nose", true, 190);
+    toggle("outline_mouth", "mouth", true, 252);
+    onlyWhen("outlineFace");
+    // objects bigger than "over" (the sky, a field) or smaller than "under" are left out
+    slider("outline_bigObj", "leave out over  (% of picture)", 1, 100, 30).setDecimalPrecision(0);
+    onlyWhen("outlineObjects");
+    slider("outline_smallObj", "leave out under  (% of picture)", 0, 5, 0.1);
+    onlyWhen("outlineObjects");
+    slider("outline_smooth", "smoothness", 0, 1, 0.5);
+    row(2);
+
+    // SETUP 4, the mesh (the Mesh tab): triangles, made beside the masses - opening the box shows
+    // it, with the triangles' sides. It comes after the outline, which it can put points along
+    live = false;
+    setupStart(S_MESH);
+    meshBox = setupBox("SETUP 4   MESH");
+    boxTitles[S_MESH] = boxTitle;
+    meshText = boxText("");
+    boxTexts[S_MESH] = meshText;
+    setupContent(S_MESH);
+    slider("meshSpacing", "point spacing  (pixels)", 3, 40, 10).setDecimalPrecision(0);
+    slider("meshStrength", "edge strength  (fewer points)", 0, 100, 20).setDecimalPrecision(0);
+    slider("meshFill", "points in flat places", 0, 1, 0.3);
+    row(24);
+    toggle("meshOutline", "points along the outline  (SETUP 3: face or objects)", false, 0);
+    slider("meshEdgePoints", "points on the edges", 0, 4000, 800).setDecimalPrecision(0);
+    onlyWhen("meshEdges");
+    slider("meshJoin", "join similar neighbours", 0, 40, 0).setDecimalPrecision(1);
+    row(6);
+    live = true;
+
+    // SETUP 5, PALETTE GEN (the Palette Gen tab): a palette of 24 colours on a colour scheme.
+    // Opening it the first time makes one, and shows the masses in its colours. Choosing a scheme
+    // or GENERATE makes a new palette; the "whole palette" sliders change every colour, and the
+    // "chosen colours" ones the swatches clicked
+    setupStart(S_PAL);
+    paletteBox = setupBox("SETUP 5   PALETTE GEN");
+    boxTitles[S_PAL] = boxTitle;
+    paletteText = boxText("");
+    boxTexts[S_PAL] = paletteText;
+    setupContent(S_PAL);
+    radio("paletteScheme", schemeNames, 2, 0);
+    row(32);
+    button("paletteGenerate", "GENERATE", 0, 100);
+    row(PAL_H * ((PALETTE_SIZE + PAL_COLS - 1) / PAL_COLS) + 6);
+    paletteGrid = cur;
+    row(20);
+    label("whole palette", 0);
+    slider("paletteHue", "hue  (degrees)", -180, 180, 0).setDecimalPrecision(0);
+    slider("paletteSat", "saturation", 0, 2, 1);
+    slider("paletteBri", "brightness", 0, 2, 1);
+    row(20);
+    label("chosen colours  (click the swatches)", 0);
+    slider("paletteHueC", "hue  (degrees)", -180, 180, 0).setDecimalPrecision(0);
+    slider("paletteSatC", "saturation", 0, 2, 1);
+    slider("paletteBriC", "brightness", 0, 2, 1);
+    row(32);
+    button("paletteAll", "ALL", 0, 50);
+    button("paletteNone", "NONE", 56, 60);
+    button("paletteResetPicked", "RESET CHOSEN", 122, 112);
+    button("paletteResetAll", "RESET ALL", 240, 80);
+    // there's always a second masses picture in the palette's colours (VIEW's "masses (palette)")
+    slider("paletteKeepLight", "keep the masses' lightness", 0, 1, 0.5);
+    row(2);
+
+    // SETUP 6, CANVAS: what the canvas starts with at RUN and CLEAR (its title closes it)
+    setupStart(S_START);
+    startBox = setupBox("SETUP 6   CANVAS");
+    boxTitles[S_START] = boxTitle;
+    boxTexts[S_START] = boxText("");
+    setupContent(S_START);
+    radio("startWith", startNames, 2, 1);
+    // plain: its colour (only shown once plain is chosen)
+    slider("startHue", "colour: hue  (degrees)", 0, 360, 38).setDecimalPrecision(0);
+    onlyWhen("startPlain");
+    slider("startSat", "saturation", 0, 1, 0.1);
+    onlyWhen("startPlain");
+    slider("startBri", "brightness", 0, 1, 0.87);
+    onlyWhen("startPlain");
+    row(2);
+
+    // SETUP 7, BACKDROP (the Backdrop tab): what the canvas sits on - it can change any time.
+    // "load ..." asks for a picture (CHOOSE FILE for another); one that isn't the photo's size is
+    // scaled to it or tiled
+    setupStart(S_BACK);
+    backdropBox = setupBox("SETUP 7   BACKDROP");
+    boxTitles[S_BACK] = boxTitle;
+    boxTexts[S_BACK] = boxText("");
+    setupContent(S_BACK);
+    // (radio buttons, not a drop-down list: a list open in a setup box locked the whole panel)
+    radio("backdropKind", backdropNames, 2, 0);
     row(28);
-    list("backdropKind", backdropNames, 0, 0, 150);
-    button("backdropChoose", "CHOOSE FILE", 170, 110).setHeight(18);
-    cur.itemWhen.set(cur.itemWhen.size() - 1, "backdropFile");
+    button("backdropChoose", "CHOOSE FILE", 0, 110).setHeight(18);
+    onlyWhen("backdropFile");
     row(22);
     backdropText = cp5.addTextlabel("backdropText").setText("").setColorValue(dark);
     put(backdropText, -4, 0);
@@ -250,158 +380,43 @@ public class Panel extends PApplet {
     slider("backdropThrough", "shows through the paint", 0, 1, 0.25);
     onlyWhen("backdropKind");
     row(2);
-    // what the canvas starts with at RUN and CLEAR - always open, and done once a choice is
-    // clicked. It can change during a run (it's used at the next CLEAR)
-    startBox = setupBox("SETUP 4   START");
-    boxText("").setText("start the canvas with  (at RUN and CLEAR)");
-    radio("startWith", startNames, 3, 1);
-    row(2);
-    // SETUP 1 - 4 are hidden while PALETTE GEN is open, so it takes their place
-    for (Row r : columns.get(columns.size() - 1)) r.when = r.when.equals("") ? "notPalette" : r.when + "&notPalette";
-
-    // SETUP 5, PALETTE GEN (the Palette Gen tab): a palette of 24 colours on a colour scheme.
-    // Clicking the box opens it, in place of SETUP 1 - 4 and RECOLOUR; clicking its title again
-    // closes it. Choosing a scheme or GENERATE makes a new palette; the "whole palette" sliders
-    // change every colour, and the "chosen colours" ones the swatches clicked
-    paletteBox = setupBox("SETUP 5   PALETTE GEN");
-    paletteTitle = boxTitle;
-    paletteText = boxText("");
-    radio("paletteScheme", schemeNames, 2, 0);
-    onlyWhen("paletteOpen");
-    row(32);
-    button("paletteGenerate", "GENERATE", 0, 100);
-    onlyWhen("paletteOpen");
-    row(PAL_H * ((PALETTE_SIZE + PAL_COLS - 1) / PAL_COLS) + 6);
-    paletteGrid = cur;
-    onlyWhen("paletteOpen");
-    row(20);
-    label("whole palette", 0);
-    onlyWhen("paletteOpen");
-    slider("paletteHue", "hue  (degrees)", -180, 180, 0).setDecimalPrecision(0);
-    onlyWhen("paletteOpen");
-    slider("paletteSat", "saturation", 0, 2, 1);
-    onlyWhen("paletteOpen");
-    slider("paletteBri", "brightness", 0, 2, 1);
-    onlyWhen("paletteOpen");
-    row(20);
-    label("chosen colours  (click the swatches)", 0);
-    onlyWhen("paletteOpen");
-    slider("paletteHueC", "hue  (degrees)", -180, 180, 0).setDecimalPrecision(0);
-    onlyWhen("paletteOpen");
-    slider("paletteSatC", "saturation", 0, 2, 1);
-    onlyWhen("paletteOpen");
-    slider("paletteBriC", "brightness", 0, 2, 1);
-    onlyWhen("paletteOpen");
-    row(32);
-    button("paletteAll", "ALL", 0, 50);
-    button("paletteNone", "NONE", 56, 60);
-    button("paletteResetPicked", "RESET CHOSEN", 122, 112);
-    button("paletteResetAll", "RESET ALL", 240, 80);
-    onlyWhen("paletteOpen");
-    // there's always a second masses picture in the palette's colours (VIEW's "masses (palette)")
-    slider("paletteKeepLight", "keep the masses' lightness", 0, 1, 0.5);
-    onlyWhen("paletteOpen");
-    row(2);
-
-    // SETUP 6, OUTLINE (the Outline tab plans it): the face in one line - which parts of the parts
-    // map and the face landmarks it traces, and how smooth. The OUTLINE tool draws it, and
-    // MOVEMENT's "along the outline" follows it. Clicking the box opens it in place of the others,
-    // with the line drawn over the picture; clicking its title again closes it
-    int outlineFrom = columns.get(columns.size() - 1).size();
-    outlineBox = setupBox("SETUP 6   OUTLINE");
-    outlineTitle = boxTitle;
-    outlineText = boxText("");
-    row(24);
-    toggle("outline_sil", "silhouette", true, 0);
-    toggle("outline_hair", "hairline", true, 100);
-    toggle("outline_clothes", "neck & clothes", true, 190);
-    onlyWhen("outlineOpen");
-    row(24);
-    toggle("outline_face", "face", true, 0);
-    toggle("outline_brows", "brows", true, 60);
-    toggle("outline_eyes", "eyes", true, 128);
-    toggle("outline_nose", "nose", true, 190);
-    toggle("outline_mouth", "mouth", true, 252);
-    onlyWhen("outlineOpen");
-    row(24);
-    toggle("outline_objects", "objects  (the edges between everything in objects.png)", false, 0);
-    onlyWhen("outlineOpen");
-    slider("outline_smooth", "smoothness", 0, 1, 0.5);
-    onlyWhen("outlineOpen");
-    row(2);
-    int outlineTo = columns.get(columns.size() - 1).size();
-    // everything above is hidden while RECOLOUR is open, so it takes their place
-    for (Row r : columns.get(columns.size() - 1)) r.when = r.when.equals("") ? "notRecolour" : r.when + "&notRecolour";
-
-    // RECOLOUR (the Recolour tab): one layer at a time - READ COLOURS divides its paint into 40
-    // colours; click swatches to choose them, and the sliders change those. Hidden while PALETTE
-    // GEN is open
-    int recolourFrom = columns.get(columns.size() - 1).size();
-    header("RECOLOUR");
-    row(26);
-    toggle("recolourOpen", "open  (in place of SETUP)", false, 0);
-    toggle("recolourOn", "on", true, 240);
-    row(24);
-    label("layer", 0);
-    radioAt("recolourLayer", new String[] { "1", "2", "3", "4", "5" }, 0, 60, 44);
-    row(32);
-    button("recolourNew", "READ COLOURS", 0, 100);
-    button("recolourRandom", "RANDOM NUDGE", 106, 110);
-    recolourText = cp5.addTextlabel("recolourText").setText("").setColorValue(dark);
-    put(recolourText, 222, 6);
-    onlyWhen("recolour");
-    row(SWATCH_H * ((RECOLOURS + SWATCH_COLS - 1) / SWATCH_COLS) + 6);
-    recolourGrid = cur;
-    onlyWhen("recolour");
-    slider("recolourHue", "hue  (degrees)", -180, 180, 0).setDecimalPrecision(0);
-    onlyWhen("recolour");
-    slider("recolourSat", "saturation", 0, 2, 1);
-    onlyWhen("recolour");
-    slider("recolourBri", "brightness", 0, 2, 1);
-    onlyWhen("recolour");
-    slider("recolourReach", "reach  (how far it spreads)", 0.02, 0.3, 0.08);
-    onlyWhen("recolour");
-    row(32);
-    button("recolourAll", "ALL", 0, 50);
-    button("recolourNone", "NONE", 56, 60);
-    button("recolourResetPicked", "RESET CHOSEN", 122, 112);
-    button("recolourResetAll", "RESET ALL", 240, 80);
-    onlyWhen("recolour");
+    setupStart(S_COUNT);
+    inSetup = false;
+    // each box's title and line show unless a box above it is open; the rest only while it's open
     ArrayList<Row> col1 = columns.get(columns.size() - 1);
-    for (int i = recolourFrom; i < col1.size(); i++) {
-      Row r = col1.get(i);
-      r.when = r.when.equals("") ? "notPalette" : r.when + "&notPalette";
-    }
-    // an open OUTLINE box takes the place of everything else in the column; an open PALETTE GEN
-    // hides it too
-    for (int i = 0; i < col1.size(); i++) {
-      Row r = col1.get(i);
-      String w = i >= outlineFrom && i < outlineTo ? "notPalette" : "notOutlineBox";
-      r.when = r.when.equals("") ? w : r.when + "&" + w;
+    for (int k = 0; k < S_COUNT; k++) {
+      for (int i = boxRowFrom[k]; i < boxRowFrom[k + 1]; i++) {
+        Row r = col1.get(i);
+        String w = i < boxContentFrom[k] ? "boxShown " + k : "boxOpen " + k;
+        r.when = r.when.equals("") ? w : r.when + "&" + w;
+      }
     }
 
-    // ---------------------------------------------------- along the bottom: VIEW, CAMERA and RUN
-    // VIEW is two lists side by side, always open: MAPS (a map in place of the painting) and
-    // LAYERS (which parts of the painting show)
+    // ---------------------------------------------------- along the bottom: VIEW and RUN
+    // VIEW, under column 1 at the very bottom (hidden while a SETUP box is open over it): two
+    // lists side by side - MAPS (a map in place of the painting) and LAYERS (which parts of the
+    // painting show) - and the direction field
     bottomColumn(0, -1);
     header("VIEW");
+    viewSection = sections - 1;
+    inView = true;
     row(20);
     label("MAPS", 0);
     label("LAYERS", 160);
-    row(showNames.length * 22 + 8);
+    row(max(showNames.length, LAYERS + 4) * 22 + 8);
     RadioButton r = cp5.addRadioButton("showWhat").setSize(16, 16).setItemsPerRow(1).setSpacingRow(6);
     for (int i = 0; i < showNames.length; i++) {
       r.addItem("showWhat " + i, i);
-      r.getItem(i).setCaptionLabel(i == 0 ? "none  (the painting)" : showNames[i]);
+      r.getItem(i).setCaptionLabel(showNames[i]);
     }
     r.activate(0);
     r.setNoneSelectedAllowed(false);
     register("showWhat", r);
     put(r, 0, 4);
     // the stack, top first, as in Photoshop: the five layers, which can be hidden and moved up
-    // and down (layerOrder, the Layers tab), then the canvas (SETUP 4's start), which can be
-    // hidden, and the backdrop (SETUP 3), which can be hidden too (plain white under the canvas) -
-    // those two stay at the bottom. Under them, a tick box for SETUP 6's outline over the view. A layer's
+    // and down (layerOrder, the Layers tab), then the canvas (SETUP 6's start), which can be
+    // hidden, and the backdrop (SETUP 7), which can be hidden too (plain white under the canvas) -
+    // those two stay at the bottom. Under them, a tick box for SETUP 3's outline over the view. A layer's
     // tick box moves to its place in draw(); the up / down buttons stay put
     layerRow = cur;
     for (int i = 0; i < LAYERS; i++) {
@@ -420,16 +435,18 @@ public class Panel extends PApplet {
     toggle("backdropOn", "backdrop", true, 160);
     cur.dy.set(cur.dy.size() - 1, 4 + 22 * (LAYERS + 1));
     backdropShown = (Toggle) all.get("backdropOn");
-    // SETUP 6's outline in red over whatever's showing (the painting or a map), a line apart
-    toggle("viewOutline", "outline over it  (SETUP 6)", false, 160);
+    // SETUP 3's outline in red over whatever's showing (the painting or a map), a line apart
+    toggle("viewOutline", "outline over it  (SETUP 3)", false, 160);
     cur.dy.set(cur.dy.size() - 1, 4 + 22 * (LAYERS + 3));
-
-    header("DIRECTION FIELD");
+    // the direction field (the Field tab) over the picture, and how smooth it is
     row(26);
     toggle("fieldOverlay", "direction field over the picture", false, 0);
     Slider sm = slider("smoothing", "direction field smoothing", 0, 24, 4);
     sm.setNumberOfTickMarks(13).snapToTickMarks(true).showTickMarks(false);
     sm.setTriggerEvent(Slider.RELEASE);          // rebuilding the field takes a moment - only on letting go
+    row(4);
+    inView = false;
+    for (Row vr : columns.get(columns.size() - 1)) vr.when = vr.when.equals("") ? "noSetupOpen" : vr.when + "&noSetupOpen";
 
     // RUN: one strip along the very bottom, under columns 2 - 4, so no box above can grow over it.
     // The painting speed slider is how fast it paints (the window and the panel keep going at
@@ -551,10 +568,10 @@ public class Panel extends PApplet {
     onlyWhen("on flow");
 
     // outline (the Outline tab): the face in one line - which parts it takes in, and the pen
-    // (which parts it traces, and how smooth, are in SETUP 6)
+    // (what it traces, and how smooth, are in SETUP 3)
     toolBox(6, false);
     row(20);
-    label("the line itself: SETUP 6  OUTLINE", 0);
+    label("the line itself: SETUP 3  OUTLINE", 0);
     onlyWhen("on outline");
     toolSlider("speed", "speed  (pixels a frame)", 2, 200, 20).setDecimalPrecision(0);
     toolSlider("passes", "passes", 1, 6, 1).setDecimalPrecision(0);
@@ -624,7 +641,10 @@ public class Panel extends PApplet {
     radioAt("cut_layer", new String[] { "1", "2", "3", "4", "5" }, 0, 100, 46);
     onlyWhen("on scrape");
     row(32);
-    button("cutOutside", "ERASE OUTSIDE THE OUTLINE", 0, 200);
+    // the outline's line: what's outside it comes off, or what's inside
+    button("cutOutside", "ERASE OUTSIDE THE LINE", 0, 156);
+    onlyWhen("on scrape");
+    button("cutInside", "ERASE INSIDE THE LINE", 164, 150);
     onlyWhen("on scrape");
     // (a test) the same layer emptied wherever there's no object in objects.png - or only one
     // bigger than "background" (the sky, a field), which counts as no object (Scrape tab)
@@ -652,30 +672,72 @@ public class Panel extends PApplet {
 
     // AUTOMATION (the Automation tab), under the tools: the chosen tool's size (or length) moved
     // up and down by a sine wave while it paints, between its shortest and longest. Each tool has
-    // its own; only the chosen one's shows
-    autoHeader = header("AUTOMATION");
+    // its own; only the chosen one's shows. Its title line has an on / off box like the tools'
+    // (red off, green on); while it's off the box is just that line
+    sections++;
     for (int i = 0; i < TOOLS.length; i++) {
       String n = TOOLS[i];
       String what = AUTO_TARGET[i].equals("length") ? "length" : AUTO_TARGET[i].equals("width") ? "width" : "size";
       String lo = what.equals("length") ? "shortest" : what.equals("width") ? "thinnest" : "smallest";
       String hi = what.equals("length") ? "longest" : what.equals("width") ? "thickest" : "largest";
-      row(26);
-      toggle(n + "_autoOn", "on  -  the " + what + " follows a wave", false, 0);
+      row(36);
+      Toggle on = cp5.addToggle(n + "_autoOn").setSize(20, 20).setValue(false);
+      on.setColorBackground(toolOff).setColorForeground(toolOffHover).setColorActive(toolOn);
+      on.setCaptionLabel("AUTOMATION  -  " + toolTitles[i].toLowerCase() + "  (the " + what + " follows a wave)");
+      on.getCaptionLabel().align(ControlP5.RIGHT_OUTSIDE, ControlP5.CENTER).setPaddingX(8);
+      register(n + "_autoOn", on);
+      put(on, 0, 10);
       onlyWhen("edit " + n);
       Slider a = slider(n + "_autoMin", lo, AUTO_LIMITS[i][0], AUTO_LIMITS[i][1], AUTO_DEFAULT[i][0]);
-      onlyWhen("edit " + n);
+      onlyWhen("edit " + n + "&autoOn");
       Slider b = slider(n + "_autoMax", hi, AUTO_LIMITS[i][0], AUTO_LIMITS[i][1], AUTO_DEFAULT[i][1]);
-      onlyWhen("edit " + n);
+      onlyWhen("edit " + n + "&autoOn");
       if (!what.equals("width")) {
         a.setDecimalPrecision(0);
         b.setDecimalPrecision(0);
       }
       slider(n + "_autoSpeed", "speed  (waves a second)", 0.01, 3, 0.25);
-      onlyWhen("edit " + n);
+      onlyWhen("edit " + n + "&autoOn");
     }
     // the wave, with where it is now (drawn in drawAutoWave())
     row(30);
     autoWave = cur;
+    onlyWhen("autoOn");
+    row(4);
+
+    // RECOLOUR (the Recolour tab), under AUTOMATION: one layer at a time - READ COLOURS divides its
+    // paint into 40 colours; click swatches to choose them, and the sliders change those. "open"
+    // shows the swatches and sliders here
+    header("RECOLOUR");
+    row(26);
+    toggle("recolourOpen", "open", false, 0);
+    toggle("recolourOn", "on", true, 240);
+    row(24);
+    label("layer", 0);
+    radioAt("recolourLayer", new String[] { "1", "2", "3", "4", "5" }, 0, 60, 44);
+    row(32);
+    button("recolourNew", "READ COLOURS", 0, 100);
+    button("recolourRandom", "RANDOM NUDGE", 106, 110);
+    recolourText = cp5.addTextlabel("recolourText").setText("").setColorValue(dark);
+    put(recolourText, 222, 6);
+    onlyWhen("recolour");
+    row(SWATCH_H * ((RECOLOURS + SWATCH_COLS - 1) / SWATCH_COLS) + 6);
+    recolourGrid = cur;
+    onlyWhen("recolour");
+    slider("recolourHue", "hue  (degrees)", -180, 180, 0).setDecimalPrecision(0);
+    onlyWhen("recolour");
+    slider("recolourSat", "saturation", 0, 2, 1);
+    onlyWhen("recolour");
+    slider("recolourBri", "brightness", 0, 2, 1);
+    onlyWhen("recolour");
+    slider("recolourReach", "reach  (how far it spreads)", 0.02, 0.3, 0.08);
+    onlyWhen("recolour");
+    row(32);
+    button("recolourAll", "ALL", 0, 50);
+    button("recolourNone", "NONE", 56, 60);
+    button("recolourResetPicked", "RESET CHOSEN", 122, 112);
+    button("recolourResetAll", "RESET ALL", 240, 80);
+    onlyWhen("recolour");
     row(4);
 
     // ---------------------------------------------------- column 3: MOVEMENT, COLOUR, APPLY
@@ -684,9 +746,12 @@ public class Panel extends PApplet {
     float[] followDefault = { 0.6, 0.6, 0, 0.5, 0.3, 0, 0, 0, 0.5 };
     moveHeader = header("MOVEMENT");
     onlyWhen("notOutline");
+    // its three parts - which way marks go, where they start, where they may draw - each on a
+    // slightly different shade of the box's colour (Row's band, drawn in drawBands)
     for (int i = 0; i < TOOLS.length; i++) {
       String n = TOOLS[i];
       if (n.equals("outline")) continue;       // it goes where the face is
+      curBand = 1;
       if (!n.equals("splat") && !n.equals("flow") && !n.equals("sponge")) {
         slider(n + "_follow", "follow the form", 0, 1, followDefault[i]);
         onlyWhen("edit " + n);
@@ -697,10 +762,14 @@ public class Panel extends PApplet {
         radio(n + "_around", new String[] { "around the form", "across it", "along the outline" }, 2, 0);
         onlyWhen("edit " + n);
       }
+      curBand = 2;
       row(20);
       label("start at", 0);
       onlyWhen("edit " + n);
-      radio(n + "_startAt", new String[] { "random", "weighted by map", "grid", "mouse (2D, hold button)", "on the outline  (SETUP 6)" }, 2, 0);
+      // vertex / tri: a corner or the middle of a triangle of the mesh (SETUP 4); blob: the middle
+      // of one of the masses (SETUP 2) - each one as likely as any other (Marks tab)
+      radio(n + "_startAt", new String[] { "random", "weighted by map", "grid", "mouse (2D, hold button)",
+        "on the outline  (SETUP 3)", "at vertex  (mesh)", "at tri  (mesh)", "at blob  (masses)" }, 2, 0);
       onlyWhen("edit " + n);
       // the grid: one pass from the top left, started again by RUN and CARRY ON
       slider(n + "_gridSize", "grid spacing  (x the usual)", 0.2, 5, 1);
@@ -714,6 +783,7 @@ public class Panel extends PApplet {
       onlyWhen("edit " + n + "&mouse " + n);
       // THE AREA (the Area tab): draw anywhere, only in it or only outside it. Marks only start
       // where they may; "clip" also cuts off paint that runs over the edge
+      curBand = 3;
       row(20);
       label("draw  (THE AREA, below)", 0);
       onlyWhen("edit " + n);
@@ -725,7 +795,9 @@ public class Panel extends PApplet {
     }
     // THE AREA, shared by every tool: palette colours, chosen in the strip or on the masses
     row(22);
-    label("THE AREA: where the masses are these colours", 0);
+    label("THE AREA: where these palette colours are, on the", 0);
+    onlyWhen("areaUsed");
+    radio("areaFrom", new String[] { "masses", "mesh" }, 2, 0);
     onlyWhen("areaUsed");
     row(2 * ERASE_H + 4);
     areaStrip = cur;
@@ -734,6 +806,7 @@ public class Panel extends PApplet {
     areaPickButton = button("areaPickMasses", "PICK ON THE MASSES", 0, 200);
     button("areaClear", "CLEAR", 210, 90);
     onlyWhen("areaUsed");
+    curBand = 0;
     row(6);
     onlyWhen("notOutline");
 
@@ -753,7 +826,7 @@ public class Panel extends PApplet {
       row(20);
       label("pick up from", 0);
       onlyWhen("edit " + n);
-      radio(n + "_pickup", new String[] { "photo", "canvas (wet)", "mix", "masses", "random  (accent ranges)", "palette  (SETUP 5)" }, 2, 0);
+      radio(n + "_pickup", new String[] { "photo", "canvas (wet)", "mix", "masses", "random  (accent ranges)", "palette  (SETUP 5)", "mesh" }, 2, 0);
       onlyWhen("edit " + n);
       // (palette: the palette colour of the mass under the point, exactly - the Palette Gen tab)
       slider(n + "_mix", "mix: share from the canvas", 0, 1, 0.5);
@@ -848,7 +921,7 @@ public class Panel extends PApplet {
     row(24);
     sliderAt("canvasSeeThrough", "transparency", 0, 1, 0, 0, 1, 100);
     row(2);
-    // the backdrop's colours (SETUP 3 chooses what it is): a hue shift, and its saturation and
+    // the backdrop's colours (SETUP 7 chooses what it is): a hue shift, and its saturation and
     // brightness multiplied
     layerSection[LAYERS + 1] = layerHeader("BACKDROP");
     row(34);
@@ -941,16 +1014,18 @@ public class Panel extends PApplet {
     if (layoutWanted) layout();
     // the coloured blocks behind the sections (the controls are drawn on top after this)
     noStroke();
+    int[] boxSecs = boxSections();
+    boolean[] setupDone = boxesDone();
     for (int i = 0; i < sections; i++) {
       if (block[i] == null) continue;
-      fill(blockColour[i]);
+      int k = java.util.Arrays.asList(boxSecsList(boxSecs)).indexOf(i);
+      fill(k >= 0 ? (setupDone[k] ? boxGreen : boxRed) : blockColour[i]);
       rect(block[i][0] - 8, block[i][1], (i == runSection ? 3 * colW : colW) - 12, block[i][2] - block[i][1], 8);
     }
+    drawBands();
     // each setup box's square, before its title: red, then green once it's done
-    int[] setupBoxes = { sourceBox, massBox, backdropBox, startBox, paletteBox, outlineBox };
-    boolean[] setupDone = { sourceDone, massesDone, backdropDone, startDone, paletteBase.length > 0, outlineDone };
-    for (int k = 0; k < setupBoxes.length; k++) {
-      float[] b = block[setupBoxes[k]];
+    for (int k = 0; k < S_COUNT; k++) {
+      float[] b = block[boxSecs[k]];
       if (b == null) continue;
       fill(setupDone[k] ? doneGreen : notDoneRed);
       rect(b[0] - 1, b[1] + 9, 15, 15, 3);
@@ -982,7 +1057,15 @@ public class Panel extends PApplet {
     }
     if (isRunning != shownRunning) {
       shownRunning = isRunning;
+      if (shownRunning) closeBox(false);       // the setup boxes can't be changed while it runs
       lockSetup(shownRunning);
+    }
+    // the rest of the panel greyed out and locked until every setup box is done
+    boolean g = !setupComplete();
+    if (g != gated) {
+      gated = g;
+      lockSetup(shownRunning);
+      layoutWanted = true;
     }
     // RUN green, STOP red. PAUSE green while painting, CARRY ON orange while paused. While a map
     // is showing nothing paints (the painter pauses), so RUN and CARRY ON are greyed out and locked
@@ -1012,19 +1095,32 @@ public class Panel extends PApplet {
       moveHeader.setText("MOVEMENT  -  " + toolTitles[e].toLowerCase());
       colourHeader.setText("COLOUR  -  " + toolTitles[e].toLowerCase());
       applyHeader.setText("APPLY  -  " + toolTitles[e].toLowerCase());
-      autoHeader.setText("AUTOMATION  -  " + toolTitles[e].toLowerCase());
     }
-    String locked = shownRunning ? "   (locked while running)" : "";
-    sourceText.setText(sourceDone ? faces[min((int) value("source"), faces.length - 1)] + locked : "click to choose a picture");
-    massTitle.setText(massesOpen ? "SETUP 2   MASSES     click here when they look right" : "SETUP 2   MASSES");
+    for (int k = 0; k < S_COUNT; k++) boxTitles[k].setText(boxNames[k] + (openSetup == k ? "     click here when done" : ""));
+    sourceText.setText(sourceDone ? faceName + "     " + photo.width + " x " + photo.height + " pixels" : "click to choose a picture");
     massText.setText(massesOpen ? massStatus : massesDone ? "done  -  " + massStatus.replace("masses: ", "")
       : "click to make the masses");
-    paletteTitle.setText(paletteOpen ? "SETUP 5   PALETTE GEN     click here to close" : "SETUP 5   PALETTE GEN");
-    paletteText.setText(paletteStatus());
-    outlineTitle.setText(outlineOpen ? "SETUP 6   OUTLINE     click here to close" : "SETUP 6   OUTLINE");
+    meshText.setText(!meshNote.equals("") ? meshNote : meshOpen ? meshStatus : meshDone ? "done  -  " + meshStatus.replace("mesh: ", "")
+      : "click to make the mesh  (triangles)");
+    paletteText.setText(paletteOpen || paletteDone ? paletteStatus() : "click to make a palette of " + PALETTE_SIZE + " colours");
     outlineText.setText(outlineStatus());
+    boxTexts[S_START].setText(startDone ? "starts with " + startNames[(int) value("startWith")].replace("  (", " (") + "  (at RUN and CLEAR)"
+      : "click to choose what the canvas starts with");
+    boxTexts[S_BACK].setText(backdropDone ? "sits on " + (fromFile ? (bf == null ? "no picture" : backdropFileName)
+      : backdropNames[(int) value("backdropKind")]) : "click to choose what the canvas sits on");
 
     cp5.draw();
+    // until every setup box is done, everything but them is greyed out (and locked)
+    if (gated) {
+      fill(128, 160);
+      noStroke();
+      rect(16 + colW - 12, 0, width - colW, height - 28);
+      fill(40);
+      textAlign(CENTER, CENTER);
+      textSize(16);
+      text("finish SETUP 1 - 7 first  (every square green)", 16 + colW + (width - colW) / 2, 20);
+      textSize(12);
+    }
     // with every tool off, columns 3 - 4 still show the last tool's settings, under a grey cover
     boolean anyOn = false;
     for (String t : TOOLS) anyOn |= value(t + "_on") > 0.5;
@@ -1053,6 +1149,7 @@ public class Panel extends PApplet {
   // the words beside it count too
   public void mousePressed() {
     pressedIn = -1;
+    clickReport();
     // a click off an open setup list closes it
     ScrollableList sl = (ScrollableList) all.get("source");
     if (sl.isOpen() && !sl.isMouseOver()) {
@@ -1061,16 +1158,16 @@ public class Panel extends PApplet {
       return;
     }
     if (listOpen) return;
+    if (gated && !overSetup() && !inBlock(viewSection, 0)) return;   // the rest is greyed out until SETUP is done
     if (swatchClicked()) return;
     if (paletteSwatchClicked()) return;
     if (eraseSwatchClicked()) return;
     if (areaSwatchClicked()) return;
-    if (inBlock(startBox, 0)) startDone = true;
-    if (inBlock(backdropBox, 0)) backdropDone = true;
-    for (int b : new int[] { sourceBox, massBox, paletteBox, outlineBox }) {
-      // an open palette or outline box only counts its title - its controls take their own clicks
-      if (inBlock(b, (b == paletteBox && paletteOpen) || (b == outlineBox && outlineOpen) ? 34 : 0)) {
-        pressedIn = b;
+    int[] secs = boxSections();
+    for (int k = 0; k < S_COUNT; k++) {
+      // an open box only counts its title - its controls take their own clicks
+      if (inBlock(secs[k], openSetup == k ? 34 : 0)) {
+        pressedIn = k;
         return;
       }
     }
@@ -1092,30 +1189,110 @@ public class Panel extends PApplet {
     }
   }
 
-  // a click on a setup box: opens its list, or opens and closes the masses. Done when the button
-  // is let go - the list opens under the mouse, and controlP5 picks a list item on letting go
+  // (for finding a fault - take out once SETUP 7 works) what the click landed on, in the console
+  void clickReport() {
+    String s = "panel click " + mouseX + "," + mouseY + "  gated=" + gated + " listOpen=" + listOpen + " openSetup=" + openSetup
+      + " running=" + isRunning + "  done=" + java.util.Arrays.toString(boxesDone()) + "  under it:";
+    for (ControllerInterface c : cp5.getAll()) {
+      if (!(c instanceof Controller)) continue;
+      Controller k = (Controller) c;
+      float[] p = k.getAbsolutePosition();
+      if (mouseX >= p[0] && mouseX <= p[0] + k.getWidth() && mouseY >= p[1] && mouseY <= p[1] + k.getHeight())
+        s += "  " + k.getName() + (k.isVisible() ? "" : "(hidden)") + (k.isLock() ? "(locked)" : "");
+    }
+    for (ScrollableList l : lists) if (l.isOpen()) s += "   OPEN LIST: " + l.getName() + (l.isVisible() ? "" : " (hidden)");
+    println(s);
+  }
+
+  // a click on a setup box: SOURCE opens its list; the others open, or (on the open one's title)
+  // close and are done. Done when the button is let go - the list opens under the mouse, and
+  // controlP5 picks a list item on letting go
   public void mouseReleased() {
-    int b = pressedIn;
+    int k = pressedIn;
     pressedIn = -1;
-    if (b < 0 || !inBlock(b, 0)) return;
-    if (b == massBox) {
-      if (!massesOpen) openMasses(true);
-      else if (inBlock(b, 34)) openMasses(false);    // only the title closes it
-    } else if (b == paletteBox) {
-      // opening it the first time makes a palette
-      if (!paletteOpen && paletteBase.length == 0) newPalette();
-      paletteOpen = !paletteOpen;
-      layoutWanted = true;
-    } else if (b == outlineBox) {
-      outlineOpen = !outlineOpen;
-      if (!outlineOpen) outlineDone = true;      // closing it says it looks right
-      layoutWanted = true;
-    } else if (!isRunning) {
+    if (k < 0 || !inBlock(boxSections()[k], 0) || isRunning) return;     // locked while running
+    if (k == S_SRC) {
+      closeBox(false);
       ScrollableList l = (ScrollableList) all.get("source");
       l.open();
       l.show();
       layoutWanted = true;
+    } else if (openSetup == k) closeBox(true);
+    else openBox(k);
+  }
+
+  // the setup boxes' colour blocks, SETUP 1 first
+  int[] boxSections() {
+    return new int[] { sourceBox, massBox, outlineBox, meshBox, paletteBox, startBox, backdropBox };
+  }
+  Integer[] boxSecsList(int[] secs) {
+    Integer[] l = new Integer[secs.length];
+    for (int i = 0; i < secs.length; i++) l[i] = secs[i];
+    return l;
+  }
+
+  boolean[] boxesDone() {
+    return new boolean[] { sourceDone, massesDone, outlineDone, meshDone, paletteDone, startDone, backdropDone };
+  }
+
+  boolean setupComplete() {
+    for (boolean b : boxesDone()) if (!b) return false;
+    return true;
+  }
+
+  // whether the mouse is on one of the setup boxes
+  boolean overSetup() {
+    for (int b : boxSections()) if (inBlock(b, 0)) return true;
+    return false;
+  }
+
+  // box k opened (any other closes, not done): it shows what it's about - the masses, the mesh,
+  // the masses in the palette's colours (making a palette the first time), the outline
+  void openBox(int k) {
+    closeBox(false);
+    RadioButton show = (RadioButton) all.get("showWhat");
+    java.util.List<String> names = java.util.Arrays.asList(showNames);
+    int want = -1;
+    if (k == S_MASS) {
+      massesOpen = true;
+      want = names.indexOf("masses");
+    } else if (k == S_MESH) {
+      meshOpen = true;
+      want = names.indexOf("mesh");
+    } else if (k == S_PAL) {
+      if (paletteBase.length == 0) newPalette();
+      paletteOpen = true;
+      want = names.indexOf("masses (palette)");
+    } else if (k == S_OUTL) {
+      outlineOpen = true;
     }
+    shownFor = want;
+    if (want >= 0) {
+      showBefore = show.getValue();
+      show.activate(want);
+    }
+    openSetup = k;
+    layoutWanted = true;
+  }
+
+  // the open box closed - done, if it was its title that was clicked - and the view put back
+  void closeBox(boolean done) {
+    int k = openSetup;
+    if (k < 0) return;
+    openSetup = -1;
+    massesOpen = meshOpen = paletteOpen = outlineOpen = false;
+    RadioButton show = (RadioButton) all.get("showWhat");
+    if (shownFor >= 0 && show.getValue() == shownFor) show.activate(showBefore == shownFor ? 0 : (int) showBefore);
+    shownFor = -1;
+    if (done) {
+      if (k == S_MASS) massesDone = true;
+      else if (k == S_MESH) meshDone = true;
+      else if (k == S_PAL) paletteDone = true;
+      else if (k == S_OUTL) outlineDone = true;
+      else if (k == S_START) startDone = true;
+      else if (k == S_BACK) backdropDone = true;
+    }
+    layoutWanted = true;
   }
 
   // a button's colour, and its hover colour - or grey and locked (and the lists lock everything
@@ -1123,7 +1300,7 @@ public class Panel extends PApplet {
   void buttonColour(Button b, int c, int hover, boolean off) {
     b.setColorBackground(off ? color(85) : c).setColorForeground(off ? color(85) : hover);
     b.getCaptionLabel().setColor(off ? color(150) : color(255));
-    b.setLock(off || listOpen);
+    b.setLock(off || listOpen || gated);
   }
 
   // whether the mouse is in section b's colour block - only its top `h` if h > 0
@@ -1376,11 +1553,14 @@ public class Panel extends PApplet {
     return out;
   }
 
-  // the line under SETUP 6's title: how many parts it traces, and how smooth
+  // the line under SETUP 3's title: how many parts it traces, and how smooth
   String outlineStatus() {
     int on = 0;
     for (String p : outlineParts) if (value("outline_" + p) > 0.5) on++;
-    String s = on + " of " + outlineParts.length + " parts,  smoothness " + nf(value("outline_smooth"), 0, 2);
+    String s = (value("outline_kind") == 1 ? "objects" : "face, " + on + " of " + outlineParts.length + " parts")
+      + ",  smoothness " + nf(value("outline_smooth"), 0, 2);
+    if (value("outline_kind") == 1 && !new java.io.File(mapsPath() + "/" + faceName + "/objects.png").exists())
+      return "objects: none found for this picture  -  make its maps again with the map maker";
     if (outlineOpen) return s + "   (red on the picture)";
     return outlineDone ? "done  -  " + s : "click to choose what the outline traces";
   }
@@ -1545,7 +1725,7 @@ public class Panel extends PApplet {
     }
     // each colour with how much of the picture it covers in the masses (%), or crossed out if no
     // mass is given it - erasing that one takes nothing off
-    float[] use = paletteUse;
+    float[] use = strip == areaStrip && value("areaFrom") == 1 ? meshPaletteUse : paletteUse;
     float w = (colW - 28) / (float) ERASE_COLS;
     textSize(10);
     for (int i = 0; i < now.length; i++) {
@@ -1585,7 +1765,8 @@ public class Panel extends PApplet {
   // ends (the view as it was, unless it's been changed meanwhile)
   void showPicking(int p) {
     RadioButton show = (RadioButton) all.get("showWhat");
-    int pm = java.util.Arrays.asList(showNames).indexOf("masses (palette)");
+    // THE AREA from the mesh: the mesh in the palette's colours instead
+    int pm = java.util.Arrays.asList(showNames).indexOf(p == PICK_AREA && value("areaFrom") == 1 ? "mesh (palette)" : "masses (palette)");
     if (p != PICK_NONE && pickingShown == PICK_NONE) {
       viewBeforePick = show.getValue();
       show.activate(pm);
@@ -1595,22 +1776,12 @@ public class Panel extends PApplet {
     pickingShown = p;
     String waiting = "CLICK THE MASSES  (HERE: DONE)", ready = "PICK ON THE MASSES";
     erasePickButton.setCaptionLabel(p == PICK_ERASE ? waiting : ready);
-    areaPickButton.setCaptionLabel(p == PICK_AREA ? waiting : ready);
+    areaPickButton.setCaptionLabel(p == PICK_AREA ? waiting.replace("MASSES", areaWhat()) : ready.replace("MASSES", areaWhat()));
   }
 
-  // opening the masses box shows the masses; closing it puts the view back and marks them done
-  void openMasses(boolean open) {
-    massesOpen = open;
-    RadioButton show = (RadioButton) all.get("showWhat");
-    int masses = java.util.Arrays.asList(showNames).indexOf("masses");
-    if (open) {
-      showBefore = show.getValue();
-      show.activate(masses);
-    } else {
-      massesDone = true;
-      if (show.getValue() == masses) show.activate(showBefore == masses ? 0 : (int) showBefore);
-    }
-    layoutWanted = true;
+  // what THE AREA's colours are on: "MASSES" or "MESH"
+  String areaWhat() {
+    return value("areaFrom") == 1 ? "MESH" : "MASSES";
   }
 
   // whether the mouse is on the caption to the right of this toggle (and it isn't locked). A radio
@@ -1634,10 +1805,16 @@ public class Panel extends PApplet {
     else if (n.equals("saveNow")) command("save");
     else if (n.equals("printView")) command("print");
     else if (n.equals("cutOutside")) command("cutOutside");
+    else if (n.equals("cutInside")) command("cutInside");
     else if (n.equals("cutObjects")) command("cutObjects");
     // pressed again: don't pick
     else if (n.equals("erasePickMasses")) picking = picking == PICK_ERASE ? PICK_NONE : PICK_ERASE;
     else if (n.equals("areaPickMasses")) picking = picking == PICK_AREA ? PICK_NONE : PICK_AREA;
+    // masses <-> mesh: any picking stops, and the button says which it picks on
+    else if (n.equals("areaFrom") && areaPickButton != null) {
+      picking = PICK_NONE;
+      showPicking(PICK_NONE);
+    }
     else if (n.equals("areaClear")) areaPick = new boolean[PALETTE_SIZE];
     else if (n.equals("eraseColour")) command("eraseColour");
     else if (n.equals("loadSettings")) command("load");
@@ -1652,12 +1829,11 @@ public class Panel extends PApplet {
       } else {
         command("source");
         sourceDone = true;
-        if (!faces[(int) e.getValue()].equals(faceName)) massesDone = false;   // a new picture needs its masses looked at again
+        if (!faces[(int) e.getValue()].equals(faceName)) massesDone = meshDone = false;   // a new picture needs its masses and mesh looked at again
       }
     }
-    else if (n.equals("startWith")) startDone = true;
+    else if (n.equals("startWith") && openSetup != S_START) startDone = true;   // (open, its title closes it)
     else if (n.equals("backdropKind")) {
-      backdropDone = true;
       if (e.getValue() == BACKDROP_FILE && backdropFile == null) command("backdropChoose");
     }
     else if (n.equals("backdropChoose")) command("backdropChoose");
@@ -1694,15 +1870,18 @@ public class Panel extends PApplet {
     if (when.startsWith("open ")) return ((ScrollableList) all.get(when.substring(5))).isOpen();
     if (when.startsWith("shut ")) return !((ScrollableList) all.get(when.substring(5))).isOpen();
     if (when.equals("massesOpen")) return massesOpen;
+    if (when.equals("meshEdges")) return value("meshOutline") > 0.5;
     if (when.equals("later")) return false;
     if (when.equals("notScrape")) return !editing.equals("scrape");
     if (when.startsWith("one ")) return value(when.substring(4) + "_one") > 0.5;
     if (when.equals("recolour")) return value("recolourOpen") > 0.5;
-    if (when.equals("notRecolour")) return value("recolourOpen") < 0.5;
-    if (when.equals("paletteOpen")) return paletteOpen;
-    if (when.equals("notPalette")) return !paletteOpen;
-    if (when.equals("outlineOpen")) return outlineOpen;
-    if (when.equals("notOutlineBox")) return !outlineOpen;
+    if (when.equals("autoOn")) return value(editing + "_autoOn") > 0.5;
+    if (when.startsWith("boxShown ")) return openSetup < 0 || Integer.parseInt(when.substring(9)) <= openSetup;
+    if (when.startsWith("boxOpen ")) return openSetup == Integer.parseInt(when.substring(8));
+    if (when.equals("noSetupOpen")) return openSetup < 0;
+    if (when.equals("outlineFace")) return value("outline_kind") == 0;
+    if (when.equals("outlineObjects")) return value("outline_kind") == 1;
+    if (when.equals("startPlain")) return value("startWith") == 0;
     if (when.equals("notOutline")) return !editing.equals("outline");
     if (when.equals("flowColour")) return value("flow_src") < 2;     // the photo or the masses
     if (when.equals("scrapeDown")) return value("scrape_which") == 0;
@@ -1727,8 +1906,34 @@ public class Panel extends PApplet {
     return true;
   }
 
+  // (0 for a control a tool doesn't have - OUTLINE has no MOVEMENT, so no "outline_area")
   float value(String name) {
-    return all.get(name).getValue();
+    ControllerInterface c = all.get(name);
+    return c == null ? 0 : c.getValue();
+  }
+
+  // the parts of a section (rows with a band) on shades of its colour: band 1 a little lighter,
+  // 2 a little darker, 3 darker again. Each run of shown rows in one band is one strip
+  void drawBands() {
+    noStroke();
+    for (ArrayList<Row> col : columns) {
+      int band = 0, sec = -1;
+      float top = 0, bottom = 0;
+      for (int k = 0; k <= col.size(); k++) {
+        Row r = k < col.size() ? col.get(k) : null;
+        boolean on = r != null && r.y >= 0 && r.band > 0 && r.section >= 0 && block[r.section] != null;
+        if (band > 0 && (!on || r.band != band || r.section != sec)) {
+          // the run before ends here
+          int c = blockColour[sec];
+          fill(band == 1 ? lerpColor(c, color(255), 0.3) : lerpColor(c, color(0), band == 2 ? 0.05 : 0.11));
+          rect(block[sec][0] - 8, top, colW - 12, bottom - top);
+          band = 0;
+        }
+        if (!on) continue;
+        if (band == 0) { band = r.band; sec = r.section; top = r.y; }
+        bottom = r.y + r.h;
+      }
+    }
   }
 
   // put every shown row in place, top to bottom in each column, and hide the rest. The columns
@@ -1918,15 +2123,18 @@ public class Panel extends PApplet {
     }
   }
 
+  // every setup box's controls locked while running (`on`), all the others while not every setup
+  // box is done
   void lockSetup(boolean on) {
-    for (String n : setupNames) {
+    for (String n : all.keySet()) {
       ControllerInterface c = all.get(n);
+      boolean lock = (on && setupGroup.contains(n)) || (gated && !setupGroup.contains(n) && !viewGroup.contains(n));
       if (c instanceof RadioButton) {
-        for (Toggle t : ((RadioButton) c).getItems()) t.setLock(on);
+        for (Toggle t : ((RadioButton) c).getItems()) t.setLock(lock);
       } else if (c instanceof Controller) {
-        ((Controller) c).setLock(on);
+        ((Controller) c).setLock(lock);
       } else if (c instanceof ColorPicker) {
-        for (String k : new String[] { "-red", "-green", "-blue" }) cp5.getController(n + k).setLock(on);
+        for (String k : new String[] { "-red", "-green", "-blue" }) cp5.getController(n + k).setLock(lock);
       }
     }
   }
@@ -1956,6 +2164,7 @@ public class Panel extends PApplet {
   void row(float h) {
     cur = new Row();
     cur.h = h;
+    cur.band = curBand;
     cur.section = sections - 1;
     columns.get(columns.size() - 1).add(cur);
   }
@@ -1979,6 +2188,8 @@ public class Panel extends PApplet {
   void register(String name, ControllerInterface c) {
     all.put(name, c);
     (live ? liveNames : setupNames).add(name);
+    if (inSetup) setupGroup.add(name);
+    if (inView) viewGroup.add(name);
   }
 
   // a tool's box in column 2: its name with an on / off box - red off, green on. The rows made
@@ -2011,8 +2222,18 @@ public class Panel extends PApplet {
   // a setup box: a section whose title is clicked (see mouseReleased). Returns its section
   int setupBox(String title) {
     boxTitle = header(title);
+    for (int k = 0; k < S_COUNT; k++) if (boxNames[k] == null) { boxNames[k] = title; break; }
     cur.dx.set(0, 20);                   // room for the square before it (drawn in draw())
     return sections - 1;
+  }
+
+  // where setup box k's rows start in column 1 (k = S_COUNT: where the last one ends), and where
+  // the rows only shown while it's open start
+  void setupStart(int k) {
+    boxRowFrom[k] = columns.get(columns.size() - 1).size();
+  }
+  void setupContent(int k) {
+    boxContentFrom[k] = columns.get(columns.size() - 1).size();
   }
 
   // SETUP 1's list: the pictures with maps, then opening a photo of your own

@@ -1,6 +1,6 @@
 // Backdrop: what the painting is painted on (design doc, "Additions": ground / substrate layer).
 //
-// SETUP 3 chooses it: nothing (plain white), a canvas weave, paper, or a picture of your own
+// SETUP 7 chooses it: nothing (plain white), a canvas weave, paper, or a picture of your own
 // ("load ..."). It's the bottom of the stack (the Layers tab), under the canvas the painting starts
 // with: it shows wherever the canvas is made see-through (or hidden) in LAYERS. "strength" fades
 // it towards white. "shows through the paint" lets it come through everything above it as well,
@@ -14,15 +14,15 @@
 // may be stretched) or tiled: one tile in the middle, the others round it, cut off at the edges.
 // SAVE keeps where it came from, so LOAD SETTINGS can load it again.
 
-String[] backdropNames = { "none", "canvas weave", "paper", "load ..." };
+String[] backdropNames = { "none  (white)", "canvas weave", "paper", "a picture  (load ...)" };
 final int BACKDROP_FILE = 3;
 PImage backdropImg;          // the texture, at full strength
 volatile PImage backdropFile;                  // the picture loaded for "load ...", at its own size
 volatile String backdropFilePath = "", backdropFileName = "";
-PGraphics backdropLayer;     // the backdrop as drawn: the texture at SETUP 3's strength
+PGraphics backdropLayer;     // the backdrop as drawn: the texture at SETUP 7's strength
 String backdropKey = "", backdropLayerKey = "";
 
-// the texture for SETUP 3's choice, made if it isn't already
+// the texture for SETUP 7's choice, made if it isn't already
 PImage backdropTexture() {
   int kind = (int) v("backdropKind");
   PImage file = backdropFile;

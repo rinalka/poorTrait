@@ -2,8 +2,8 @@
 // into `canvas` - the picture you see, and that wet paint picks up from.
 //
 // Under them is the canvas (`startLayer`): solid, the canvas colour with the masses or the photo
-// on it (SETUP 4), made at RUN and CLEAR and never painted on. Under that, at the very bottom, is
-// the backdrop (SETUP 3, the Backdrop tab): white, a canvas weave, paper or a picture of your own, which shows
+// on it (SETUP 6), made at RUN and CLEAR and never painted on. Under that, at the very bottom, is
+// the backdrop (SETUP 7, the Backdrop tab): white, a canvas weave, paper or a picture of your own, which shows
 // where the canvas is made see-through or hidden. The backdrop and the canvas stay at the bottom.
 // The layers start empty; they're stacked in `layerOrder`, layer 1 at the bottom to start with,
 // and VIEW's LAYERS list can change the order. Each tool chooses the layer it paints on in its
@@ -72,8 +72,11 @@ PGraphics photoSized(PGraphics g) {
 void clearStart() {
   if (startLayer == null) return;
   int start = (int) v("startWith");
-  PImage under = start == 1 ? massesImg : start == 2 ? photo : null;
+  PImage under = start == 1 ? massesImg : start == 2 ? photo : start == 3 ? meshImg
+    : start == 4 ? paletteMassesImg : start == 5 ? paletteMeshImg : null;
+  if (start >= 4 && under == null) println("no palette yet (SETUP 5) - starting with the plain canvas colour");
   if (start == 1 && massesImg == null) println("the masses aren't ready yet - starting with the plain canvas colour");
+  if (start == 3 && meshImg == null) println("the mesh isn't ready yet - starting with the plain canvas colour");
   startLayer.beginDraw();
   startLayer.background(ground);
   if (under != null) startLayer.image(under, 0, 0);
