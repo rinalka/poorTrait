@@ -78,19 +78,23 @@ int countFor(float rate) {
   return (int) rate + (random(1) < rate - (int) rate ? 1 : 0);
 }
 
-// the colour for a splatter, line, from the tool's COLOUR settings: the accent now and
+// the colour for a line, pencil, flow ... from the tool's COLOUR settings: the accent now and
 // then (accent chance) or always (pick up from random), otherwise picked up where it lands,
 // jittered - then pushed away from the photo's lightness there by "contrast", so dark spots get
 // light marks and light spots dark ones
 color systemColour(float x, float y) {
-  color c;
-  if ((int) t("pickup") == PICK_RANDOM || random(1) < t("accentChance")) c = randomAccent();
-  else {
-    Paint p = new Paint();
-    p.pickup = (int) t("pickup");
-    p.mix = t("mix");
-    c = jitter(p.pickRaw(x, y));
-  }
+  return withContrast(pickedColour(x, y), x, y);
+}
+
+color pickedColour(float x, float y) {
+  if ((int) t("pickup") == PICK_RANDOM || random(1) < t("accentChance")) return randomAccent();
+  Paint p = new Paint();
+  p.pickup = (int) t("pickup");
+  p.mix = t("mix");
+  return jitter(p.pickRaw(x, y));
+}
+
+color withContrast(color c, float x, float y) {
   float k = t("contrast");
   if (k > 0) c = lerpColor(c, brightness(photoAt(x, y)) > 128 ? color(0) : color(255), k * 0.85);
   return c;

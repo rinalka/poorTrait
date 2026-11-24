@@ -16,6 +16,16 @@
 // ("drips") are wet enough to run: paint hangs off the bottom of the drop and runs straight down,
 // thinning a little, and gathers in a blob at the end.
 //
+// The paint (COLOUR) is picked up at one spot and put down at another: each cluster picks up at a
+// spot of its own, by MOVEMENT's rules, and lands somewhere else by the same rules ("put it down
+// somewhere else" off: where it lands). What it picks up there is COLOUR's "carry":
+//   one colour     the colour at the spot, for the whole cluster
+//   start to end   the colour there in the middle of the cluster, sliding into one picked up a
+//                  cluster's reach away at its edge
+//   two colours    two colours from either side of the spot - each drop is one or the other
+//   chunk          the bit of the picture round the spot - every drop is a dab of the same bit
+//   copy           the picture round the spot, seen through the cluster: each drop has its own part
+//
 // A cluster can be hundreds of drops, so the whole cluster is drawn as one shape made of
 // triangles - drawing each drop as a shape of its own is several times slower.
 
@@ -34,20 +44,31 @@ void paintSplatters(PGraphics g) {
   for (int i = 0; i < n; i++) splatter(g);
 }
 
+Paint splatPaint;                  // the cluster's paint: its carry, and its colours or picture
+float splatX, splatY;              // where the cluster lands
+float splatPickX, splatPickY;      // where its paint was picked up
+float splatReach;                  // how far out "start to end" has got to the end
+float splatDU, splatDV;            // chunk and copy: from a corner being drawn to its paint
+float splatSmearY = Float.NaN;     // a drip's paint all comes from this height: it runs down
+
 void splatter(PGraphics g) {
   float[] s = startPoint();
   if (s == null) return;
-  float cx = s[0], cy = s[1];
-  color c = systemColour(cx, cy);      // (in the Lines tab)
+  float cx = splatX = s[0], cy = splatY = s[1];
   float alpha = toolAlpha(cx, cy);
   float size = t("size"), spread = t("scatter");
   float tail = lerp(7, 1.5, t("big"));        // higher = more of the drops tiny
+  loadSplat(spread);
   g.noStroke();
   g.beginShape(TRIANGLES);
+  if (splatPaint.textured()) {
+    g.textureMode(IMAGE);
+    g.texture(splatPaint.tex);
+  }
 
   // the big splat in the middle (not always - some clusters are only drops)
   if (random(1) < 0.7) {
-    anyDrop(g, cx, cy, size * random(0.5, 1), dropColour(c), alpha);
+    anyDrop(g, cx, cy, size * random(0.5, 1), splatColour(cx, cy), alpha);
   }
 
   // drops round it: nearer the middle they're bigger
@@ -58,21 +79,102 @@ void splatter(PGraphics g) {
     if (x < 0 || y < 0 || x >= photo.width || y >= photo.height) continue;
     float far = constrain(sqrt(gx * gx + gy * gy) / 3, 0, 1);
     float r = max(0.7, size * 0.6 * pow(random(1), tail) * (1 - 0.6 * far));
-    anyDrop(g, x, y, r, dropColour(c), alpha * random(0.6, 1));
+    anyDrop(g, x, y, r, splatColour(x, y), alpha * random(0.6, 1));
   }
 
   // trails flung out from the middle
   int trails = floor(t("trails") * random(0, 4));
   for (int t = 0; t < trails; t++) {
-    trail(g, cx, cy, random(TWO_PI), spread * random(1.2, 4), size * random(0.12, 0.35), dropColour(c), alpha);
+    trail(g, cx, cy, random(TWO_PI), spread * random(1.2, 4), size * random(0.12, 0.35), splatColour(cx, cy), alpha);
   }
   g.endShape();
+  if (splatPaint.textured()) g.noTint();
+}
+
+// where the cluster's paint is picked up: somewhere else by MOVEMENT's rules, or where it lands.
+// "grid" and "mouse" say where clusters land, so with those the paint comes from anywhere THE
+// AREA allows
+float[] splatPickPoint() {
+  if (t("elsewhere") < 0.5) return new float[] { splatX, splatY };
+  int mode = (int) t("startAt"), a = (int) t("area");
+  float[] s = null;
+  if (mode != 2 && mode != 3) s = startPoint();
+  else {
+    boolean any = a == 0 || !areaReady();
+    for (int k = 0; k < 200 && s == null; k++) {
+      float x = random(photo.width), y = random(photo.height);
+      if (any || inArea(x, y) == (a == 1)) s = new float[] { x, y };
+    }
+  }
+  return s != null ? s : new float[] { splatX, splatY };
+}
+
+// the cluster's paint, as "carry" says (see the top of this tab)
+void loadSplat(float spread) {
+  float[] s = splatPickPoint();
+  splatPickX = s[0];
+  splatPickY = s[1];
+  splatReach = max(1, spread * 2);
+  Paint p = splatPaint = newPaint(255);
+  if (p.textured()) return;
+  if ((int) t("carry") >= CHUNK) {                // an accent instead of a picture
+    p.c0 = p.c1 = withContrast(p.accentColour, splatX, splatY);
+    return;
+  }
+  float a = random(TWO_PI), ca = cos(a), sa = sin(a);
+  if (p.carry == TWO) {
+    p.c0 = splatPick(splatPickX + ca * spread / 2, splatPickY + sa * spread / 2);
+    p.c1 = splatPick(splatPickX - ca * spread / 2, splatPickY - sa * spread / 2);
+  } else {
+    p.c0 = p.c1 = splatPick(splatPickX, splatPickY);
+    if (p.carry == START_END) p.c1 = splatPick(splatPickX + ca * splatReach, splatPickY + sa * splatReach);
+  }
+}
+
+// the colour picked up at (x, y) - its contrast is with the photo where the cluster lands
+color splatPick(float x, float y) {
+  x = constrain(x, 0, photo.width - 1);
+  y = constrain(y, 0, photo.height - 1);
+  return withContrast(pickedColour(x, y), splatX, splatY);       // (in the Lines tab)
+}
+
+// the colour of a drop at (x, y)
+color splatColour(float x, float y) {
+  return dropColour(splatMix(x, y, random(1) < 0.5));
+}
+
+// (second: for "two colours", the second one)
+color splatMix(float x, float y, boolean second) {
+  Paint p = splatPaint;
+  if (p.carry == TWO) return second ? p.c1 : p.c0;
+  if (p.carry == START_END) return lerpColor(p.c0, p.c1, constrain(dist(x, y, splatX, splatY) / splatReach, 0, 1));
+  return p.c0;
+}
+
+// the paint for what's drawn next, and a corner of it
+void splatInk(PGraphics g, color c, float a) {
+  if (splatPaint.textured()) g.tint(255, a);
+  else g.fill(c, a);
+}
+
+void splatVertex(PGraphics g, float x, float y) {
+  if (!splatPaint.textured()) g.vertex(x, y);
+  else g.vertex(x, y, constrain(x + splatDU, 0, photo.width - 1),
+                constrain((Float.isNaN(splatSmearY) ? y : splatSmearY) + splatDV, 0, photo.height - 1));
+}
+
+// chunk and copy: where the paint of something at (x, y) comes from. Chunk: all of them from
+// round the spot it was picked up; copy: each from as far from the spot as it is from the middle
+void splatFrom(float x, float y) {
+  boolean chunk = splatPaint.carry == CHUNK;
+  splatDU = splatPickX - (chunk ? x : splatX);
+  splatDV = splatPickY - (chunk ? y : splatY);
 }
 
 // one drop: a wobbly round shape, with satellite droplets round the big ones. Added to the
 // cluster's shape as a fan of triangles round its middle
 void drop(PGraphics g, float x, float y, float r, color c, float a) {
-  g.fill(c, a);
+  splatInk(g, c, a);
   if (r < 1.5) {
     disc(g, x, y, r, 6);
     return;
@@ -89,9 +191,9 @@ void drop(PGraphics g, float x, float y, float r, color c, float a) {
   }
   for (int i = 0; i < pts; i++) {
     int j = (i + 1) % pts;
-    g.vertex(x, y);
-    g.vertex(rx[i], ry[i]);
-    g.vertex(rx[j], ry[j]);
+    splatVertex(g, x, y);
+    splatVertex(g, rx[i], ry[i]);
+    splatVertex(g, rx[j], ry[j]);
   }
   // a drip, more likely from a bigger drop, hanging off its lowest point
   int low = 0;
@@ -109,6 +211,7 @@ void drop(PGraphics g, float x, float y, float r, color c, float a) {
 // one drop of a kind chosen at random from the box's ticked kinds, r about its radius
 void anyDrop(PGraphics g, float x, float y, float r, color c, float a) {
   int kind = splatKinds.get((int) random(splatKinds.size()));
+  splatFrom(x, y);
   if (kind == 0) drop(g, x, y, r, c, a);
   else fragment(g, x, y, r, kind, c, a);
 }
@@ -116,7 +219,7 @@ void anyDrop(PGraphics g, float x, float y, float r, color c, float a) {
 // a dot, a dash (a short thin bar) or a triangle (never quite regular), about r across, pointing
 // anywhere. Like a round drop, it can drip from its lowest point
 void fragment(PGraphics g, float x, float y, float r, int kind, color c, float a) {
-  g.fill(c, a);
+  splatInk(g, c, a);
   float ang = random(TWO_PI), ca = cos(ang), sa = sin(ang);
   float lowX = x, lowY = y;
   if (kind == 1) {
@@ -127,14 +230,14 @@ void fragment(PGraphics g, float x, float y, float r, int kind, color c, float a
     float ax = ca * l, ay = sa * l, bx = -sa * w, by = ca * w;
     float[] px = { x - ax - bx, x + ax - bx, x + ax + bx, x - ax + bx };
     float[] py = { y - ay - by, y + ay - by, y + ay + by, y - ay + by };
-    g.vertex(px[0], py[0]); g.vertex(px[1], py[1]); g.vertex(px[2], py[2]);
-    g.vertex(px[0], py[0]); g.vertex(px[2], py[2]); g.vertex(px[3], py[3]);
+    splatVertex(g, px[0], py[0]); splatVertex(g, px[1], py[1]); splatVertex(g, px[2], py[2]);
+    splatVertex(g, px[0], py[0]); splatVertex(g, px[2], py[2]); splatVertex(g, px[3], py[3]);
     for (int k = 0; k < 4; k++) if (py[k] > lowY) { lowX = px[k]; lowY = py[k]; }
   } else {
     for (int k = 0; k < 3; k++) {
       float a3 = ang + TWO_PI * k / 3 + random(-0.4, 0.4), rr = max(0.8, r * random(1, 1.75));
       float px = x + cos(a3) * rr, py = y + sin(a3) * rr;
-      g.vertex(px, py);
+      splatVertex(g, px, py);
       if (py > lowY) { lowX = px; lowY = py; }
     }
   }
@@ -155,14 +258,15 @@ void drip(PGraphics g, float x, float y, float r) {
   float seed = random(1000), drift = random(-0.03, 0.03);
   y -= w * 0.6;                                   // starts inside the drop, so they're joined
   float pl = 0, pr = 0, py = 0;
+  splatSmearY = y;
   for (int s = 0; s <= steps; s++) {
     float u = s / (float) steps, yy = y + len * u;
     float xx = x + drift * len * u * u + (noise(seed, u * 4) - 0.5) * w * 0.3;
     // wide where it leaves the drop, then thinning, swelling a little here and there
     float half = w / 2 * (lerp(1.6, 0.55, sqrt(u)) + 0.25 * (noise(seed + 9, u * 6) - 0.5));
     if (s > 0) {
-      g.vertex(pl, py); g.vertex(pr, py); g.vertex(xx - half, yy);
-      g.vertex(pr, py); g.vertex(xx + half, yy); g.vertex(xx - half, yy);
+      splatVertex(g, pl, py); splatVertex(g, pr, py); splatVertex(g, xx - half, yy);
+      splatVertex(g, pr, py); splatVertex(g, xx + half, yy); splatVertex(g, xx - half, yy);
     }
     pl = xx - half; pr = xx + half; py = yy;
     if (s == steps) {
@@ -172,21 +276,22 @@ void drip(PGraphics g, float x, float y, float r) {
       float cy = yy + br * 0.35;
       for (int i = 0; i < pts; i++) {
         float a0 = TWO_PI * i / pts, a1 = TWO_PI * (i + 1) / pts;
-        g.vertex(xx, cy);
-        g.vertex(xx + cos(a0) * br, cy + sin(a0) * br * (sin(a0) > 0 ? 1.2 : 0.9));
-        g.vertex(xx + cos(a1) * br, cy + sin(a1) * br * (sin(a1) > 0 ? 1.2 : 0.9));
+        splatVertex(g, xx, cy);
+        splatVertex(g, xx + cos(a0) * br, cy + sin(a0) * br * (sin(a0) > 0 ? 1.2 : 0.9));
+        splatVertex(g, xx + cos(a1) * br, cy + sin(a1) * br * (sin(a1) > 0 ? 1.2 : 0.9));
       }
     }
   }
+  splatSmearY = Float.NaN;
 }
 
 // a small round dot, as triangles
 void disc(PGraphics g, float x, float y, float r, int pts) {
   for (int i = 0; i < pts; i++) {
     float a0 = TWO_PI * i / pts, a1 = TWO_PI * (i + 1) / pts;
-    g.vertex(x, y);
-    g.vertex(x + cos(a0) * r, y + sin(a0) * r);
-    g.vertex(x + cos(a1) * r, y + sin(a1) * r);
+    splatVertex(g, x, y);
+    splatVertex(g, x + cos(a0) * r, y + sin(a0) * r);
+    splatVertex(g, x + cos(a1) * r, y + sin(a1) * r);
   }
 }
 
@@ -194,7 +299,9 @@ void disc(PGraphics g, float x, float y, float r, int pts) {
 void trail(PGraphics g, float x, float y, float ang, float len, float w, color c, float a) {
   int steps = max(4, round(len / 4));
   float stepLen = len / steps, bend = random(-0.02, 0.02);
-  g.fill(c, a);
+  boolean slides = splatPaint.carry == START_END;        // its colour changes on the way out
+  splatFrom(x, y);
+  splatInk(g, c, a);
   float pax = 0, pay = 0, pbx = 0, pby = 0;      // the last step's two edge points
   for (int s = 0; s <= steps; s++) {
     float t = s / (float) steps;
@@ -202,13 +309,14 @@ void trail(PGraphics g, float x, float y, float ang, float len, float w, color c
       ang += bend;
       x += cos(ang) * stepLen;
       y += sin(ang) * stepLen;
+      if (slides) splatInk(g, c = splatMix(x, y, false), a);
     }
     float half = w / 2 * pow(1 - t, 0.7) + 0.4;
     float nx = -sin(ang), ny = cos(ang);
     float ax = x + nx * half, ay = y + ny * half, bx = x - nx * half, by = y - ny * half;
     if (s > 0) {
-      g.vertex(pax, pay); g.vertex(pbx, pby); g.vertex(ax, ay);
-      g.vertex(pbx, pby); g.vertex(bx, by); g.vertex(ax, ay);
+      splatVertex(g, pax, pay); splatVertex(g, pbx, pby); splatVertex(g, ax, ay);
+      splatVertex(g, pbx, pby); splatVertex(g, bx, by); splatVertex(g, ax, ay);
     }
     pax = ax; pay = ay; pbx = bx; pby = by;
   }

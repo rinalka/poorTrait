@@ -23,8 +23,9 @@
 // Then the pen goes along the line, "speed" pixels a frame, with the hand's wobble and pressure.
 // "passes" goes round the whole line again, a little off, like going over a drawing; "start
 // again when done" keeps it going for ever. A change to the parts or smoothness plans the line
-// again and starts over. The colour comes from COLOUR, picked once for each pass, or is COLOUR's
-// "one colour".
+// again and starts over. The colour comes from COLOUR, picked once for each pass, or ("colour
+// changes along the line") where each part starts and again as the pen goes along it, as FLOW's
+// does (ColourAlong, in the Flow tab) - or it's COLOUR's "one colour".
 
 float[] outlineX, outlineY;        // every part's line, one after another, a point every 2 pixels
 int[] outlineFirst, outlineLast;   // for each point, the first and last points of its part
@@ -34,6 +35,7 @@ float outlineAt = 0;               // how far along the pen is (points)
 int outlinePass = 0;
 float outlineSeed, outlineAlpha, outlineOffX, outlineOffY;
 color outlineColour;
+ColourAlong outlineAlong;          // "colour changes along the line"
 boolean outlineDown = false;
 boolean outlineRestart = true;     // CLEAR and RUN start the pen again from the beginning
 float opax, opay, opbx, opby;
@@ -111,6 +113,10 @@ boolean outlineStep(PGraphics g) {
   float dx = (outlineX[j] - x) * (j > i ? 1 : -1), dy = (outlineY[j] - y) * (j > i ? 1 : -1);
   float d = max(0.001, sqrt(dx * dx + dy * dy));
   float nx = -dy / d, ny = dx / d;
+  if (t("along") > 0.5 && t("one") < 0.5) {
+    if (!outlineDown || outlineAlong == null) outlineAlong = new ColourAlong(outlineColour = systemColour(x, y));
+    else outlineColour = outlineAlong.step(x, y, OUTLINE_STEP);
+  }
   // the hand: wandering a little off the line, pressing harder and lighter
   float wob = t("wobble") * 7 * (noise(outlineSeed, i * 0.012) - 0.5) * 2;
   x += nx * wob + outlineOffX;

@@ -14,7 +14,9 @@
 // There's always a second masses picture (VIEW's "masses (palette)"): the masses
 // (SETUP 2) always have 24 paints, and each is given one of the palette's 24 colours - every colour
 // used once, shared out so the picture changes as little as it can (a paint may get a colour a
-// little off its own). "keep the masses' lightness" keeps how light or dark each paint was (so the
+// little off its own). Which colour each paint gets is worked out from the palette as it was generated, so
+// changing the colours afterwards (here, or in RECOLOUR's "masses" and "mesh" while a run is going)
+// never swaps them about. "keep the masses' lightness" keeps how light or dark each paint was (so the
 // picture stays readable even with a palette that hasn't the right darks and lights).
 //
 // Each tool can paint in the palette's colours: COLOUR's "pick up from: palette" (see further down).
@@ -100,6 +102,7 @@ void updatePaletteMasses() {
   String key = System.identityHashCode(massShown) + " " + java.util.Arrays.toString(lookShown) + " "
     + java.util.Arrays.toString(pal) + " " + v("paletteKeepLight");
   if (key.equals(paletteMassesKey) && paletteMassesImg != null) return;
+  if (paletteMassesImg != null && recolourHeld()) return;
   paletteMassesKey = key;
   int[] paints = adjustedPalette(massShown.rgb), choice = paletteMassChoice(massShown, pal);
   float keep = v("paletteKeepLight");
@@ -115,11 +118,25 @@ void updatePaletteMasses() {
 }
 
 // which palette colour each of the masses' (r's) paints is given, for the masses in the
-// palette's colours and SCRAPE's ERASE A PALETTE COLOUR
+// palette's colours and SCRAPE's ERASE A PALETTE COLOUR. It goes by the palette as it was
+// generated, not as it is now (pal), so reworking the colours leaves each with the masses it has;
+// it's only worked out again for a new palette, or when the masses or their colours change. The
+// same array is given back until then
+int[] massChoice, massChoiceBase, massChoicePaints;
+MassResult massChoiceFor;
+
 int[] paletteMassChoice(MassResult r, int[] pal) {
+  int[] base = panel.paletteBase, paints = adjustedPalette(r.rgb);
+  if (base.length != pal.length) base = pal;
+  if (r == massChoiceFor && java.util.Arrays.equals(base, massChoiceBase)
+    && java.util.Arrays.equals(paints, massChoicePaints)) return massChoice;
   int[] size = new int[r.rgb.length];
   for (int p : r.paintOf) size[p]++;
-  return paletteMassPaints(adjustedPalette(r.rgb), size, pal);
+  massChoice = paletteMassPaints(paints, size, base);
+  massChoiceFor = r;
+  massChoiceBase = base.clone();
+  massChoicePaints = paints;
+  return massChoice;
 }
 
 // each of the masses' paints given a palette colour (its number), one each: the masses have as many
@@ -210,7 +227,7 @@ String paletteUseFor = "";
 void updatePaletteUse() {
   int[] pal = panel.paletteFinal();
   String key = massShown == null || pal.length == 0 ? "" : System.identityHashCode(massShown) + " "
-    + java.util.Arrays.toString(lookShown) + " " + java.util.Arrays.toString(pal);
+    + java.util.Arrays.toString(paletteMassChoice(massShown, pal));
   if (key.equals(paletteUseFor)) return;
   paletteUseFor = key;
   if (key.equals("")) {
@@ -301,8 +318,15 @@ final int PICK_PALETTE = 5;
 PImage paletteMatched;         // the masses, each paint in its palette colour (null: make it again)
 String paletteMatchedFor = "";
 
-// Every frame: forget the picture if the masses or the palette have changed
+// Every frame: forget the pictures (the mesh's too, the Mesh tab) if the masses, the mesh or the
+// palette have changed - but not until a RECOLOUR slider is let go
 void updatePaletteMatch() {
+  if (recolourHeld()) return;
+  String meshKey = System.identityHashCode(meshPalIndex) + " " + java.util.Arrays.toString(panel.paletteFinal());
+  if (!meshKey.equals(meshMatchedFor)) {
+    meshMatchedFor = meshKey;
+    meshMatched = null;
+  }
   String key = massShown == null ? "" : System.identityHashCode(massShown) + " " + java.util.Arrays.toString(lookShown)
     + " " + java.util.Arrays.toString(panel.paletteFinal());
   if (!key.equals(paletteMatchedFor)) {

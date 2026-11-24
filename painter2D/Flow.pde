@@ -13,8 +13,9 @@
 // more gives long smooth swirls.
 //
 // The line's colour comes from COLOUR: picked where it starts, or ("colour changes along the
-// line") picked up again as it goes and blended in, so the line slowly takes on the colours it
-// passes over - or it's COLOUR's "one colour".
+// line") picked up again every so many pixels ("pixels till a new colour") and blended in over
+// that share of the way to the next ("blend": 0 changes at once, 1 slides all the way), so the
+// line takes on the colours it passes over - or it's COLOUR's "one colour".
 
 String[] flowSources = { "photo", "masses", "importance", "curvature", "depth", "light", "photo lightness", "saturation" };
 String[] flowChannels = { "red", "green", "blue", "hue", "saturation", "brightness" };
@@ -46,7 +47,8 @@ void paintFlows(PGraphics g) {
 
 class FlowLine {
   float x, y, heading, drawn = 0, len, seed = random(1000), alpha;
-  color c, target;
+  color c;
+  ColourAlong along;
   boolean done = false, down = false;
   float pax, pay, pbx, pby;
 
@@ -55,7 +57,8 @@ class FlowLine {
     this.y = y;
     heading = flowDirection(x, y);
     len = t("length") * random(0.8, 1.1);
-    c = target = systemColour(x, y);
+    c = systemColour(x, y);
+    along = new ColourAlong(c);
     alpha = toolAlpha(x, y);
   }
 
@@ -72,10 +75,7 @@ class FlowLine {
       return;
     }
     if (t("one") > 0.5) c = flowInk;
-    else if (t("along") > 0.5) {
-      if (drawn % 24 < FLOW_STEP) target = systemColour(x, y);
-      c = lerpColor(c, target, 0.08);
-    }
+    else if (t("along") > 0.5) c = along.step(x, y, FLOW_STEP);
     float press = lerp(1, 0.3 + 1.2 * noise(seed, drawn * 0.004), t("pressure"));
     float ends = min(1, min(drawn, len - drawn) / 20 + 0.2);
     float half = max(0.3, t("width") / 2 * press * ends);
@@ -89,6 +89,30 @@ class FlowLine {
     }
     down = true;
     pax = ax; pay = ay; pbx = bx; pby = by;
+  }
+}
+
+// a line's colour as it goes along ("colour changes along the line" - FLOW's and OUTLINE's): every
+// "pixels till a new colour" the colour under the line is picked up, and the line slides from the
+// colour it had to that one over "blend" of the way to the next
+class ColourAlong {
+  color now, from, to;
+  float gone = 0;                  // pixels since the last pick
+
+  ColourAlong(color c) {
+    now = from = to = c;
+  }
+
+  color step(float x, float y, float d) {
+    float every = max(1, t("every")), over = t("blendOver") * every;
+    if (gone >= every) {
+      gone = 0;
+      from = now;
+      to = systemColour(x, y);
+    }
+    gone += d;
+    now = gone >= over ? to : lerpColor(from, to, gone / over);
+    return now;
   }
 }
 

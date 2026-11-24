@@ -53,18 +53,16 @@ boolean makeArea() {
     return false;
   }
   areaWarned = false;
-  String key = (fromMesh ? "mesh " + System.identityHashCode(mr) + " " + System.identityHashCode(mIdx) : System.identityHashCode(r) + " " + java.util.Arrays.toString(lookShown)) + " "
-    + java.util.Arrays.toString(pal) + " " + java.util.Arrays.toString(picks) + " " + photo.width + "x" + photo.height;
+  int[] choice = fromMesh ? null : paletteMassChoice(r, pal);
+  String key = (fromMesh ? "mesh " + System.identityHashCode(mr) + " " + System.identityHashCode(mIdx)
+    : System.identityHashCode(r) + " " + System.identityHashCode(choice)) + " " + java.util.Arrays.toString(picks) + " " + photo.width + "x" + photo.height;
   if (key.equals(areaFor)) return true;
   areaFor = key;
   // each pixel's palette colour: its mass's, or its mesh shape's
   int w = fromMesh ? mr.w : r.w, h = fromMesh ? mr.h : r.h;
   int[] colourOf = new int[w * h];
   if (fromMesh) for (int i = 0; i < colourOf.length; i++) colourOf[i] = mIdx[mr.regionOf[i]];
-  else {
-    int[] choice = paletteMassChoice(r, pal);
-    for (int i = 0; i < colourOf.length; i++) colourOf[i] = choice[r.paintOf[i]];
-  }
+  else for (int i = 0; i < colourOf.length; i++) colourOf[i] = choice[r.paintOf[i]];
   areaW = w;
   areaH = h;
   areaIn = new boolean[w * h];

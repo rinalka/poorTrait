@@ -146,6 +146,10 @@ Paint newPaint(float alpha) {
       PImage m = paletteMatchedMasses();
       p.tex = m != null ? m : massesImg != null ? massesImg : photo;
     }
+    if (p.pickup == PICK_MESH_PALETTE) {
+      PImage m = paletteMatchedMesh();
+      p.tex = m != null ? m : meshImg != null ? meshImg : photo;
+    }
   }
   return p;
 }
@@ -180,6 +184,7 @@ class Paint {
     if (pickup == 3) return massesAt(x, y);
     if (pickup == PICK_PALETTE) return paletteAt(x, y);
     if (pickup == PICK_MESH) return meshAt(x, y);
+    if (pickup == PICK_MESH_PALETTE) return meshPaletteAt(x, y);
     return photoAt(x, y);
   }
 

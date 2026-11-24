@@ -14,6 +14,14 @@
 // very like a swatch move; bigger, and the changes blend smoothly into each other)
 // (data/recolour.glsl). Tools that pick up wet paint pick up the recoloured colours.
 //
+// After the layers come "masses" and "mesh": with one of them chosen, the swatches are SETUP 5's 24
+// palette colours (one palette, shared by the masses and the mesh, and the same one SETUP 5 changes)
+// and the output window shows the masses or the mesh in them, so the palette can be reworked while
+// looking at the picture - during a run too, when SETUP 5 is locked. Showing it pauses the painting
+// (MAPS: none, then CARRY ON). It changes what tools pick up from "palette" and "mesh (palette)"
+// from then on; paint already down stays as it is. "as generated" shows the palette without its
+// changes, to compare - in the output window only.
+//
 // The swatches and what's been done to them are kept on the panel (Gui's recolourBases and
 // recolourAdjs, one of each per layer), and saved with the settings.
 
@@ -150,6 +158,41 @@ PGraphics recolouredLayer(int i) {
   r.blendMode(BLEND);
   r.endDraw();
   return r;
+}
+
+// whether RECOLOUR is on the masses or the mesh (the palette) rather than a layer
+boolean recolouringPalette() {
+  return panel.recolourKind > 0 && panel.value("recolourOpen") > 0.5;
+}
+
+// ... with the mouse held on the panel, most likely a slider being dragged: everything made from
+// the palette waits until it's let go, but for the picture being looked at
+boolean recolourHeld() {
+  return recolouringPalette() && panel.mousePressed;
+}
+
+// the masses or the mesh in the palette's exact colours, for the output window (null if it isn't
+// ready). At the size they were worked out at - drawing it scales it up - so it keeps up with a
+// slider on a big photo
+PImage recolourImg;
+String recolourImgKey = "";
+
+PImage recolourPalettePicture() {
+  boolean mesh = panel.recolourKind == 2;
+  int[] pal = v("recolourAsMade") > 0.5 ? panel.paletteBase : panel.paletteFinal();
+  MassResult r = massShown;
+  MeshResult m = meshShown;
+  if (pal.length == 0 || (mesh ? m == null || meshImg == null || meshPalIndex == null : r == null || massesImg == null)) return null;
+  int[] to = mesh ? meshPalIndex : paletteMassChoice(r, pal), of = mesh ? m.regionOf : r.paintOf;
+  String key = System.identityHashCode(of) + " " + System.identityHashCode(to) + " " + java.util.Arrays.toString(pal);
+  if (recolourImg != null && key.equals(recolourImgKey)) return recolourImg;
+  recolourImgKey = key;
+  int w = mesh ? m.w : r.w, h = mesh ? m.h : r.h;
+  if (recolourImg == null || recolourImg.width != w || recolourImg.height != h) recolourImg = createImage(w, h, RGB);
+  recolourImg.loadPixels();
+  for (int i = 0; i < of.length; i++) recolourImg.pixels[i] = pal[to[of[i]]];
+  recolourImg.updatePixels();
+  return recolourImg;
 }
 
 // a swatch's colour after its changes (for the panel; the same sums as the shader)

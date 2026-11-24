@@ -1,6 +1,6 @@
 // Mesh: the photo cut into triangles - the "low poly" look of Pastiche's MeshMap - beside the
 // masses (SETUP 4, MESH), and used the same ways: VIEW's "mesh", START's "mesh", and COLOUR's
-// "pick up from: mesh". Each triangle is the photo's average colour over it.
+// "pick up from: mesh" (or "mesh (palette)", in SETUP 5's colours). Each triangle is the photo's average colour over it.
 //
 // The points the triangles join up:
 //   - brightness (always): the photo is looked at every "point spacing" pixels, and a point is
@@ -120,6 +120,45 @@ PImage meshPicture(MeshResult r, int[] rgb) {
 PImage paletteMeshImg;
 String paletteMeshKey = "";
 int[] meshPalIndex;                 // which palette colour each of meshShown's shapes was given
+MeshResult meshIndexFor;            // ... and what that was worked out from
+int[] meshIndexChoice, meshIndexPaints;
+
+// which palette colour each of the mesh's shapes is given. The colours are given out as the masses
+// give them: each shape the masses' paint nearest its colour, then that paint's palette colour - so
+// every palette colour is used, as in the masses (each shape simply taking its nearest palette
+// colour left most of a bright palette unused). Without the masses, the nearest palette colour.
+// Like the masses', it goes by the palette as it was generated, so it stays put while the colours
+// are reworked
+void updateMeshIndex(MeshResult r, int[] pal) {
+  MassResult mr = massShown;
+  int[] paints = mr == null ? (panel.paletteBase.length == pal.length ? panel.paletteBase : pal) : adjustedPalette(mr.rgb);
+  int[] paintTo = mr == null ? null : paletteMassChoice(mr, pal);
+  if (meshPalIndex != null && r == meshIndexFor && paintTo == meshIndexChoice
+    && java.util.Arrays.equals(paints, meshIndexPaints)) return;
+  meshIndexFor = r;
+  meshIndexChoice = paintTo;
+  meshIndexPaints = paints.clone();
+  float[][] kl = new float[paints.length][3];
+  for (int p = 0; p < paints.length; p++) toLab(paints[p], kl[p]);
+  float[] ml = new float[3];
+  int[] idx = new int[r.rgb.length];
+  for (int k = 0; k < r.rgb.length; k++) {
+    toLab(r.rgb[k], ml);
+    int best = 0;
+    float bestD = Float.MAX_VALUE;
+    for (int p = 0; p < paints.length; p++) {
+      float dd = 0.5 * sq(ml[0] - kl[p][0]) + sq(ml[1] - kl[p][1]) + sq(ml[2] - kl[p][2]);
+      if (dd < bestD) { bestD = dd; best = p; }
+    }
+    idx[k] = paintTo == null ? best : paintTo[best];
+  }
+  meshPalIndex = idx;
+  // each palette colour's share of the picture in the mesh (THE AREA's strip, "from: mesh")
+  float[] use = new float[pal.length];
+  for (int i = 0; i < r.regionOf.length; i++) use[idx[r.regionOf[i]]]++;
+  for (int p = 0; p < use.length; p++) use[p] /= r.regionOf.length;
+  panel.meshPaletteUse = use;
+}
 
 void updatePaletteMesh() {
   MeshResult r = meshShown;
@@ -131,44 +170,53 @@ void updatePaletteMesh() {
     panel.meshPaletteUse = new float[0];
     return;
   }
-  MassResult mr = massShown;
-  String key = System.identityHashCode(r) + " " + java.util.Arrays.toString(pal) + " " + v("paletteKeepLight")
-    + " " + (mr == null ? "" : System.identityHashCode(mr) + java.util.Arrays.toString(lookShown));
+  updateMeshIndex(r, pal);
+  int[] idx = meshPalIndex;
+  String key = System.identityHashCode(idx) + " " + java.util.Arrays.toString(pal) + " " + v("paletteKeepLight");
   if (key.equals(paletteMeshKey) && paletteMeshImg != null) return;
+  if (paletteMeshImg != null && recolourHeld()) return;
   paletteMeshKey = key;
   float keep = v("paletteKeepLight");
   float[][] pl = new float[pal.length][3];
   for (int p = 0; p < pal.length; p++) toLab(pal[p], pl[p]);
-  // the colours are given out as the masses give them: each shape the masses' paint nearest its
-  // colour, then that paint's palette colour - so every palette colour is used, as in the masses
-  // (each shape simply taking its nearest palette colour left most of a bright palette unused)
-  // Without the masses, the nearest palette colour
-  int[] paints = mr == null ? pal : adjustedPalette(mr.rgb);
-  int[] paintTo = mr == null ? null : paletteMassChoice(mr, pal);
-  float[][] kl = new float[paints.length][3];
-  for (int p = 0; p < paints.length; p++) toLab(paints[p], kl[p]);
   float[] ml = new float[3];
   int[] mapped = new int[r.rgb.length];
-  int[] idx = new int[r.rgb.length];
   for (int k = 0; k < r.rgb.length; k++) {
     toLab(r.rgb[k], ml);
-    int best = 0;
-    float bestD = Float.MAX_VALUE;
-    for (int p = 0; p < paints.length; p++) {
-      float dd = 0.5 * sq(ml[0] - kl[p][0]) + sq(ml[1] - kl[p][1]) + sq(ml[2] - kl[p][2]);
-      if (dd < bestD) { bestD = dd; best = p; }
-    }
-    if (paintTo != null) best = paintTo[best];
-    mapped[k] = fromLab(lerp(pl[best][0], ml[0], keep), pl[best][1], pl[best][2]);
-    idx[k] = best;
+    int p = idx[k];
+    mapped[k] = fromLab(lerp(pl[p][0], ml[0], keep), pl[p][1], pl[p][2]);
   }
-  meshPalIndex = idx;
-  // each palette colour's share of the picture in the mesh (THE AREA's strip, "from: mesh")
-  float[] use = new float[pal.length];
-  for (int i = 0; i < r.regionOf.length; i++) use[idx[r.regionOf[i]]]++;
-  for (int p = 0; p < use.length; p++) use[p] /= r.regionOf.length;
-  panel.meshPaletteUse = use;
   paletteMeshImg = meshPicture(r, mapped);
+}
+
+// COLOUR's "pick up from: mesh (palette)": each shape in its palette colour exactly as it is in the
+// palette, as "palette" does with the masses. Made when a tool first asks for it, and again when the
+// mesh or the palette changes (updatePaletteMatch, the Palette Gen tab)
+final int PICK_MESH_PALETTE = 7;
+PImage meshMatched;
+String meshMatchedFor = "";
+
+PImage paletteMatchedMesh() {
+  MeshResult r = meshShown;
+  if (r == null || meshImg == null) return null;
+  if (panel.paletteBase.length == 0) {
+    panel.newPalette();
+    println("palette: SETUP 5 hadn't made one yet - made one (open SETUP 5 to change it)");
+  }
+  if (meshMatched == null) {
+    int[] pal = panel.paletteFinal();
+    if (pal.length == 0) return null;
+    updateMeshIndex(r, pal);
+    int[] mapped = new int[r.rgb.length];
+    for (int k = 0; k < mapped.length; k++) mapped[k] = pal[meshPalIndex[k]];
+    meshMatched = meshPicture(r, mapped);
+  }
+  return meshMatched;
+}
+
+color meshPaletteAt(float x, float y) {
+  PImage m = paletteMatchedMesh();
+  return m == null ? meshAt(x, y) : m.pixels[pixelIndex(x, y)];
 }
 
 // the palette colour the mesh's shape at (x, y) on the photo was given, or -1 (with why, on the console)

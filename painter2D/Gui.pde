@@ -12,8 +12,9 @@
 //                                 shape settings - and under them AUTOMATION, the chosen tool's
 //                                 size or length moved up and down by a wave (the Automation tab),
 //                                 and RECOLOUR, changing the painting's colours a few at a time
-//   MOVEMENT, COLOUR, APPLY       how the chosen tool moves, where its colour comes from, and
-//                                 how solid it is
+//                                 (a layer's, or the palette's on the masses or the mesh)
+//   APPLY, MOVEMENT, COLOUR       which layer the chosen tool paints on and how solid it is - to
+//                                 be picked first - how it moves, and where its colour comes from
 //   LAYER 1 - 5, CANVAS,          a box for each layer, the canvas and the backdrop's colours,
 //   BACKDROP, SHADOW BOX,         the layers floating apart, lit from one side, and thick paint
 //   IMPASTO                       catching the light
@@ -113,11 +114,17 @@ public class Panel extends PApplet {
   volatile float[][][] recolourAdjs = new float[LAYERS][0][];
   boolean[][] recolourPickeds = new boolean[LAYERS][0];
   int recolourL = 0;
-  Row recolourGrid;                   // the row the swatches are drawn in
+  Row recolourGrid, recolourPalGrid;  // the rows the swatches are drawn in: a layer's, the palette's
+  // 0: a layer, 1: the masses, 2: the mesh - for those two the swatches are SETUP 5's palette
+  volatile int recolourKind = 0;
+  int recolourShown = -1;             // the map VIEW was switched to for that (-1: none)
+  float recolourShowBefore = 0;       // ... and what it showed before
+  boolean applying = false;           // saved settings are being put back: don't switch the view
   Row accentBar;                      // the row COLOUR's accent hue bar is drawn in
   Textlabel recolourText;
   boolean recolourSyncing = false;    // the sliders are being set to show a swatch, not moved
-  final int SWATCH_COLS = 5, SWATCH_H = 38;
+  final int SWATCH_COLS = 5, SWATCH_H = 35;
+  final int SWATCH_PAL_COLS = 8;      // ... the palette's 24, in fewer rows
 
   // SETUP 5, PALETTE GEN (the Palette Gen tab): the palette's colours as generated, what's been
   // done to each (hue shift in degrees, saturation and brightness multiplied by), which are chosen,
@@ -173,6 +180,10 @@ public class Panel extends PApplet {
   int[] toolSection = new int[TOOLS.length];   // each tool box's colour block
   String curTool;            // the tool whose box is being built
   Textlabel moveHeader, colourHeader, applyHeader;
+  int applySection;                   // APPLY's colour block
+  boolean applyOpen = false;          // opened by its title (it's open anyway till a layer's picked)
+  boolean applyPressed = false;       // its title has been pressed (it opens or closes on letting go)
+  volatile boolean layerClicked = false;   // a layer's been clicked: APPLY closes on letting go
   Row autoWave;              // the row AUTOMATION's wave is drawn in
 
   // one row of controls, and when it's shown (see shown())
@@ -511,6 +522,7 @@ public class Panel extends PApplet {
     toolSlider("scatter", "scatter", 5, 400, 60).setDecimalPrecision(0);
     toolSlider("trails", "flung trails", 0, 1, 0.3);
     toolSlider("vary", "drop colour variation", 0, 0.5, 0.1);
+    onlyWhen("on splat&splatFlat");
     toolSlider("drip", "drips", 0, 1, 0);
     toolSlider("dripLength", "drip length", 10, 400, 120).setDecimalPrecision(0);
 
@@ -566,6 +578,10 @@ public class Panel extends PApplet {
     row(24);
     toggle("flow_along", "colour changes along the line", true, 0);
     onlyWhen("on flow");
+    toolSlider("every", "pixels till a new colour", 2, 500, 24).setDecimalPrecision(0);
+    onlyWhen("on flow&along flow");
+    toolSlider("blendOver", "blend  (0: at once)", 0, 1, 1);
+    onlyWhen("on flow&along flow");
 
     // outline (the Outline tab): the face in one line - which parts it takes in, and the pen
     // (what it traces, and how smooth, are in SETUP 3)
@@ -582,6 +598,13 @@ public class Panel extends PApplet {
     toggle("outline_loop", "start again when done", false, 0);
     toggle("outline_join", "one unbroken line", false, 180);
     onlyWhen("on outline");
+    row(24);
+    toggle("outline_along", "colour changes along the line", false, 0);
+    onlyWhen("on outline");
+    toolSlider("every", "pixels till a new colour", 2, 500, 24).setDecimalPrecision(0);
+    onlyWhen("on outline&along outline");
+    toolSlider("blendOver", "blend  (0: at once)", 0, 1, 1);
+    onlyWhen("on outline&along outline");
 
     // the sponge (the Sponge tab): the chunk, and how it's dabbed
     toolBox(7, false);
@@ -712,18 +735,31 @@ public class Panel extends PApplet {
     row(26);
     toggle("recolourOpen", "open", false, 0);
     toggle("recolourOn", "on", true, 240);
-    row(24);
+    cur.itemWhen.set(cur.itemWhen.size() - 1, "recolourLayers");
+    // (on the masses or the mesh: the output window shows the palette without its changes)
+    toggle("recolourAsMade", "as generated", false, 180);
+    cur.itemWhen.set(cur.itemWhen.size() - 1, "recolourPal");
+    row(48);
     label("layer", 0);
-    radioAt("recolourLayer", new String[] { "1", "2", "3", "4", "5" }, 0, 60, 44);
+    radioAt("recolourLayer", new String[] { "1", "2", "3", "4", "5", "masses", "mesh" }, 0, 60, 44);
+    RadioButton rl = (RadioButton) all.get("recolourLayer");
+    rl.getItem(LAYERS).setPosition(0, 24);          // the palette's two on a line of their own
+    rl.getItem(LAYERS + 1).setPosition(88, 24);
+    Textlabel rp = cp5.addTextlabel("recolourPalLabel").setText("palette").setColorValue(dark);
+    put(rp, -4, 26);
     row(32);
     button("recolourNew", "READ COLOURS", 0, 100);
+    cur.itemWhen.set(cur.itemWhen.size() - 1, "recolourLayers");
     button("recolourRandom", "RANDOM NUDGE", 106, 110);
     recolourText = cp5.addTextlabel("recolourText").setText("").setColorValue(dark);
     put(recolourText, 222, 6);
     onlyWhen("recolour");
     row(SWATCH_H * ((RECOLOURS + SWATCH_COLS - 1) / SWATCH_COLS) + 6);
     recolourGrid = cur;
-    onlyWhen("recolour");
+    onlyWhen("recolour&recolourLayers");
+    row(SWATCH_H * ((PALETTE_SIZE + SWATCH_PAL_COLS - 1) / SWATCH_PAL_COLS) + 6);
+    recolourPalGrid = cur;
+    onlyWhen("recolour&recolourPal");
     slider("recolourHue", "hue  (degrees)", -180, 180, 0).setDecimalPrecision(0);
     onlyWhen("recolour");
     slider("recolourSat", "saturation", 0, 2, 1);
@@ -731,7 +767,7 @@ public class Panel extends PApplet {
     slider("recolourBri", "brightness", 0, 2, 1);
     onlyWhen("recolour");
     slider("recolourReach", "reach  (how far it spreads)", 0.02, 0.3, 0.08);
-    onlyWhen("recolour");
+    onlyWhen("recolour&recolourLayers");
     row(32);
     button("recolourAll", "ALL", 0, 50);
     button("recolourNone", "NONE", 56, 60);
@@ -740,9 +776,48 @@ public class Panel extends PApplet {
     onlyWhen("recolour");
     row(4);
 
-    // ---------------------------------------------------- column 3: MOVEMENT, COLOUR, APPLY
+    // ---------------------------------------------------- column 3: APPLY, MOVEMENT, COLOUR
     // ... of the tool chosen in column 2. Every tool has its own set; only the chosen one's shows
     column();
+    // APPLY first: which layer the tool paints on has to be picked before its MOVEMENT and COLOUR
+    // show, and it doesn't paint till it is. Picking one closes the box to one line saying which;
+    // clicking its title opens it again, over the others, and closes it (see applyShut())
+    applyHeader = header("APPLY");
+    cur.dx.set(0, 20);                   // room for the square before it (drawn in draw())
+    applySection = sections - 1;
+    onlyWhen("notScrape");
+    float[] opacityDefault = { 0.9, 0.9, 0.9, 0.8, 0.9, 0.9, 0.95, 0.9 };
+    float[] washesDefault = { 0.15, 0.15, 0, 0, 0, 0, 0, 0 };
+    float[] thicknessDefault = { 0.5, 0.8, 0.4, 0.1, 0, 0.2, 0, 0.15 };
+    for (int i = 0; i < TOOLS.length - 1; i++) {
+      String n = TOOLS[i], when = "edit " + n + "&applyOpen";
+      row(24);
+      label("paints on layer", 0);
+      radioAt(n + "_layer", new String[] { "1", "2", "3", "4", "5" }, -1, 110, 44);
+      onlyWhen(when);
+      for (Toggle t : ((RadioButton) all.get(n + "_layer")).getItems()) {
+        // (a callback: the layer it already has sends no event)
+        t.addCallback(new CallbackListener() {
+          public void controlEvent(CallbackEvent e) {
+            if (e.getAction() == ControlP5.ACTION_PRESS && !((Toggle) e.getController()).isLock()) layerClicked = true;
+          }
+        });
+      }
+      slider(n + "_opacity", "opacity", 0, 1, opacityDefault[i]);
+      onlyWhen(when);
+      modRow(n + "_opacity", 0, 0.5, false);
+      onlyWhen(when);
+      slider(n + "_washes", "see-through washes", 0, 1, washesDefault[i]);
+      onlyWhen(when);
+      slider(n + "_thickness", "thickness  (impasto)", 0, 1, thicknessDefault[i]);
+      onlyWhen(when);
+      row(28);
+      label("blend", 0);
+      list(n + "_blend", blendNames, 0, 50, 140);
+      onlyWhen(when);
+    }
+    int applyRows = columns.get(columns.size() - 1).size();
+
     float[] followDefault = { 0.6, 0.6, 0, 0.5, 0.3, 0, 0, 0, 0.5 };
     moveHeader = header("MOVEMENT");
     onlyWhen("notOutline");
@@ -786,18 +861,16 @@ public class Panel extends PApplet {
       curBand = 3;
       row(20);
       label("draw  (THE AREA, below)", 0);
+      toggle(n + "_areaClip", "clip at its edge  (slow)", true, 170);
+      cur.itemWhen.set(cur.itemWhen.size() - 1, "area " + n);
       onlyWhen("edit " + n);
       radio(n + "_area", new String[] { "anywhere", "in the area", "outside it" }, 3, 0);
       onlyWhen("edit " + n);
-      row(24);
-      toggle(n + "_areaClip", "clip at the area's edge  (slower)", true, 0);
-      onlyWhen("edit " + n + "&area " + n);
     }
     // THE AREA, shared by every tool: palette colours, chosen in the strip or on the masses
-    row(22);
-    label("THE AREA: where these palette colours are, on the", 0);
-    onlyWhen("areaUsed");
-    radio("areaFrom", new String[] { "masses", "mesh" }, 2, 0);
+    row(24);
+    label("THE AREA: colours on the", 0);
+    radioAt("areaFrom", new String[] { "masses", "mesh" }, 0, 170, 80);
     onlyWhen("areaUsed");
     row(2 * ERASE_H + 4);
     areaStrip = cur;
@@ -826,20 +899,28 @@ public class Panel extends PApplet {
       row(20);
       label("pick up from", 0);
       onlyWhen("edit " + n);
-      radio(n + "_pickup", new String[] { "photo", "canvas (wet)", "mix", "masses", "random  (accent ranges)", "palette  (SETUP 5)", "mesh" }, 2, 0);
+      radio(n + "_pickup", new String[] { "photo", "canvas (wet)", "mix", "masses", "random  (accent ranges)", "palette  (SETUP 5)", "mesh", "mesh  (palette)" }, 2, 0);
       onlyWhen("edit " + n);
-      // (palette: the palette colour of the mass under the point, exactly - the Palette Gen tab)
+      // (palette: the palette colour of the mass under the point, exactly - the Palette Gen tab;
+      // mesh (palette): of the mesh's shape under it - the Mesh tab)
       slider(n + "_mix", "mix: share from the canvas", 0, 1, 0.5);
       onlyWhen("edit " + n + "&mix " + n);
-      if (i <= 1) {
+      if (i <= 2) {
         row(20);
         label("carry", 0);
         onlyWhen("edit " + n);
-        radio(n + "_carry", new String[] { "one colour", "start to end", "two colours", "chunk (dipped)", "copy" }, 2, 1);
+        radio(n + "_carry", new String[] { "one colour", "start to end", "two colours", "chunk", "copy" }, 3, n.equals("splat") ? 0 : 1);
         onlyWhen("edit " + n);
-      } else {
+      }
+      if (n.equals("splat")) {
+        // a cluster's paint from one spot, the cluster at another (the Splatter tab)
+        row(24);
+        toggle("splat_elsewhere", "put it down somewhere else", true, 0);
+        onlyWhen("edit splat");
+      }
+      if (i >= 2) {
         slider(n + "_contrast", "contrast with the photo", 0, 1, contrastDefault[i]);
-        onlyWhen("edit " + n);
+        onlyWhen(n.equals("splat") ? "edit splat&splatFlat" : "edit " + n);
       }
       slider(n + "_jitterH", "hue jitter", 0, 0.2, 0.02);
       onlyWhen("edit " + n);
@@ -866,30 +947,11 @@ public class Panel extends PApplet {
     row(6);
     onlyWhen("notScrape");
 
-    applyHeader = header("APPLY");
-    onlyWhen("notScrape");
-    float[] opacityDefault = { 0.9, 0.9, 0.9, 0.8, 0.9, 0.9, 0.95, 0.9 };
-    float[] washesDefault = { 0.15, 0.15, 0, 0, 0, 0, 0, 0 };
-    int[] layerDefault = { 1, 1, 3, 2, 3, 2, 3, 2 };
-    float[] thicknessDefault = { 0.5, 0.8, 0.4, 0.1, 0, 0.2, 0, 0.15 };
-    for (int i = 0; i < TOOLS.length - 1; i++) {
-      String n = TOOLS[i];
-      row(24);
-      label("paints on layer", 0);
-      radioAt(n + "_layer", new String[] { "1", "2", "3", "4", "5" }, layerDefault[i], 110, 44);
-      onlyWhen("edit " + n);
-      slider(n + "_opacity", "opacity", 0, 1, opacityDefault[i]);
-      onlyWhen("edit " + n);
-      modRow(n + "_opacity", 0, 0.5, false);
-      onlyWhen("edit " + n);
-      slider(n + "_washes", "see-through washes", 0, 1, washesDefault[i]);
-      onlyWhen("edit " + n);
-      slider(n + "_thickness", "thickness  (impasto)", 0, 1, thicknessDefault[i]);
-      onlyWhen("edit " + n);
-      row(28);
-      label("blend", 0);
-      list(n + "_blend", blendNames, 0, 50, 140);
-      onlyWhen("edit " + n);
+    // MOVEMENT and COLOUR only show while APPLY is closed
+    ArrayList<Row> col3 = columns.get(columns.size() - 1);
+    for (int i = applyRows; i < col3.size(); i++) {
+      Row cr = col3.get(i);
+      cr.when = cr.when.equals("") ? "applyShut" : cr.when + "&applyShut";
     }
 
     // ---------------------------------------------------- column 4: LAYER 1 - 5, CANVAS, BACKDROP, SHADOW BOX, IMPASTO
@@ -1030,6 +1092,11 @@ public class Panel extends PApplet {
       fill(setupDone[k] ? doneGreen : notDoneRed);
       rect(b[0] - 1, b[1] + 9, 15, 15, 3);
     }
+    float[] ab = block[applySection];
+    if (ab != null) {
+      fill(layerPicked() ? doneGreen : notDoneRed);
+      rect(ab[0] - 1, ab[1] + 9, 15, 15, 3);
+    }
     drawSwatches();
     drawPaletteSwatches();
     drawEraseSwatches();
@@ -1094,8 +1161,12 @@ public class Panel extends PApplet {
       int e = java.util.Arrays.asList(TOOLS).indexOf(editing);
       moveHeader.setText("MOVEMENT  -  " + toolTitles[e].toLowerCase());
       colourHeader.setText("COLOUR  -  " + toolTitles[e].toLowerCase());
-      applyHeader.setText("APPLY  -  " + toolTitles[e].toLowerCase());
+      applyOpen = false;
+      layoutWanted = true;
     }
+    applyHeader.setText("APPLY  -  " + toolTitles[max(0, java.util.Arrays.asList(TOOLS).indexOf(editing))].toLowerCase()
+      + (!layerPicked() ? "     pick a layer first" : applyShut() ? "     paints on layer " + ((int) value(editing + "_layer") + 1)
+      : "     click here when done"));
     for (int k = 0; k < S_COUNT; k++) boxTitles[k].setText(boxNames[k] + (openSetup == k ? "     click here when done" : ""));
     sourceText.setText(sourceDone ? faceName + "     " + photo.width + " x " + photo.height + " pixels" : "click to choose a picture");
     massText.setText(massesOpen ? massStatus : massesDone ? "done  -  " + massStatus.replace("masses: ", "")
@@ -1141,6 +1212,7 @@ public class Panel extends PApplet {
       return;
     }
     String state = isRunning ? (isPaused ? (value("showWhat") > 0 ? "paused  (showing a map)" : "paused") : "painting") : runWaiting ? "waiting for the masses" : "stopped";
+    if (anyOn && isRunning && !isPaused && !layerPicked()) state += " nothing - pick a layer in APPLY";
     text(faceName + "   " + photo.width + " x " + photo.height + "      " + state + "      " + markCount + " marks      "
       + round(outputFps) + " fps      " + massStatus, 16, height - 14);
   }
@@ -1171,6 +1243,10 @@ public class Panel extends PApplet {
         return;
       }
     }
+    if (!editing.equals("scrape") && layerPicked() && inBlock(applySection, 30)) {
+      applyPressed = true;
+      return;
+    }
     for (ControllerInterface c : all.values()) {
       if (!c.isVisible()) continue;
       if (c instanceof RadioButton) {
@@ -1178,6 +1254,7 @@ public class Panel extends PApplet {
         for (int i = 0; i < items.size(); i++) {
           if (onLabel(items.get(i), ((RadioButton) c).getPosition())) {
             ((RadioButton) c).activate(i);
+            if (c == all.get(editing + "_layer") && !editing.equals("scrape")) layerClicked = true;
             layoutWanted = true;
             return;
           }
@@ -1208,6 +1285,10 @@ public class Panel extends PApplet {
   // close and are done. Done when the button is let go - the list opens under the mouse, and
   // controlP5 picks a list item on letting go
   public void mouseReleased() {
+    if (layerClicked) applyOpen = false;
+    else if (applyPressed && inBlock(applySection, 30)) applyOpen = !applyOpen;
+    if (layerClicked || applyPressed) layoutWanted = true;
+    layerClicked = applyPressed = false;
     int k = pressedIn;
     pressedIn = -1;
     if (k < 0 || !inBlock(boxSections()[k], 0) || isRunning) return;     // locked while running
@@ -1240,6 +1321,16 @@ public class Panel extends PApplet {
     return true;
   }
 
+  // APPLY: whether the chosen tool has its layer, and whether the box is closed (MOVEMENT and
+  // COLOUR show then). SCRAPE hasn't got one
+  boolean layerPicked() {
+    return value(editing + "_layer") >= 0;
+  }
+
+  boolean applyShut() {
+    return editing.equals("scrape") || (layerPicked() && !applyOpen && !layerClicked);
+  }
+
   // whether the mouse is on one of the setup boxes
   boolean overSetup() {
     for (int b : boxSections()) if (inBlock(b, 0)) return true;
@@ -1262,6 +1353,7 @@ public class Panel extends PApplet {
     } else if (k == S_PAL) {
       if (paletteBase.length == 0) newPalette();
       paletteOpen = true;
+      showPaletteChosen();         // (RECOLOUR may have changed them meanwhile)
       want = names.indexOf("masses (palette)");
     } else if (k == S_OUTL) {
       outlineOpen = true;
@@ -1292,6 +1384,7 @@ public class Panel extends PApplet {
       else if (k == S_START) startDone = true;
       else if (k == S_BACK) backdropDone = true;
     }
+    if (k == S_PAL && recolourKind > 0) showChosen();      // RECOLOUR shows the same palette
     layoutWanted = true;
   }
 
@@ -1332,36 +1425,97 @@ public class Panel extends PApplet {
     showChosen();
   }
 
+  // what the swatches show and the sliders change: the chosen layer's, or the palette's (the masses
+  // and the mesh). They're replaced whole, never changed in place
+  int[] swatchBase() { return recolourKind > 0 ? paletteBase : recolourBase; }
+  float[][] swatchAdj() { return recolourKind > 0 ? paletteAdj : recolourAdj; }
+  boolean[] swatchPicked() { return recolourKind > 0 ? palettePicked : recolourPicked; }
+  int swatchCols() { return recolourKind > 0 ? SWATCH_PAL_COLS : SWATCH_COLS; }
+  Row swatchGrid() { return recolourKind > 0 ? recolourPalGrid : recolourGrid; }
+
+  void setSwatchAdj(float[][] adj) {
+    if (recolourKind > 0) paletteAdj = adj;
+    else recolourAdj = recolourAdjs[recolourL] = adj;
+  }
+
+  void setSwatchPicked(boolean[] p) {
+    if (recolourKind > 0) palettePicked = p;
+    else recolourPicked = recolourPickeds[recolourL] = p;
+  }
+
+  // what RECOLOUR is on: a layer (with its palette shown), or the masses or the mesh
+  void chooseRecolour(int i) {
+    recolourKind = constrain(i - LAYERS + 1, 0, 2);
+    if (recolourKind == 0) showLayer(constrain(i, 0, LAYERS - 1));
+    else showChosen();
+  }
+
+  // the swatches' palette made if there isn't one yet: a layer's colours read, or SETUP 5's palette
+  void needSwatches() {
+    if (recolourKind > 0) {
+      if (paletteBase.length == 0) newPalette();
+    }
+    else if (recolourBase.length == 0) command("recolourPalette " + recolourL);
+  }
+
+  // the map that goes with what RECOLOUR is open on (-1: none)
+  int recolourMap() {
+    if (recolourKind == 0 || value("recolourOpen") < 0.5) return -1;
+    return java.util.Arrays.asList(showNames).indexOf(recolourKind == 1 ? "masses (palette)" : "mesh (palette)");
+  }
+
+  // the masses or the mesh in the palette's colours in the output window while RECOLOUR is open on
+  // them; then the view as it was, unless it's been changed meanwhile
+  void showRecolourMap() {
+    int want = recolourMap();
+    if (applying || want == recolourShown) return;
+    RadioButton show = (RadioButton) all.get("showWhat");
+    int was = recolourShown;
+    recolourShown = want;
+    if (want >= 0) {
+      if (was < 0 || show.getValue() != was) recolourShowBefore = show.getValue();
+      show.activate(want);
+    }
+    else if (show.getValue() == was) show.activate(recolourShowBefore == was ? 0 : (int) recolourShowBefore);
+  }
+
   void recolourEvent(String n, float value) {
     if (n.equals("recolourNew")) command("recolourPalette " + recolourL);
     else if (n.equals("recolourRandom")) randomRecolour();
     else if (n.equals("recolourOpen")) {
-      if (value > 0.5 && recolourBase.length == 0) command("recolourPalette " + recolourL);
+      if (value > 0.5) needSwatches();
+      showRecolourMap();
     }
     else if (n.equals("recolourLayer")) {
       // another layer: the box opens on its palette, read now if it hasn't one yet
-      showLayer(constrain((int) value, 0, LAYERS - 1));
+      chooseRecolour((int) value);
       if (value("recolourOpen") < 0.5) all.get("recolourOpen").setValue(1);
-      else if (recolourBase.length == 0) command("recolourPalette " + recolourL);
+      else {
+        needSwatches();
+        showRecolourMap();
+      }
     }
     else if (n.equals("recolourAll") || n.equals("recolourNone")) {
-      java.util.Arrays.fill(recolourPicked, n.equals("recolourAll"));
+      boolean[] p = new boolean[swatchBase().length];
+      java.util.Arrays.fill(p, n.equals("recolourAll"));
+      setSwatchPicked(p);
       showChosen();
     }
     else if (n.equals("recolourResetPicked") || n.equals("recolourResetAll")) {
       float[][] adj = copyAdj();
       for (int i = 0; i < adj.length; i++) {
-        if (n.equals("recolourResetAll") || recolourPicked[i]) adj[i] = new float[] { 0, 1, 1 };
+        if (n.equals("recolourResetAll") || swatchPicked()[i]) adj[i] = new float[] { 0, 1, 1 };
       }
-      recolourAdj = recolourAdjs[recolourL] = adj;
+      setSwatchAdj(adj);
       showChosen();
     }
     else if (!recolourSyncing && (n.equals("recolourHue") || n.equals("recolourSat") || n.equals("recolourBri"))) {
       // a slider moved: the chosen swatches all take its value
       int q = n.equals("recolourHue") ? 0 : n.equals("recolourSat") ? 1 : 2;
       float[][] adj = copyAdj();
-      for (int i = 0; i < adj.length; i++) if (recolourPicked[i]) adj[i][q] = value;
-      recolourAdj = recolourAdjs[recolourL] = adj;
+      boolean[] p = swatchPicked();
+      for (int i = 0; i < adj.length && i < p.length; i++) if (p[i]) adj[i][q] = value;
+      setSwatchAdj(adj);
     }
   }
 
@@ -1371,18 +1525,19 @@ public class Panel extends PApplet {
   void randomRecolour() {
     float[][] adj = copyAdj();
     boolean any = false;
-    for (boolean b : recolourPicked) any |= b;
+    boolean[] p = swatchPicked();
+    for (boolean b : p) any |= b;
     for (int i = 0; i < adj.length; i++) {
-      if (any && !recolourPicked[i]) continue;
+      if (any && !p[i]) continue;
       adj[i][0] = constrain(adj[i][0] + random(-40, 40), -180, 180);
       adj[i][1] = constrain(adj[i][1] * random(0.75, 1.28), 0, 2);
     }
-    recolourAdj = recolourAdjs[recolourL] = adj;
+    setSwatchAdj(adj);
     showChosen();
   }
 
   float[][] copyAdj() {
-    float[][] a = recolourAdj, c = new float[a.length][];
+    float[][] a = swatchAdj(), c = new float[a.length][];
     for (int i = 0; i < a.length; i++) c[i] = a[i].clone();
     return c;
   }
@@ -1403,9 +1558,11 @@ public class Panel extends PApplet {
   void showChosen() {
     float[] a = { 0, 1, 1 };
     int chosen = 0;
-    for (int i = 0; i < recolourPicked.length && i < recolourAdj.length; i++) {
-      if (!recolourPicked[i]) continue;
-      if (chosen == 0) a = recolourAdj[i];
+    boolean[] p = swatchPicked();
+    float[][] adj = swatchAdj();
+    for (int i = 0; i < p.length && i < adj.length; i++) {
+      if (!p[i]) continue;
+      if (chosen == 0) a = adj[i];
       chosen++;
     }
     recolourSyncing = true;
@@ -1417,20 +1574,24 @@ public class Panel extends PApplet {
 
   // the swatch under the mouse, or -1
   int swatchAt(float mx, float my) {
-    if (value("recolourOpen") < 0.5 || recolourGrid == null || recolourGrid.y < 0) return -1;
-    float[] b = block[recolourGrid.section];
+    Row grid = swatchGrid();
+    if (value("recolourOpen") < 0.5 || grid == null || grid.y < 0) return -1;
+    float[] b = block[grid.section];
     if (b == null) return -1;
-    float w = (colW - 28) / (float) SWATCH_COLS;
-    int col = floor((mx - b[0]) / w), row = floor((my - recolourGrid.y) / SWATCH_H);
-    if (col < 0 || col >= SWATCH_COLS || row < 0) return -1;
-    int i = row * SWATCH_COLS + col;
-    return i < recolourBase.length ? i : -1;
+    int cols = swatchCols();
+    float w = (colW - 28) / (float) cols;
+    int col = floor((mx - b[0]) / w), row = floor((my - grid.y) / SWATCH_H);
+    if (col < 0 || col >= cols || row < 0) return -1;
+    int i = row * cols + col;
+    return i < swatchBase().length ? i : -1;
   }
 
   boolean swatchClicked() {
     int i = swatchAt(mouseX, mouseY);
-    if (i < 0 || i >= recolourPicked.length) return false;
-    recolourPicked[i] = !recolourPicked[i];
+    if (i < 0 || i >= swatchPicked().length) return false;
+    boolean[] p = swatchPicked().clone();
+    p[i] = !p[i];
+    setSwatchPicked(p);
     showChosen();
     return true;
   }
@@ -1492,18 +1653,22 @@ public class Panel extends PApplet {
   }
 
   void drawSwatches() {
-    if (value("recolourOpen") < 0.5 || recolourGrid == null || recolourGrid.y < 0) return;
-    float[] b = block[recolourGrid.section];
+    Row grid = swatchGrid();
+    if (value("recolourOpen") < 0.5 || grid == null || grid.y < 0) return;
+    float[] b = block[grid.section];
     if (b == null) return;
-    int[] base = recolourBase;
-    float[][] adj = recolourAdj;
-    float w = (colW - 28) / (float) SWATCH_COLS;
+    int[] base = swatchBase();
+    float[][] adj = swatchAdj();
+    boolean[] picked = swatchPicked();
+    int[] whole = recolourKind > 0 ? paletteFinal() : null;    // (with SETUP 5's "whole palette" changes)
+    int cols = swatchCols();
+    float w = (colW - 28) / (float) cols;
     int chosen = 0;
     for (int i = 0; i < base.length && i < adj.length; i++) {
-      float x = b[0] + (i % SWATCH_COLS) * w, y = recolourGrid.y + (i / SWATCH_COLS) * SWATCH_H;
-      boolean on = i < recolourPicked.length && recolourPicked[i];
+      float x = b[0] + (i % cols) * w, y = grid.y + (i / cols) * SWATCH_H;
+      boolean on = i < picked.length && picked[i];
       if (on) chosen++;
-      int now = recoloured(base[i], adj[i]);
+      int now = whole != null && i < whole.length ? whole[i] : recoloured(base[i], adj[i]);
       noStroke();
       fill(base[i]);
       rect(x, y, (w - 6) / 2, SWATCH_H - 6);
@@ -1524,7 +1689,7 @@ public class Panel extends PApplet {
       text(i + 1, x + 4, y + 3);
     }
     textAlign(LEFT, BASELINE);
-    recolourText.setText(base.length == 0 ? "no palette yet  (needs paint)" : chosen + "/" + base.length + " chosen");
+    recolourText.setText(base.length == 0 ? (recolourKind > 0 ? "no palette yet" : "no palette yet  (needs paint)") : chosen + "/" + base.length + " chosen");
   }
 
   // ---------------------------------------------------- PALETTE GEN
@@ -1872,9 +2037,13 @@ public class Panel extends PApplet {
     if (when.equals("massesOpen")) return massesOpen;
     if (when.equals("meshEdges")) return value("meshOutline") > 0.5;
     if (when.equals("later")) return false;
+    if (when.equals("applyShut")) return applyShut();
+    if (when.equals("applyOpen")) return !applyShut();
     if (when.equals("notScrape")) return !editing.equals("scrape");
     if (when.startsWith("one ")) return value(when.substring(4) + "_one") > 0.5;
     if (when.equals("recolour")) return value("recolourOpen") > 0.5;
+    if (when.equals("recolourLayers")) return recolourKind == 0;
+    if (when.equals("recolourPal")) return recolourKind > 0 && value("recolourOpen") > 0.5;
     if (when.equals("autoOn")) return value(editing + "_autoOn") > 0.5;
     if (when.startsWith("boxShown ")) return openSetup < 0 || Integer.parseInt(when.substring(9)) <= openSetup;
     if (when.startsWith("boxOpen ")) return openSetup == Integer.parseInt(when.substring(8));
@@ -1890,6 +2059,8 @@ public class Panel extends PApplet {
     if (when.equals("pencilFlow")) return value("pencil_kind") == 1;
     if (when.equals("pencilHatch")) return value("pencil_hatch") > 0;
     if (when.equals("knifeFlat")) return value("knife_carry") < CHUNK;   // chunk and copy have no streaks
+    if (when.equals("splatFlat")) return value("splat_carry") < CHUNK;   // (nor colours to vary)
+    if (when.startsWith("along ")) return value(when.substring(6) + "_along") > 0.5;
     if (when.startsWith("mix ")) return value(when.substring(4) + "_pickup") == 2;
     if (when.startsWith("palette ")) return value(when.substring(8) + "_pickup") == PICK_PALETTE;
     if (when.startsWith("weighted ")) return value(when.substring(9) + "_startAt") == 1;
@@ -2047,6 +2218,7 @@ public class Panel extends PApplet {
 
   // put saved settings back on the panel; SETUP too if we're not running
   void applySettings(JSONObject j, boolean includeSetup) {
+    applying = true;
     for (String n : all.keySet()) {
       ControllerInterface r = all.get(n);
       if (r instanceof Range && j.hasKey(n + "_lo") && j.hasKey(n + "_hi")) {
@@ -2056,7 +2228,10 @@ public class Panel extends PApplet {
       if (setupNames.contains(n) && !includeSetup) continue;
       ControllerInterface c = all.get(n);
       if (c instanceof ColorPicker) ((ColorPicker) c).setColorValue(j.getInt(n) | 0xFF000000);
-      else if (c instanceof RadioButton) ((RadioButton) c).activate((int) j.getFloat(n));
+      else if (c instanceof RadioButton) {
+        if (j.getFloat(n) >= 0) ((RadioButton) c).activate((int) j.getFloat(n));
+        else ((RadioButton) c).setNoneSelectedAllowed(true).deactivateAll().setNoneSelectedAllowed(false);   // a layer not picked
+      }
       else c.setValue(j.getFloat(n));
     }
     if (j.hasKey("accent") && !j.hasKey("accentHue_lo")) {
@@ -2079,11 +2254,9 @@ public class Panel extends PApplet {
         JSONObject o = layersJ.getJSONObject(L);
         loadRecolour(L, o.getJSONArray("palette"), o.getJSONArray("changes"));
       }
-      showLayer(constrain((int) value("recolourLayer"), 0, LAYERS - 1));
     } else if (j.hasKey("recolourPalette") && j.hasKey("recolourChanges")) {
       // settings saved before each layer had its own: the one palette on every layer
       for (int L = 0; L < LAYERS; L++) loadRecolour(L, j.getJSONArray("recolourPalette"), j.getJSONArray("recolourChanges"));
-      showLayer(constrain((int) value("recolourLayer"), 0, LAYERS - 1));
     }
     // (after the controls: choosing the scheme above made a new palette, and this replaces it)
     if (j.hasKey("paletteGen")) {
@@ -2106,6 +2279,11 @@ public class Panel extends PApplet {
       int i = java.util.Arrays.asList(faces).indexOf(j.getString("face"));
       if (i >= 0) all.get("source").setValue(i);
     }
+    // (after the palette) RECOLOUR's swatches as loaded. The view is left as the settings have it
+    chooseRecolour((int) value("recolourLayer"));
+    recolourShown = recolourMap();
+    recolourShowBefore = 0;
+    applying = false;
     layoutWanted = true;
   }
 
@@ -2116,7 +2294,7 @@ public class Panel extends PApplet {
     for (String n : liveNames) {
       ControllerInterface c = all.get(n);
       if (!(c instanceof Slider) || n.equals("nudgeAmount") || n.equals("pace") || n.endsWith("perFrame") || n.endsWith("_rate")) continue;
-      if (n.startsWith("palette")) continue;      // PALETTE GEN isn't part of the painting (yet)
+      if (n.startsWith("palette") || (recolourKind > 0 && n.startsWith("recolour"))) continue;      // PALETTE GEN isn't part of the painting (yet)
       Slider s = (Slider) c;
       float range = s.getMax() - s.getMin();
       s.setValue(constrain(s.getValue() + random(-0.5, 0.5) * range * amount, s.getMin(), s.getMax()));
@@ -2383,7 +2561,8 @@ public class Panel extends PApplet {
     put(r, 0, 0);
   }
 
-  // radio buttons in the current row, at dx, spaced `step` apart (for short items like "1" "2" "3")
+  // radio buttons in the current row, at dx, spaced `step` apart (for short items like "1" "2" "3").
+  // chosen -1: none is, until one's clicked
   void radioAt(String name, String[] items, int chosen, float dx, int step) {
     RadioButton r = cp5.addRadioButton(name).setSize(16, 16).setItemsPerRow(items.length)
       .setSpacingColumn(step - 16);
@@ -2391,7 +2570,8 @@ public class Panel extends PApplet {
       r.addItem(name + " " + i, i);
       r.getItem(i).setCaptionLabel(items[i]);
     }
-    r.activate(chosen);
+    if (chosen >= 0) r.activate(chosen);
+    else r.deactivateAll();
     r.setNoneSelectedAllowed(false);
     register(name, r);
     put(r, dx, 2);

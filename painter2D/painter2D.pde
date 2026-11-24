@@ -312,6 +312,7 @@ void paintFrame() {
 
   // each tool that's on paints on its layer (LAYERS), with its own blend (APPLY), layer by layer
   // and in the TOOLS order within a layer. Scrape (the last tool) takes paint off afterwards
+  // (A tool whose layer hasn't been picked yet - its layer is -1 - doesn't paint.)
   // A tool with a thickness also adds what it painted to its layer's height (the Impasto tab)
   for (int L = 0; L < LAYERS; L++) {
     for (int i = 0; i < TOOLS.length - 1; i++) {
@@ -392,6 +393,11 @@ boolean mapShowing() {
 // the picture VIEW's MAPS has chosen (0, none: the painting)
 PImage currentView() {
   int s = (int) v("showWhat");
+  // RECOLOUR's "masses" or "mesh" being reworked: the exact colours, kept up as the sliders move
+  if (recolouringPalette() && !panel.paletteOpen && s == (panel.recolourKind == 1 ? 7 : 9)) {
+    PImage p = recolourPalettePicture();
+    if (p != null) return p;
+  }
   if (s == 0) return canvas != null ? canvas : photo;
   if (s == 1) return photo;
   if (s == 6) return massesImg != null ? massesImg : photo;

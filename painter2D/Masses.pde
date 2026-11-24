@@ -383,7 +383,7 @@ color massesAt(float x, float y) {
 // lay the masses on the brushes' layer, as see-through as `opacity` says
 void layMasses(float opacity) {
   if (canvas == null) return;
-  PGraphics g = layers[constrain((int) v("brush_layer"), 0, LAYERS - 1)];
+  PGraphics g = layers[constrain(v("brush_layer") < 0 ? 1 : (int) v("brush_layer"), 0, LAYERS - 1)];
   if (massesImg == null) {
     println("the masses aren't ready yet");
     return;
