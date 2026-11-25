@@ -48,7 +48,7 @@ void fragment(PGraphics g, float x, float y, int kind) {
   g.fill(systemColour(x, y), toolAlpha(x, y) * random(0.7, 1));
 
   if (kind == 0) {                                // a dot
-    disc(g, x, y, max(0.6, size * 0.4), 7);
+    disc(g, x, y, max(0.6, size * 0.4));
   } else if (kind == 1) {                         // a dash: a short thin bar
     float l = size * random(1, 2.5) / 2, w = max(0.4, size * random(0.12, 0.3) / 2);
     float ax = ca * l, ay = sa * l, bx = -sa * w, by = ca * w;

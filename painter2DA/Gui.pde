@@ -81,8 +81,8 @@ public class Panel extends PApplet {
   int[] TOOL_COLOURS = { 0xFFD8C8EE, 0xFFCCB9E7, 0xFFB29AD6, 0xFFC3D8F0, 0xFFB3CDEA, 0xFFA5C2E2, 0xFF91B3D8, 0xFFC1ABE0, 0xFFCFABA2, 0xFFCFABA2 };
   int viewBase = 0xFFDCE6F2, mapsBlue = 0xFF9FC1E8, layersBlue = 0xFFC3DAF3;   // VIEW, and its two columns
   int[] layerSection = new int[LAYERS];         // each layer's box
-  // their colours: pastels, all with plenty of red
-  int[] LAYER_COLOURS = { 0xFFF5C4C4, 0xFFF6D5B4, 0xFFEEC3DE, 0xFFF2E1AE, 0xFFDDC6EF, 0xFFE8CFC2, 0xFFE9D6CB };
+  // their colours: reds, LAYER 1 the lightest to LAYER B the darkest
+  int[] LAYER_COLOURS = { 0xFFFBE2E0, 0xFFF3CECB, 0xFFEBB9B7, 0xFFE3A5A2, 0xFFDB918D, 0xFFD37C79, 0xFFCB6864 };
   int runGreen = 0xFF2E9E48, runGreenHover = 0xFF45B860, runRed = 0xFFCC3B2E, runRedHover = 0xFFE26A5E;
   int orange = 0xFFE08A1E, orangeHover = 0xFFF0A040;
   // the setup boxes (1 SOURCE, 2 MASSES, 3 OUTLINE, 4 MESH, 5 PALETTE GEN): their colour blocks, the line under each title, and whether each is done.
@@ -560,9 +560,15 @@ public class Panel extends PApplet {
     toolSlider("rate", "clusters per frame", 0.05, 10, 0.5);
     toolSlider("drops", "drops per cluster", 0, 200, 40).setDecimalPrecision(0);
     toolSlider("size", "size (biggest splat)", 2, 120, 24).setDecimalPrecision(0);
+    onlyWhen("on splat&splatFree");
+    // (IN AREA's Tri Centers and Vertices: how big a drop is beside its triangle)
+    toolSlider("triSize", "size  (1 = fits its tri)", 0.1, 4, 1);
+    onlyWhen("on splat&splatSites");
     toolSlider("big", "how many big drops", 0, 1, 0.3);
+    onlyWhen("on splat&splatFree");
     toolSlider("scatter", "scatter", 5, 400, 60).setDecimalPrecision(0);
     toolSlider("trails", "flung trails", 0, 1, 0.3);
+    onlyWhen("on splat&splatFree");
     toolSlider("vary", "drop colour variation", 0, 0.5, 0.1);
     onlyWhen("on splat&splatFlat");
     toolSlider("drip", "drips", 0, 1, 0);
@@ -796,10 +802,13 @@ public class Panel extends PApplet {
     onlyWhen("applyOpen");
     for (int i = 0; i < TOOLS.length; i++) {
       String n = TOOLS[i], when = "edit " + n + "&applyOpen";
-      radio(n + "_inArea", inAreaNames, 3, -1);
+      // (Tri Centers and Vertices are only the splatter's)
+      int choices = n.equals("splat") ? inAreaNames.length : AREA_TRI_CENTERS;
+      radio(n + "_inArea", java.util.Arrays.copyOf(inAreaNames, choices), 3, -1);
+      if (n.equals("splat")) cur.h += 22;
       onlyWhen(when);
       RadioButton a = (RadioButton) all.get(n + "_inArea");
-      for (int k = 0; k < inAreaNames.length; k++) {
+      for (int k = 0; k < choices; k++) {
         a.getItem(k).setPosition(k == 0 ? 0 : k % 2 == 1 ? 70 : 190, max(0, (k - 1) / 2) * 22);
       }
       closesApply(n + "_inArea");
@@ -986,7 +995,7 @@ public class Panel extends PApplet {
     // ---------------------------------------------------- column 4: LAYER 1 - 5, A, B, LIGHT
     column();
 
-    // a box for each of the layers (the Layers tab), each its own pastel (LAYER_COLOURS):
+    // a box for each of the layers (the Layers tab), each its own red (LAYER_COLOURS):
     // CLEAR empties it; how see-through it is and how it's combined with the layers under it; how far
     // it floats above them (its gap - 0 is not at all), its shadow, softness and lit edges; and how
     // much its thick paint catches the light (impasto). (Whether each shows is in VIEW's LAYERS list;
@@ -1389,7 +1398,7 @@ public class Panel extends PApplet {
 
   boolean areaPicked() {
     int a = (int) value(editing + "_inArea");
-    if (!areaUsed()) return a == AREA_ALL;
+    if (!areaUsed()) return a == AREA_ALL || a >= AREA_TRI_CENTERS;
     if (areaPatches()) return patchCount[areaKind()] > 0;
     for (boolean b : areaPick) if (b) return true;
     return false;
@@ -1397,7 +1406,7 @@ public class Panel extends PApplet {
 
   // whether its area is one that needs some choosing - colours, or blobs, triangles ...
   boolean areaUsed() {
-    return value(editing + "_inArea") > AREA_ALL;
+    return areaIsPart((int) value(editing + "_inArea"));
   }
 
   boolean areaColours() {
@@ -2188,6 +2197,8 @@ public class Panel extends PApplet {
     if (when.equals("pencilFlow")) return value("pencil_kind") == 1;
     if (when.equals("pencilHatch")) return value("pencil_hatch") > 0;
     if (when.equals("knifeFlat")) return value("knife_carry") < CHUNK;   // chunk and copy have no streaks
+    if (when.equals("splatSites")) return value("splat_inArea") >= AREA_TRI_CENTERS;
+    if (when.equals("splatFree")) return value("splat_inArea") < AREA_TRI_CENTERS;
     if (when.equals("splatFlat")) return value("splat_carry") < CHUNK;   // (nor colours to vary)
     if (when.startsWith("along ")) return value(when.substring(6) + "_along") > 0.5;
     if (when.startsWith("mix ")) return value(when.substring(4) + "_pickup") == 2;

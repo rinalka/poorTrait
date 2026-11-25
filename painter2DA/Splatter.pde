@@ -16,6 +16,11 @@
 // ("drips") are wet enough to run: paint hangs off the bottom of the drop and runs straight down,
 // thinning a little, and gathers in a blob at the end.
 //
+// IN AREA's "Tri Centers" and "Vertices" put every drop in the middle of a triangle of the mesh (SETUP 4),
+// or on one of its corners: the one its scattered place is in, or nearest - one drop there from each cluster.
+// A drop's size then goes by the triangle's (or the average of those round the corner): at 1 it just fits
+// in it. Droplets and trails, which would land elsewhere, are left out (drips still run).
+//
 // The paint (COLOUR) is picked up at one spot and put down at another: each cluster picks up at a
 // spot of its own, by MOVEMENT's rules, and lands somewhere else by the same rules ("put it down
 // somewhere else" off: where it lands). What it picks up there is COLOUR's "carry":
@@ -49,22 +54,41 @@ float splatX, splatY;              // where the cluster lands
 float splatPickX, splatPickY;      // where its paint was picked up
 float splatReach;                  // how far out "start to end" has got to the end
 float splatDU, splatDV;            // chunk and copy: from a corner being drawn to its paint
+float splatBig = 24;               // the size of the biggest drops there are now
+boolean splatSites = false;        // every drop goes on one of the mesh's triangles or corners
+java.util.HashSet<Integer> splatUsed = new java.util.HashSet<Integer>();     // the ones this cluster's been to
 float splatSolid = 255;            // how solid what's being drawn is
 float splatSmearY = Float.NaN;     // a drip's paint all comes from this height: it runs down
 
 void splatter(PGraphics g) {
+  int a = (int) t("inArea");
+  splatSites = a == AREA_TRI_CENTERS || a == AREA_VERTICES;
+  if (splatSites && !sitesReady()) return;        // (no mesh yet)
+  splatUsed.clear();
   float[] s = startPoint();
   if (s == null) return;
   float cx = splatX = s[0], cy = splatY = s[1];
   float alpha = toolAlpha(cx, cy);
   float size = t("size"), spread = t("scatter");
   float tail = lerp(7, 1.5, t("big"));        // higher = more of the drops tiny
+  splatBig = size;
   loadSplat(spread);
   g.noStroke();
   g.beginShape(TRIANGLES);
   if (splatPaint.textured()) {
     g.textureMode(IMAGE);
     g.texture(splatPaint.tex);
+  }
+
+  if (splatSites) {
+    int drops = round(t("drops") * random(0.4, 1.4));
+    siteDrop(g, a, cx, cy, alpha);
+    for (int d = 0; d < drops; d++) {
+      siteDrop(g, a, cx + randomGaussian() * spread, cy + randomGaussian() * spread, alpha * random(0.6, 1));
+    }
+    g.endShape();
+    if (splatPaint.textured()) g.noTint();
+    return;
   }
 
   // the big splat in the middle (not always - some clusters are only drops)
@@ -90,6 +114,28 @@ void splatter(PGraphics g) {
   }
   g.endShape();
   if (splatPaint.textured()) g.noTint();
+}
+
+// a drop on the mesh's triangle or corner at (x, y) - if this cluster hasn't put one there - its size going by the
+// triangle's
+void siteDrop(PGraphics g, int where, float x, float y, float alpha) {
+  if (x < 0 || y < 0 || x >= photo.width || y >= photo.height) return;
+  boolean vertex = where == AREA_VERTICES;
+  int i = siteAt(vertex, x, y);
+  if (i < 0 || !splatUsed.add(i)) return;
+  float sx = vertex ? siteVertX[i] : siteTriX[i], sy = vertex ? siteVertY[i] : siteTriY[i];
+  float r = (vertex ? siteVertR[i] : siteTriR[i]) * t("triSize");
+  // (AUTOMATION moves it too: as its size now is to its largest)
+  if (t("autoOn") > 0.5) r *= t("size") / max(1, t("autoMax"));
+  if (r < 0.4) return;
+  splatBig = r;
+  anyDrop(g, sx, sy, r, splatColour(constrain(sx, 0, photo.width - 1), constrain(sy, 0, photo.height - 1)), alpha);
+}
+
+// how many sides a round shape r across needs to look round: more the bigger it is, so that its
+// sides are never more than a sixth of a pixel off a circle
+int roundSides(float r) {
+  return constrain(ceil(5.5 * sqrt(r)), 8, 160);
 }
 
 // where the cluster's paint is picked up: somewhere else by MOVEMENT's rules, or where it lands.
@@ -178,10 +224,10 @@ void splatFrom(float x, float y) {
 void drop(PGraphics g, float x, float y, float r, color c, float a) {
   splatInk(g, c, a);
   if (r < 1.5) {
-    disc(g, x, y, r, 6);
+    disc(g, x, y, r);
     return;
   }
-  int pts = constrain(round(r * 1.5), 8, 32);
+  int pts = max(constrain(round(r * 1.5), 8, 32), roundSides(r));
   float seed = random(1000), squash = random(0.75, 1), turn = random(TWO_PI);
   float[] rx = new float[pts], ry = new float[pts];
   for (int i = 0; i < pts; i++) {
@@ -202,11 +248,11 @@ void drop(PGraphics g, float x, float y, float r, color c, float a) {
   int low = 0;
   for (int i = 1; i < pts; i++) if (ry[i] > ry[low]) low = i;
   maybeDrip(g, lerp(rx[low], x, 0.25), ry[low], r);
-  if (r > 5) {
+  if (r > 5 && !splatSites) {
     int sats = (int) random(0, r / 3);
     for (int i = 0; i < sats; i++) {
       float ang = random(TWO_PI), dist = r * random(1.1, 1.9), sr = r * random(0.05, 0.18);
-      disc(g, x + cos(ang) * dist, y + sin(ang) * dist, sr, 6);
+      disc(g, x + cos(ang) * dist, y + sin(ang) * dist, sr);
     }
   }
 }
@@ -226,7 +272,7 @@ void fragment(PGraphics g, float x, float y, float r, int kind, color c, float a
   float ang = random(TWO_PI), ca = cos(ang), sa = sin(ang);
   float lowX = x, lowY = y;
   if (kind == 1) {
-    disc(g, x, y, max(0.6, r), 7);
+    disc(g, x, y, max(0.6, r));
     lowY = y + r;
   } else if (kind == 2) {
     float l = max(0.8, r * random(1.2, 3)), w = max(0.4, r * random(0.15, 0.4));
@@ -254,14 +300,14 @@ void fragment(PGraphics g, float x, float y, float r, int kind, color c, float a
 
 // a drip off a drop r across, from (x, y), its lowest point: more likely from a bigger drop
 void maybeDrip(PGraphics g, float x, float y, float r) {
-  if (r > 3 && random(1) < t("drip") * min(1, 0.3 + r / max(1, t("size")))) drip(g, x, y, r);
+  if (r > 3 && random(1) < t("drip") * min(1, 0.3 + r / max(1, splatBig))) drip(g, x, y, r);
 }
 
 // paint running straight down from (x, y), the bottom of a drop r across: it leaves the drop
 // wide, thins as it goes with a little waver, and ends in a blob a bit fatter than the run
 void drip(PGraphics g, float x, float y, float r) {
   float w = r * random(0.25, 0.5);
-  float len = t("dripLength") * random(0.4, 1.2) * sqrt(min(1, r / max(1, t("size")) + 0.3));
+  float len = t("dripLength") * random(0.4, 1.2) * sqrt(min(1, r / max(1, splatBig) + 0.3));
   int steps = max(3, round(len / 3));
   float seed = random(1000), drift = random(-0.03, 0.03);
   y -= w * 0.6;                                   // starts inside the drop, so they're joined
@@ -288,7 +334,7 @@ void drip(PGraphics g, float x, float y, float r) {
     if (s == steps) {
       // the blob: a fat drop, a little longer than it's wide, hanging just below the run's end
       float br = w * random(0.65, 0.95);
-      int pts = 14;
+      int pts = roundSides(br);
       float cy = yy + br * 0.35;
       if (shaping) shapeDisc(xx, cy, br, pts, 1, 0.95, splatSolid);      // (the thickest of it)
       for (int i = 0; i < pts; i++) {
@@ -302,8 +348,10 @@ void drip(PGraphics g, float x, float y, float r) {
   splatSmearY = Float.NaN;
 }
 
-// a small round dot, as triangles
-void disc(PGraphics g, float x, float y, float r, int pts) {
+// a round dot, as triangles (all of a cluster is one shape, so it's quick, and can be filled with a picture -
+// circle() would be a shape of its own every time, and only a plain colour)
+void disc(PGraphics g, float x, float y, float r) {
+  int pts = r < 1 ? 6 : roundSides(r);
   if (shaping) shapeDisc(x, y, r, pts, r < 6 ? 0.8 : 0.3, 0.9, splatSolid);   // (specks are just beads)
   for (int i = 0; i < pts; i++) {
     float a0 = TWO_PI * i / pts, a1 = TWO_PI * (i + 1) / pts;

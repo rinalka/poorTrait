@@ -8,6 +8,8 @@
 //   Tris           the same, with the mesh's triangles (SETUP 4)
 //   Objects        ... with what the map maker's object finder found
 //   Face Parts     ... with the parts of the face (and the hair, the clothes ...) - the Picks tab
+//   Tri Centers    (SPLATTER only) anywhere, but every drop in the middle of one of the mesh's triangles
+//   Vertices       (SPLATTER only) ... or on one of its corners. Nothing to choose, as All (Splatter tab)
 // The colours are SETUP 5's, chosen in the strip - click to turn each on or off - or with PICK ON
 // THE MASSES / MESH, clicking that picture in the output window. They, and the pieces picked,
 // are shared by every tool; which of these a tool goes by, and whether it stays in or out, is its own.
@@ -23,8 +25,14 @@
 //     same way.
 
 // IN AREA's choices, and what each is. -1: not chosen yet
-String[] inAreaNames = { "All", "Masses Color", "Mesh Color", "Masses", "Tris", "Objects", "Face Parts" };
+String[] inAreaNames = { "All", "Masses Color", "Mesh Color", "Masses", "Tris", "Objects", "Face Parts", "Tri Centers", "Vertices" };
 final int AREA_ALL = 0, AREA_MASS_COLOUR = 1, AREA_MESH_COLOUR = 2, AREA_MASSES = 3, AREA_TRIS = 4, AREA_OBJECTS = 5, AREA_PARTS = 6;
+final int AREA_TRI_CENTERS = 7, AREA_VERTICES = 8;       // (SPLATTER's own: where each drop goes, not a part of the picture)
+
+// whether IN AREA's choice a is a part of the picture
+boolean areaIsPart(int a) {
+  return a > AREA_ALL && a < AREA_TRI_CENTERS;
+}
 
 // whether tool n's IN AREA step is done
 boolean areaChosen(String n) {
@@ -34,12 +42,12 @@ boolean areaChosen(String n) {
     for (boolean b : panel.areaPick) if (b) return true;
     return false;
   }
-  return a == AREA_ALL;
+  return a == AREA_ALL || a >= AREA_TRI_CENTERS;
 }
 
 // where the tool now in use may paint: 0 anywhere, 1 only in the area, 2 only outside it
 int areaWay() {
-  return t("inArea") > AREA_ALL ? (t("areaSide") == 0 ? 1 : 2) : 0;
+  return areaIsPart((int) t("inArea")) ? (t("areaSide") == 0 ? 1 : 2) : 0;
 }
 
 // whether the tool now in use can paint: its area chosen, and worked out if there is one

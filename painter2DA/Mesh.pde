@@ -269,6 +269,74 @@ float[] meshTriangleMiddles() {
   return meshTriPts;
 }
 
+// SPLATTER's "Tri Centers" and "Vertices" (IN AREA): for each of the mesh's triangles, the middle of the biggest
+// circle that fits in it, and how big that is; and for each corner, the average size of that circle in the
+// triangles round it
+float[] siteTriX, siteTriY, siteTriR, siteVertX, siteVertY, siteVertR;
+MeshResult siteFor;
+
+boolean sitesReady() {
+  MeshResult r = meshShown;
+  if (r == null || r.tri == null || r.tri.size() < 6) return false;
+  if (r == siteFor) return true;
+  int n = r.tri.size() / 6;
+  siteTriX = new float[n];
+  siteTriY = new float[n];
+  siteTriR = new float[n];
+  java.util.HashMap<Long, Integer> at = new java.util.HashMap<Long, Integer>();
+  FloatList vx = new FloatList(), vy = new FloatList(), sum = new FloatList();
+  IntList count = new IntList();
+  for (int t = 0; t < n; t++) {
+    float ax = r.tri.get(t * 6), ay = r.tri.get(t * 6 + 1), bx = r.tri.get(t * 6 + 2), by = r.tri.get(t * 6 + 3),
+      cx = r.tri.get(t * 6 + 4), cy = r.tri.get(t * 6 + 5);
+    float la = dist(bx, by, cx, cy), lb = dist(ax, ay, cx, cy), lc = dist(ax, ay, bx, by), round = max(1e-4, la + lb + lc);
+    siteTriX[t] = (la * ax + lb * bx + lc * cx) / round;
+    siteTriY[t] = (la * ay + lb * by + lc * cy) / round;
+    siteTriR[t] = abs((bx - ax) * (cy - ay) - (cx - ax) * (by - ay)) / round;
+    for (int c = 0; c < 3; c++) {
+      float x = r.tri.get(t * 6 + c * 2), y = r.tri.get(t * 6 + c * 2 + 1);
+      long key = ((long) round(x * 4) << 32) ^ (round(y * 4) & 0xFFFFFFFFL);     // (as meshStartPoints)
+      Integer i = at.get(key);
+      if (i == null) {
+        at.put(key, i = vx.size());
+        vx.append(x);
+        vy.append(y);
+        sum.append(0);
+        count.append(0);
+      }
+      sum.add(i, siteTriR[t]);
+      count.increment(i);
+    }
+  }
+  siteVertX = vx.array();
+  siteVertY = vy.array();
+  siteVertR = sum.array();
+  for (int i = 0; i < siteVertR.length; i++) siteVertR[i] /= count.get(i);
+  siteFor = r;
+  return true;
+}
+
+// the triangle (x, y) is in, or the corner nearest to it (-1: none)
+int siteAt(boolean vertex, float x, float y) {
+  if (!vertex) {
+    FloatList q = siteFor.tri;
+    for (int t = 0; t < siteTriX.length; t++) {
+      float ax = q.get(t * 6), ay = q.get(t * 6 + 1), bx = q.get(t * 6 + 2), by = q.get(t * 6 + 3), cx = q.get(t * 6 + 4), cy = q.get(t * 6 + 5);
+      if (x < min(ax, bx, cx) || x > max(ax, bx, cx) || y < min(ay, by, cy) || y > max(ay, by, cy)) continue;
+      float d0 = (bx - ax) * (y - ay) - (by - ay) * (x - ax), d1 = (cx - bx) * (y - by) - (cy - by) * (x - bx), d2 = (ax - cx) * (y - cy) - (ay - cy) * (x - cx);
+      if (d0 >= 0 && d1 >= 0 && d2 >= 0 || d0 <= 0 && d1 <= 0 && d2 <= 0) return t;
+    }
+    return -1;
+  }
+  int best = -1;
+  float near = Float.MAX_VALUE;
+  for (int i = 0; i < siteVertX.length; i++) {
+    float dx = siteVertX[i] - x, dy = siteVertY[i] - y, d = dx * dx + dy * dy;
+    if (d < near) { near = d; best = i; }
+  }
+  return best;
+}
+
 color meshAt(float x, float y) {
   return meshImg == null ? photoAt(x, y) : meshImg.pixels[pixelIndex(x, y)];
 }

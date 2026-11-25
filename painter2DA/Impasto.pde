@@ -184,18 +184,19 @@ void shapeBlob(float[] px, float[] py, float middle, float rim, float solid) {
     cx += px[i] / n;
     cy += py[i] / n;
   }
+  // (the slope down to its edge is a couple of pixels wide, so that it looks smooth)
+  float far = max(0.1, dist(cx, cy, px[0], py[0])), in = 1 - constrain(far * 0.12, min(far * 0.5, 2), 3) / far;
   for (int i = 0; i < n; i++) {
     int j = (i + 1) % n;
-    float ix = lerp(cx, px[i], 0.76), iy = lerp(cy, py[i], 0.76), jx = lerp(cx, px[j], 0.76), jy = lerp(cy, py[j], 0.76);
+    float ix = lerp(cx, px[i], in), iy = lerp(cy, py[i], in), jx = lerp(cx, px[j], in), jy = lerp(cy, py[j], in);
     shapeCorner(cx, cy, middle, solid);
     shapeCorner(ix, iy, rim, solid);
     shapeCorner(jx, jy, rim, solid);
-    shapeRows(new float[] { ix, iy, rim, jx, jy, rim }, new float[] { px[i], py[i], rim * 0.55, px[j], py[j], rim * 0.55 }, solid, solid);
+    shapeRows(new float[] { ix, iy, rim, jx, jy, rim }, new float[] { px[i], py[i], rim * 0.25, px[j], py[j], rim * 0.25 }, solid, solid);
   }
 }
 
 void shapeDisc(float x, float y, float r, int pts, float middle, float rim, float solid) {
-  pts = max(pts, min(24, round(r * 2.5)));
   float[] px = new float[pts], py = new float[pts];
   for (int i = 0; i < pts; i++) {
     px[i] = x + cos(TWO_PI * i / pts) * r;
