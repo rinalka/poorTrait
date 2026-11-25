@@ -5,7 +5,7 @@
 //              knife's (the Knife tab's Blade), that doesn't take everything - streaks of
 //              paint are left behind where the knife didn't quite catch, more towards its end
 //   scratches  short, thin wandering lines scored through to what's underneath
-//   erase      not marks: its ERASE button takes everything off in APPLY's IN AREA (or outside it),
+//   erase      not marks: its ERASE button, in MOVEMENT, takes everything off in APPLY's IN AREA (or outside it),
 //              all at once - see eraseArea()
 //
 // The knife and the scratches go as the run does. The frame's marks are drawn first into a mask
@@ -16,10 +16,10 @@
 String[] scrapeNames = { "knife", "scratches", "erase" };
 final int SCRAPE_KNIFE = 0, SCRAPE_SCRATCHES = 1, SCRAPE_ERASE = 2;
 PGraphics scrapeMask;
-volatile String eraseStatus = "";      // what ERASE did last, for its box
+volatile String eraseStatus = "";      // what ERASE did last, shown by its button
 
 void paintScrapes() {
-  int L = (int) t("only");               // its layer (-1: not picked yet)
+  int L = (int) t("layer");              // its layer (-1: not picked yet)
   if (t("on") < 0.5 || t("kind") == SCRAPE_ERASE || L < 0 || !areaAllows()) return;
   int n = countFor(t("rate"));
   if (n == 0) return;
@@ -100,7 +100,7 @@ void scratch(PGraphics m, float x, float y) {
 // ---------------------------------------------------------------- erase
 
 // ERASE's button: everything on SCRAPE's layer in IN AREA's area (or outside it) comes off at once,
-// fading at the area's edge - nothing off at the edge itself, everything from "fade" pixels in.
+// fading inside the area's border, or outside it ("edgeFade").
 // (All: the whole layer, with no edge to fade at.)
 void eraseArea() {
   String was = tool;
@@ -111,7 +111,7 @@ void eraseArea() {
 }
 
 String eraseNow() {
-  int L = (int) t("only");
+  int L = (int) t("layer");
   if (L < 0) return "pick a layer";
   if (!areaChosen(tool)) return "choose the area, in APPLY";
   layersReady();
@@ -121,7 +121,7 @@ String eraseNow() {
     return "all of layer " + LAYER_NAMES[L] + " is off" + hidden;
   }
   if (!areaReady()) return "the area isn't ready";
-  PImage mask = areaMask(t("fade"));
+  PImage mask = areaMask(t("edgeFade"));
   eraseWith(layers[L], mask);
   eraseWith(heights[L], mask);                 // the paint's thickness goes with it (Impasto)
   return nf(100 * areaShare(), 0, 1) + "% of layer " + LAYER_NAMES[L] + " is off" + hidden;

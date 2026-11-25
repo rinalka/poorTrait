@@ -2,11 +2,11 @@
 // them on any layer.
 //
 // COPY is switched on and off like the tools, but it doesn't paint as the run goes along: its COPY
-// button lays the chosen map on the chosen layer there and then - before RUN, while it's painting or
-// while it's paused. It's SCRAPE's erase the other way round: the map goes on in APPLY's IN AREA (or
-// outside it), all at once, fading at the area's edge into what's on the layer already, which stays
-// everywhere else. With All, it covers the whole layer. Where it covers, it lies flat (the layer's
-// IMPASTO height goes). "mesh (lines)" is only the lines, in black: they go over what's there, which stays.
+// button, in MOVEMENT (there once APPLY is done), lays the chosen map on APPLY's layer there and
+// then - before RUN, while it's painting or while it's paused. It's SCRAPE's erase the other way round:
+// the map goes on in APPLY's IN AREA (or outside it), all at once, fading, inside the area's border or
+// outside it, into what's on the layer already, which stays everywhere else. With All, it covers the whole layer. Where it covers, it lies flat (the layer's
+// impasto height goes). "mesh (lines)" is only the lines, in black: they go over what's there, which stays.
 //
 // The grey maps (importance, curvature, depth, light) can be tinted: their greys made shades of one
 // colour, from black, through the colour (where the grey is as light as it is), to white.
@@ -18,7 +18,7 @@
 final int VIEW_PAINTING = 0, VIEW_PHOTO = 1, VIEW_MASSES = 6, VIEW_PAL_MASSES = 7, VIEW_MESH = 8, VIEW_PAL_MESH = 9, VIEW_MESH_LINES = 10;
 String[] showNames = { "painting", "photo", "importance", "curvature", "depth", "light",
   "masses (photo)", "masses (palette)", "mesh (photo)", "mesh (palette)", "mesh (lines)" };
-volatile String copyStatus = "";       // what COPY did last, for its box
+volatile String copyStatus = "";       // what COPY did last, shown by its button
 boolean painted = false;               // there's been painting since the layers were last cleared
 
 // map number m of VIEW's list as a picture, or null if it isn't ready. The map maker's are smaller
@@ -43,12 +43,13 @@ void copyNow() {
   String was = tool;
   useTool(T_COPY);
   int m = constrain((int) v("copyWhat") + VIEW_PHOTO, VIEW_PHOTO, VIEW_MESH_LINES);
-  int L = constrain((int) v("copyTo"), 0, LAYERS - 1);
+  int L = (int) t("layer");
   layersReady();
-  if (!areaChosen(tool)) copyStatus = "choose the area, in APPLY";
+  if (L < 0) copyStatus = "pick a layer";
+  else if (!areaChosen(tool)) copyStatus = "choose the area, in APPLY";
   else if (areaWay() > 0 && !areaReady()) copyStatus = "the area isn't ready";
   else {
-    PImage mask = areaWay() == 0 ? null : areaMask(t("fade"));
+    PImage mask = areaWay() == 0 ? null : areaMask(t("edgeFade"));
     if (!layMap(m, L, mask, greyMap(m) && v("copyTint") > 0.5, panel.colour("copyInk"))) copyStatus = showNames[m] + " isn't ready";
     else copyStatus = showNames[m] + (mask == null ? " on " : " on " + nf(100 * areaShare(), 0, 1) + "% of ")
       + "layer " + LAYER_NAMES[L] + (v("layerOn" + L) < 0.5 ? "  (hidden)" : "");
@@ -72,6 +73,7 @@ boolean layMap(int m, int L, PImage mask, boolean tinted, int ink) {
   g.beginDraw();
   g.image(p, 0, 0, photo.width, photo.height);
   g.endDraw();
+  layerChanged[L] = true;
   return true;
 }
 

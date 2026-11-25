@@ -7,18 +7,20 @@
 //                                 over the boxes below; clicking its title closes it and marks it
 //                                 done. Until all five are done the rest of the panel (but VIEW) is greyed
 //                                 out and locked
-//   the tools                     COPY, which lays a map on a layer (the Copy tab), then what does
-//                                 the drawing: brush, palette knife, splatter, lines, pencil,
-//                                 flow, outline, sponge, scrape - one at a time, with its
-//                                 shape settings - and under them AUTOMATION, the chosen tool's
-//                                 size or length moved up and down by a wave (the Automation tab),
-//                                 and RECOLOUR, changing the painting's colours a few at a time
-//                                 (a layer's, or the palette's on the masses or the mesh)
+//   the tools                     COPY, which lays a map on a layer (the Copy tab), and SCRAPE, which
+//                                 takes paint off one, then what does the drawing: brush, palette
+//                                 knife, sponge, splatter (purples), lines, pencil, flow, outline
+//                                 (blues) - one at a time, with its shape settings. At the bottom,
+//                                 above RUN and coloured like VIEW: RECOLOUR, changing the painting's
+//                                 colours a few at a time (a layer's, or the palette's on the masses
+//                                 or the mesh)
 //   APPLY, MOVEMENT, COLOUR       two steps to be done first - ON LAYER, which layer the chosen tool
 //                                 paints on and how solid it is, and IN AREA, where on it - then
-//                                 how it moves, and where its colour comes from
+//                                 how it moves, and where its colour comes from. At the bottom:
+//                                 AUTOMATION, its size or length moved up and down by a wave (the
+//                                 Automation tab)
 //   LAYER 1 - 5, A, B,            a box for each layer, the layers floating apart, lit from one
-//   SHADOW BOX, IMPASTO           side, and thick paint catching the light
+//   LIGHT                         side, and thick paint catching the same light (at the bottom)
 // and along the bottom, VIEW (MAPS, and LAYERS with the outline and the direction field under it)
 // under column 1, and RUN, one strip under columns 2 - 4, at the very bottom.
 //
@@ -30,8 +32,8 @@
 // Every tool has its own MOVEMENT, COLOUR and APPLY settings, named with the tool in front
 // ("knife_follow", "splat_opacity" ...). Only one tool is on at a time: switching one on (its
 // box turns from red to green) switches the others off and chooses it (`editing`) - its box
-// opens and columns 3 - 4 show its settings. With every tool off, they show the last one's under a
-// grey cover. The painter reads them with t("follow") while that tool paints (the Marks tab).
+// opens and column 3 shows its settings. With every tool off (as at the start), it shows the last
+// one's under a grey cover. The painter reads them with t("follow") while that tool paints (the Marks tab).
 //
 // Every control has a name (its first argument below), and the painter asks for values by that
 // name with v("name") - sliders give their value, toggles 0 or 1, lists and radio buttons the
@@ -59,7 +61,7 @@ public class Panel extends PApplet {
   ArrayList<ScrollableList> lists = new ArrayList<ScrollableList>();
   ArrayList<ArrayList<Row>> columns = new ArrayList<ArrayList<Row>>();
   IntList colAt = new IntList();       // which column each one is laid out in, counting from 0
-  IntList colBottom = new IntList();   // 1 for the ones along the bottom of the window
+  IntList colBottom = new IntList();   // 1 for the ones along the bottom of the window, 2 for those just above RUN
   IntList colLevel = new IntList();    // a bottom column whose top this one's is level with, or -1
   int topColumns = 0;
   Row cur;                   // the row being built
@@ -74,6 +76,9 @@ public class Panel extends PApplet {
   int[] layerItem = new int[LAYERS];              // each layer's tick box in layerRow's items
   String shownOrder = "";
   final int VIEW_TOP = 28;                        // how far down that row its lists start
+  // the tools' boxes, in the order of TOOLS: the brushes, sponge and splatter purples, the lines blues, and
+  // SCRAPE and COPY alike
+  int[] TOOL_COLOURS = { 0xFFD8C8EE, 0xFFCCB9E7, 0xFFB29AD6, 0xFFC3D8F0, 0xFFB3CDEA, 0xFFA5C2E2, 0xFF91B3D8, 0xFFC1ABE0, 0xFFCFABA2, 0xFFCFABA2 };
   int viewBase = 0xFFDCE6F2, mapsBlue = 0xFF9FC1E8, layersBlue = 0xFFC3DAF3;   // VIEW, and its two columns
   int[] layerSection = new int[LAYERS];         // each layer's box
   // their colours: pastels, all with plenty of red
@@ -97,7 +102,7 @@ public class Panel extends PApplet {
   // ... but for these, which work (and show) all the same
   String[] alwaysButtons = { "saveNow", "loadSettings", "printView" };
   java.util.HashSet<String> setupGroup = new java.util.HashSet<String>();
-  int viewSection;
+  int viewSection, autoSection, recolourSection, lightSection;      // (all coloured like VIEW)
   float shownFor = -1;                // the view an open box switched to
   int boxRed = 0xFFD9B8B4, boxGreen = 0xFFBBD3B6;   // a setup box's block: not done, done
   Textlabel boxTitle, massTitle, sourceText, massText, meshText;
@@ -186,9 +191,14 @@ public class Panel extends PApplet {
   int toolOff = 0xFFCC3B2E, toolOffHover = 0xFFE26A5E, toolOn = 0xFF2E9E48;   // a tool's on / off box
   int[] toolSection = new int[TOOLS.length];   // each tool box's colour block
   String curTool;            // the tool whose box is being built
+  boolean inTools = false;   // ... and the rows being made are its settings
+  boolean toolFolded = false;         // there's no room for the chosen tool's settings: RECOLOUR is open
   Textlabel moveHeader, colourHeader, applyHeader;
-  int applySection;                   // APPLY's colour block
-  boolean applyOpen = false;          // opened by its title (it's open anyway till both its steps are done)
+  int applySection, moveSection;      // APPLY's and MOVEMENT's colour blocks
+  boolean[] moveFolded = new boolean[TOOLS.length];   // each tool's MOVEMENT: folded, by clicking its title
+  boolean movePressed = false;        // its title has been pressed (it folds or opens on letting go)
+  Textlabel moveText;                 // what's chosen in it, while it's folded
+  volatile boolean applyOpen = false; // opened by its title (it's open anyway till both its steps are done)
   boolean applyPressed = false;       // its title has been pressed (it opens or closes on letting go)
   volatile boolean layerClicked = false;   // a layer or an area's been clicked: APPLY may close on letting go
   Row autoWave;              // the row AUTOMATION's wave is drawn in
@@ -199,6 +209,8 @@ public class Panel extends PApplet {
     float h;
     float y = -1;            // where layout() put it, or -1 if it's hidden
     int section;
+    boolean autoSetting;     // one of AUTOMATION's
+    boolean toolSetting;     // one of a tool's settings, in its box in column 2
     int band;                // 0, or a part of its section drawn a shade lighter or darker (drawBands)
     ArrayList<ControllerInterface> items = new ArrayList<ControllerInterface>();
     ArrayList<String> itemWhen = new ArrayList<String>();
@@ -220,7 +232,7 @@ public class Panel extends PApplet {
     surface.setLocation(min((int) ((40 + painter2DA.this.width) / scale) + 30, screen.x + screen.width - width - 16), 40);
     textFont(createFont("Arial", 12, true));
     cp5 = new ControlP5(this);
-    cp5.setAutoDraw(false);    // drawn in draw(), so the cover over columns 3 - 4 can go on top
+    cp5.setAutoDraw(false);    // drawn in draw(), so the cover over column 3 can go on top
     cp5.setFont(createFont("Arial", 12, true), 12);
     cp5.setColorForeground(color(70, 130, 200));
     cp5.setColorActive(color(110, 170, 240));
@@ -401,6 +413,7 @@ public class Panel extends PApplet {
     r.setNoneSelectedAllowed(false);
     register("showWhat", r);
     put(r, 2, VIEW_TOP);
+    // (an empty layer's box is white, and the one the tool that's on paints on has a green frame)
     // the stack, top first, as in Photoshop: the seven layers, which can be hidden and moved up
     // and down (layerOrder, the Layers tab). A layer's tick box moves to its place in draw(); the
     // up / down buttons stay put
@@ -454,7 +467,7 @@ public class Panel extends PApplet {
     // Each tool's box: switched on or off (only one at a time), and - while it's on - its shape
     // settings
     column();
-    // COPY (the Copy tab): a map, a layer, and the button that lays the one on the other
+    // COPY (the Copy tab): a map and a layer. (The button that lays the one on the other is in MOVEMENT)
     toolBox(T_COPY, false);
     row(20);
     label("map", 0);
@@ -471,16 +484,21 @@ public class Panel extends PApplet {
     onlyWhen("on copy&copyGrey");
     colourPicker("copyInk", "the colour", color(40, 90, 150));
     onlyWhen("on copy&copyGrey&copyTint");
-    row(26);
-    label("to layer", 0);
-    radioAt("copyTo", LAYER_NAMES, LAYER_A, 70, 34);
-    onlyWhen("on copy");
-    toolSlider("fade", "fade at the edge  (pixels)", 0, 40, 10).setDecimalPrecision(0);
-    row(34);
-    button("copyMap", "COPY", 0, 76);
-    copyText = cp5.addTextlabel("copyText").setText("").setColorValue(dark);
-    put(copyText, 82, 6);
-    onlyWhen("on copy");
+
+    toolBox(8, false);
+    radio("scrape_kind", scrapeNames, 3, 0);
+    onlyWhen("on scrape");
+    toolSlider("rate", "scrapes per frame", 0.05, 20, 1);
+    onlyWhen("on scrape&notErase");
+    toolSlider("length", "length", 10, 500, 140).setDecimalPrecision(0);
+    onlyWhen("on scrape&notErase");
+    toolSlider("width", "width", 2, 150, 40).setDecimalPrecision(0);
+    onlyWhen("on scrape&notErase");
+    toolSlider("ragged", "ragged edges", 0, 1, 0.5);
+    onlyWhen("on scrape&notErase");
+    toolSlider("strength", "how much comes off", 0, 1, 0.8);
+    onlyWhen("on scrape&notErase");
+    // erase: all that's in IN AREA's area, at once (Scrape tab, eraseArea), by MOVEMENT's button
 
     toolBox(0, false);
     toolSlider("perFrame", "marks per frame", 1, 400, 20).setDecimalPrecision(0);
@@ -491,7 +509,7 @@ public class Panel extends PApplet {
     toolSlider("taper", "pointed end", 0, 1, 1);
     toolSlider("curving", "bend along the form", 0, 1, 0.5);
 
-    toolBox(1, true);
+    toolBox(1, false);
     toolSlider("perFrame", "marks per frame", 1, 400, 20).setDecimalPrecision(0);
     toolSlider("size", "size (pixels, longest)", 4, 400, 110).setDecimalPrecision(0);
     toolModRow("size", 1, 0.8, true);
@@ -501,6 +519,34 @@ public class Panel extends PApplet {
     onlyWhen("on knife&knifeFlat");
     toolSlider("leaf", "leaf shapes", 0, 1, 0.35);
     toolSlider("ridge", "ridge along the edge", 0, 1, 0.5);
+
+    // the sponge (the Sponge tab): the chunk, and how it's dabbed
+    toolBox(7, false);
+    toolSlider("rate", "stamps per frame", 0.05, 20, 2);
+    // its size: one picked from this range - kept, or a new one every dip
+    range("sponge_sizeRange", "size range  (pixels across)", 10, 300, 50, 90);
+    onlyWhen("on sponge");
+    // or where in the range by a map at the dip: dark the small end, light the big end
+    toolModRow("size", 0, 1, false);
+    row(24);
+    toggle("sponge_sizeEachDip", "a new size each dip", false, 0);
+    onlyWhen("on sponge");
+    toolSlider("ragged", "torn edges", 0, 1, 0.5);
+    toolSlider("pores", "pore size", 1, 12, 3);
+    toolSlider("open", "how open  (holes even when full)", 0, 1, 0.4);
+    toolSlider("load", "picks up  (% of the picture)", 10, 100, 85).setDecimalPrecision(0);
+    toolSlider("smear", "smearing  (each stamp)", 0, 8, 2);
+    toolSlider("loss", "paint lost each stamp  (%)", 1, 80, 20).setDecimalPrecision(0);
+    toolSlider("stamps", "stamps per dip", 1, 40, 8).setDecimalPrecision(0);
+    toolSlider("step", "distance between stamps", 0, 3, 0.7);
+    toolSlider("turn", "rotation  (degrees either way)", 0, 180, 180).setDecimalPrecision(0);
+    row(24);
+    toggle("sponge_fresh", "a new chunk each dip", false, 0);
+    onlyWhen("on sponge");
+    // copy: every stamp prints the picture right under it (COLOUR's "pick up from"), not paint carried
+    row(24);
+    toggle("sponge_copy", "copy  (each stamp prints the picture under it)", false, 0);
+    onlyWhen("on sponge");
 
     // the splatter: what its drops are - any mix of round splatter drops, dots, dashes and
     // triangles - then the cluster settings they all share
@@ -602,66 +648,15 @@ public class Panel extends PApplet {
     toolSlider("blendOver", "blend  (0: at once)", 0, 1, 1);
     onlyWhen("on outline&along outline");
 
-    // the sponge (the Sponge tab): the chunk, and how it's dabbed
-    toolBox(7, false);
-    toolSlider("rate", "stamps per frame", 0.05, 20, 2);
-    // its size: one picked from this range - kept, or a new one every dip
-    range("sponge_sizeRange", "size range  (pixels across)", 10, 300, 50, 90);
-    onlyWhen("on sponge");
-    // or where in the range by a map at the dip: dark the small end, light the big end
-    toolModRow("size", 0, 1, false);
-    row(24);
-    toggle("sponge_sizeEachDip", "a new size each dip", false, 0);
-    onlyWhen("on sponge");
-    toolSlider("ragged", "torn edges", 0, 1, 0.5);
-    toolSlider("pores", "pore size", 1, 12, 3);
-    toolSlider("open", "how open  (holes even when full)", 0, 1, 0.4);
-    toolSlider("load", "picks up  (% of the picture)", 10, 100, 85).setDecimalPrecision(0);
-    toolSlider("smear", "smearing  (each stamp)", 0, 8, 2);
-    toolSlider("loss", "paint lost each stamp  (%)", 1, 80, 20).setDecimalPrecision(0);
-    toolSlider("stamps", "stamps per dip", 1, 40, 8).setDecimalPrecision(0);
-    toolSlider("step", "distance between stamps", 0, 3, 0.7);
-    toolSlider("turn", "rotation  (degrees either way)", 0, 180, 180).setDecimalPrecision(0);
-    row(24);
-    toggle("sponge_fresh", "a new chunk each dip", false, 0);
-    onlyWhen("on sponge");
-    // copy: every stamp prints the picture right under it (COLOUR's "pick up from"), not paint carried
-    row(24);
-    toggle("sponge_copy", "copy  (each stamp prints the picture under it)", false, 0);
-    onlyWhen("on sponge");
-
-    toolBox(8, false);
-    radio("scrape_kind", scrapeNames, 3, 0);
-    onlyWhen("on scrape");
-    // the one layer it takes paint off
-    row(26);
-    label("layer", 0);
-    radioAt("scrape_only", LAYER_NAMES, -1, 50, 34);
-    onlyWhen("on scrape");
-    toolSlider("rate", "scrapes per frame", 0.05, 20, 1);
-    onlyWhen("on scrape&notErase");
-    toolSlider("length", "length", 10, 500, 140).setDecimalPrecision(0);
-    onlyWhen("on scrape&notErase");
-    toolSlider("width", "width", 2, 150, 40).setDecimalPrecision(0);
-    onlyWhen("on scrape&notErase");
-    toolSlider("ragged", "ragged edges", 0, 1, 0.5);
-    onlyWhen("on scrape&notErase");
-    toolSlider("strength", "how much comes off", 0, 1, 0.8);
-    onlyWhen("on scrape&notErase");
-    // erase: all that's in IN AREA's area, at once (Scrape tab, eraseArea)
-    toolSlider("fade", "fade at the edge  (pixels)", 0, 40, 10).setDecimalPrecision(0);
-    onlyWhen("on scrape&erase");
-    row(34);
-    button("scrapeEraseNow", "ERASE", 0, 76);
-    eraseText = cp5.addTextlabel("eraseText").setText("").setColorValue(dark);
-    put(eraseText, 82, 6);
-    onlyWhen("on scrape&erase");
-
-    // AUTOMATION (the Automation tab), under the tools: the chosen tool's size (or length) moved
+    // AUTOMATION (the Automation tab), along the bottom of column 3, above RUN (if MOVEMENT and COLOUR don't
+    // leave room for its sliders, they're folded away: see layout()): the chosen tool's size (or length) moved
     // up and down by a sine wave while it paints, between its shortest and longest. Each tool has
     // its own; only the chosen one's shows. Its title line has an on / off box like the tools'
     // (red off, green on); while it's off the box is just that line
+    bottomColumn(2, -1);
+    colBottom.set(colBottom.size() - 1, 2);
     sections++;
+    autoSection = sections - 1;
     for (int i = 0; i <= T_SCRAPE; i++) {
       String n = TOOLS[i];
       String what = AUTO_TARGET[i].equals("length") ? "length" : AUTO_TARGET[i].equals("width") ? "width" : "size";
@@ -670,7 +665,7 @@ public class Panel extends PApplet {
       row(31);
       Toggle on = cp5.addToggle(n + "_autoOn").setSize(20, 20).setValue(false);
       on.setColorBackground(toolOff).setColorForeground(toolOffHover).setColorActive(toolOn);
-      on.setCaptionLabel("AUTOMATION  -  " + toolTitles[i].toLowerCase() + "  (the " + what + " follows a wave)");
+      on.setCaptionLabel("AUTOMATION  -  " + toolTitles[i].toLowerCase() + "  (" + what + " follows a wave)");
       on.getCaptionLabel().align(ControlP5.RIGHT_OUTSIDE, ControlP5.CENTER).setPaddingX(8);
       register(n + "_autoOn", on);
       put(on, 0, 6);
@@ -689,21 +684,35 @@ public class Panel extends PApplet {
     // the wave, with where it is now (drawn in drawAutoWave())
     row(30);
     autoWave = cur;
+    for (Row ar : columns.get(columns.size() - 1)) ar.autoSetting = ar.when.endsWith("autoOn");
     onlyWhen("autoOn");
     row(4);
     onlyWhen("makesMarks");
 
-    // RECOLOUR (the Recolour tab), under AUTOMATION: one layer at a time - READ COLOURS divides its
-    // paint into 40 colours; click swatches to choose them, and the sliders change those. "open"
-    // shows the swatches and sliders here
-    header("RECOLOUR");
-    row(26);
-    toggle("recolourOpen", "open", false, 0);
+    // RECOLOUR (the Recolour tab), along the bottom of column 2, above RUN (if a tool's settings don't leave
+    // room for it, they're folded away meanwhile: see layout()): one layer at a time - READ COLOURS divides its
+    // paint into 40 colours; click swatches to choose them, and the sliders change those. Its title
+    // line has a box like the tools' (red shut, green open)
+    bottomColumn(1, -1);
+    colBottom.set(colBottom.size() - 1, 2);
+    sections++;
+    recolourSection = sections - 1;
+    row(31);
+    Toggle ro = cp5.addToggle("recolourOpen").setSize(20, 20).setValue(false);
+    ro.setColorBackground(toolOff).setColorForeground(toolOffHover).setColorActive(toolOn);
+    ro.setCaptionLabel("RECOLOUR");
+    ro.getCaptionLabel().align(ControlP5.RIGHT_OUTSIDE, ControlP5.CENTER).setPaddingX(8);
+    register("recolourOpen", ro);
+    put(ro, 0, 6);
     toggle("recolourOn", "on", true, 240);
-    cur.itemWhen.set(cur.itemWhen.size() - 1, "recolourLayers");
+    cur.dy.set(cur.dy.size() - 1, 8);
+    cur.itemWhen.set(cur.itemWhen.size() - 1, "recolour&recolourLayers");
     // (on the masses or the mesh: the output window shows the palette without its changes)
     toggle("recolourAsMade", "as generated", false, 180);
+    cur.dy.set(cur.dy.size() - 1, 8);
     cur.itemWhen.set(cur.itemWhen.size() - 1, "recolourPal");
+    row(6);
+    onlyWhen("recolour");
     row(48);
     label("layer", 0);
     radioAt("recolourLayer", concat(LAYER_NAMES, new String[] { "masses", "mesh" }), 0, 60, 36);
@@ -712,6 +721,7 @@ public class Panel extends PApplet {
     rl.getItem(LAYERS + 1).setPosition(88, 24);
     Textlabel rp = cp5.addTextlabel("recolourPalLabel").setText("palette").setColorValue(dark);
     put(rp, -4, 26);
+    onlyWhen("recolour");
     row(32);
     button("recolourNew", "READ COLOURS", 0, 100);
     cur.itemWhen.set(cur.itemWhen.size() - 1, "recolourLayers");
@@ -746,23 +756,24 @@ public class Panel extends PApplet {
     column();
     // APPLY first, in two steps: ON LAYER, which layer the tool paints on, and IN AREA, where on it
     // (on a slightly darker strip). Both have to be done before its MOVEMENT and COLOUR show, and it
-    // doesn't paint till they are. With IN AREA's All, the box then closes to one line saying which;
-    // with the colours it stays open to choose them, and its title closes it. Clicking its title
-    // opens it again, over the others (see applyShut()). SCRAPE and COPY only have IN AREA - their
-    // layer is in their own box
+    // doesn't paint till they are. With IN AREA's All, the box then closes to one line saying which layer
+    // and area; with the others it stays open to choose the colours or pieces, and its title (or the PICK
+    // button) closes it. Clicking its title opens it again, over the others (see applyShut()). SCRAPE and COPY only
+    // have the layer in ON LAYER - the one paint comes off, or the map goes on
     applyHeader = header("APPLY");
     cur.dx.set(0, 20);                   // room for the square before it (drawn in draw())
     applySection = sections - 1;
     float[] opacityDefault = { 0.9, 0.9, 0.9, 0.8, 0.9, 0.9, 0.95, 0.9 };
     float[] washesDefault = { 0.15, 0.15, 0, 0, 0, 0, 0, 0 };
-    float[] thicknessDefault = { 0.5, 0.8, 0.4, 0.1, 0, 0.2, 0, 0.15 };
-    for (int i = 0; i < PAINT_TOOLS; i++) {
+    float[] thicknessDefault = { 0.5, 0.6, 0.5, 0.1, 0, 0.2, 0, 0.4 };
+    for (int i = 0; i < TOOLS.length; i++) {
       String n = TOOLS[i], when = "edit " + n + "&applyOpen";
       row(24);
       label("ON LAYER", 0);
       radioAt(n + "_layer", LAYER_NAMES, -1, 90, 33);
       onlyWhen(when);
       closesApply(n + "_layer");
+      if (i >= PAINT_TOOLS) continue;
       slider(n + "_opacity", "opacity", 0, 1, opacityDefault[i]);
       onlyWhen(when);
       modRow(n + "_opacity", 0, 0.5, false);
@@ -827,7 +838,39 @@ public class Panel extends PApplet {
 
     float[] followDefault = { 0.6, 0.6, 0, 0.5, 0.3, 0, 0, 0, 0.5 };
     moveHeader = header("MOVEMENT");
+    moveSection = sections - 1;
     onlyWhen("hasMove");
+    // clicking its title folds it to that and a line saying what's chosen, or opens it again
+    row(24);
+    moveText = cp5.addTextlabel("moveText").setText("").setColorValue(dark);
+    put(moveText, -4, 2);
+    onlyWhen("hasMove&makesMarks&moveFolded");
+    // COPY and SCRAPE's erase do the whole area at once: all they have here is the button that does it
+    row(34);
+    button("copyMap", "COPY", 0, 76);
+    copyText = cp5.addTextlabel("copyText").setText("").setColorValue(dark);
+    put(copyText, 82, 6);
+    onlyWhen("on copy");
+    row(34);
+    button("scrapeEraseNow", "ERASE", 0, 76);
+    eraseText = cp5.addTextlabel("eraseText").setText("").setColorValue(dark);
+    put(eraseText, 82, 6);
+    onlyWhen("on scrape&erase");
+    // ... and, with an area, how wide the fade at its border is, and which side of it
+    for (String n : new String[] { "copy", "scrape" }) {
+      String when = n.equals("copy") ? "on copy&areaUsed" : "on scrape&erase&areaUsed";
+      row(20);
+      label("fade at the area's border", 0);
+      onlyWhen(when);
+      slider(n + "_edgeFade", "", -FADE_MOST, FADE_MOST, -10).setDecimalPrecision(0).setSliderMode(Slider.FLEXIBLE).setHandleSize(8);
+      onlyWhen(when);
+      row(20);
+      label("inside", 0);
+      label("none", 70);
+      label("outside", 126);
+      onlyWhen(when);
+    }
+    int moveRows = columns.get(columns.size() - 1).size();
     // its two parts - which way marks go, and where they start - each on a slightly different shade of the box's colour (Row's band, drawn in drawBands)
     for (int i = 0; i <= T_SCRAPE; i++) {
       String n = TOOLS[i];
@@ -845,7 +888,7 @@ public class Panel extends PApplet {
       }
       curBand = 2;
       row(20);
-      label("start at", 0);
+      label("START AT", 0);
       onlyWhen("edit " + n);
       // vertex / tri: a corner or the middle of a triangle of the mesh (SETUP 4); blob: the middle
       // of one of the masses (SETUP 2) - each one as likely as any other (Marks tab)
@@ -863,6 +906,8 @@ public class Panel extends PApplet {
       slider(n + "_spread", "spread round the mouse", 0, 300, 60).setDecimalPrecision(0);
       onlyWhen("edit " + n + "&mouse " + n);
     }
+    ArrayList<Row> moveCol = columns.get(columns.size() - 1);
+    for (int i = moveRows; i < moveCol.size(); i++) moveCol.get(i).when += "&makesMarks&moveOpen";
     curBand = 0;
     row(6);
     onlyWhen("hasMove");
@@ -938,16 +983,16 @@ public class Panel extends PApplet {
       cr.when = cr.when.equals("") ? "applyShut" : cr.when + "&applyShut";
     }
 
-    // ---------------------------------------------------- column 4: LAYER 1 - 5, A, B, SHADOW BOX, IMPASTO
+    // ---------------------------------------------------- column 4: LAYER 1 - 5, A, B, LIGHT
     column();
 
     // a box for each of the layers (the Layers tab), each its own pastel (LAYER_COLOURS):
-    // CLEAR empties it; how see-through it is and how it's combined with the layers under it; its
-    // SHADOW BOX gap, shadow, softness and lit edges; and how much IMPASTO's light catches its
-    // paint. (Whether each shows is in VIEW's LAYERS list; which layer each tool paints on is in
-    // its APPLY)
+    // CLEAR empties it; how see-through it is and how it's combined with the layers under it; how far
+    // it floats above them (its gap - 0 is not at all), its shadow, softness and lit edges; and how
+    // much its thick paint catches the light (impasto). (Whether each shows is in VIEW's LAYERS list;
+    // which layer each tool paints on is in its APPLY)
     // (the boxes are kept tight so the column ends above RUN's strip)
-    for (int i = 0; i < LAYER_A; i++) {
+    for (int i = 0; i < LAYERS; i++) {
       layerSection[i] = layerHeader("LAYER " + LAYER_NAMES[i]);
       button("clearLayer" + i, "CLEAR", 240, 64).setHeight(18);
       cur.dy.set(cur.dy.size() - 1, 4);
@@ -955,48 +1000,25 @@ public class Panel extends PApplet {
       sliderAt("layerSeeThrough" + i, "transparency", 0, 1, 0, 0, 1, 100);
       list("layerBlend" + i, layerBlendNames, 0, 200, 110);
       row(34);
-      boxSlider("layerGap" + i, "gap", 0, 60, 12, 0).setDecimalPrecision(0);
+      boxSlider("layerGap" + i, "gap", 0, 60, 0, 0).setDecimalPrecision(0);
       boxSlider("boxShadow" + i, "shadow", 0, 1, 0.6, 80);
       boxSlider("boxSoftness" + i, "softness", 0, 1, 0.4, 160);
-      boxSlider("boxRim" + i, "lit edges", 0, 1, 0.4, 240);
-      slider("layerImpasto" + i, "impasto", 0, 1, 1);
-      row(2);
-    }
-    // A and B, for now without the SHADOW BOX and impasto sliders (no gap, and all their impasto)
-    for (int i = LAYER_A; i <= LAYER_B; i++) {
-      layerSection[i] = layerHeader("LAYER " + LAYER_NAMES[i]);
-      button("clearLayer" + i, "CLEAR", 240, 64).setHeight(18);
-      cur.dy.set(cur.dy.size() - 1, 4);
-      row(24);
-      sliderAt("layerSeeThrough" + i, "transparency", 0, 1, 0, 0, 1, 100);
-      list("layerBlend" + i, layerBlendNames, 0, 200, 110);
+      boxSlider("boxRim" + i, "lit edges", 0, 1, 0, 240);
+      slider("layerImpasto" + i, "impasto", 0, 1, 0.5);
       row(2);
     }
 
-    // the layers floating apart, lit from one side (the Layers tab's composite). The light is the
-    // same for all; each layer's gap, shadow and lit edges are in its own box above
-    header("SHADOW BOX");
-    row(26);
-    toggle("boxOn", "on  (the layers float apart)", false, 0);
-    slider("lightFrom", "light from  (90 = above)", 0, 360, 135).setDecimalPrecision(0);
-    onlyWhen("box");
-    slider("lightHeight", "light height", 10, 80, 45).setDecimalPrecision(0);
-    onlyWhen("box");
-    row(6);
-
-    // thick paint catching a raking light (the Impasto tab); how thick each tool's paint is is in
-    // its APPLY
-    header("IMPASTO");
-    row(26);
-    toggle("impastoOn", "on  (the light catches thick paint)", true, 0);
-    slider("impastoRelief", "relief", 0, 1, 0.5);
-    onlyWhen("impasto");
-    slider("impastoFrom", "light from  (90 = above)", 0, 360, 135).setDecimalPrecision(0);
-    onlyWhen("impasto");
-    slider("impastoHeight", "light height", 10, 80, 35).setDecimalPrecision(0);
-    onlyWhen("impasto");
-    slider("impastoGloss", "shine", 0, 1, 0.3);
-    onlyWhen("impasto");
+    // the one light: it casts the layers' shadows and lights their edges (the Layers tab's composite),
+    // and rakes across the thick paint (the Impasto tab - how thick each tool's paint is is in its APPLY)
+    // at the bottom of the column, above RUN
+    bottomColumn(3, -1);
+    colBottom.set(colBottom.size() - 1, 2);
+    header("LIGHT");
+    lightSection = sections - 1;
+    slider("lightFrom", "from  (90 = above)", 0, 360, 135).setDecimalPrecision(0);
+    slider("lightHeight", "height", 10, 80, 35).setDecimalPrecision(0);
+    slider("lightShine", "shine on thick paint", 0, 1, 0.3);
+    row(4);
 
     // the lists open downwards over the controls under them, so draw them last - the higher
     // ones last of all, so an open list is never hidden behind the one below it
@@ -1024,7 +1046,8 @@ public class Panel extends PApplet {
     }
     colorMode(RGB, 255);
     for (int i = 0; i < layerSection.length; i++) blockColour[layerSection[i]] = LAYER_COLOURS[i];
-    blockColour[viewSection] = viewBase;
+    for (int i = 0; i < TOOLS.length; i++) blockColour[toolSection[i]] = TOOL_COLOURS[i];
+    for (int s : new int[] { viewSection, autoSection, recolourSection, lightSection }) blockColour[s] = viewBase;
     layout();
     ready = true;
   }
@@ -1069,6 +1092,13 @@ public class Panel extends PApplet {
       rect(block[i][0] - 8, block[i][1], (i == runSection ? 3 * colW : colW) - 12, block[i][2] - block[i][1], 8);
     }
     drawBands();
+    // what's in AUTOMATION, RECOLOUR and LIGHT, on one of VIEW's blues
+    for (int s : new int[] { autoSection, recolourSection, lightSection }) {
+      float[] b = block[s];
+      if (b == null || b[2] - b[1] < 40) continue;       // (only its title)
+      fill(layersBlue);
+      rect(b[0] - 4, b[1] + 28, 320, b[2] - b[1] - 28, 6);
+    }
     // VIEW's two columns
     if (block[viewSection] != null && layerRow.y >= 0) {
       float vx = block[viewSection][0];
@@ -1143,6 +1173,11 @@ public class Panel extends PApplet {
     paceSlider.getValueLabel().setText(paceText(paceRate(value("pace"))));
     copyText.setText(copyStatus);
     eraseText.setText(eraseStatus);
+    for (String n : new String[] { "copy", "scrape" }) {
+      int p = round(value(n + "_edgeFade"));
+      ((Slider) all.get(n + "_edgeFade")).getCaptionLabel().setText(p == 0 ? "no fade" : abs(p) + (p < 0 ? " pixels inside" : " pixels outside"));
+      ((Slider) all.get(n + "_edgeFade")).getValueLabel().setText("");
+    }
     if (areaPatches()) {
       patchText.setText(patchLine(areaKind()));
       String[] which = split(partsLine(), '\n');
@@ -1151,16 +1186,22 @@ public class Panel extends PApplet {
     }
     if (!editing.equals(shownEditing)) {
       shownEditing = editing;
-      int e = java.util.Arrays.asList(TOOLS).indexOf(editing);
-      moveHeader.setText("MOVEMENT  -  " + toolTitles[e].toLowerCase());
-      colourHeader.setText("COLOUR  -  " + toolTitles[e].toLowerCase());
       applyOpen = false;
       if (picking == PICK_AREA) picking = PICK_NONE;     // (it was for the tool before)
       layoutWanted = true;
     }
+    for (int i = 0; i < TOOLS.length; i++) {
+      ((Toggle) all.get(TOOLS[i] + "_on")).setCaptionLabel(toolTitles[i]
+        + (toolFolded && value(TOOLS[i] + "_on") > 0.5 ? "     (RECOLOUR is open)" : ""));
+    }
+    if (areaUsed() && !areaPicked()) applyOpen = true;     // (it stays open till its title's clicked)
     showPickButtons();
+    String toolNow = "  -  " + toolTitles[toolIndex()].toLowerCase();
+    moveHeader.setText("MOVEMENT" + toolNow + (shown("makesMarks&moveOpen") ? "     click here when done" : ""));
+    moveText.setText(moveLine());
+    colourHeader.setText("COLOUR" + toolNow);
     applyHeader.setText("APPLY  -  " + toolTitles[max(0, java.util.Arrays.asList(TOOLS).indexOf(editing))].toLowerCase()
-      + "     " + (!layerPicked() ? pickLayer() : !areaPicked() ? (areaUsed() ? areaChoose() : "pick an area")
+      + "     " + (!layerPicked() ? "pick a layer" : !areaPicked() ? (areaUsed() ? areaChoose() : "pick an area")
       : applyShut() ? applyLine() : "click here when done"));
     for (int k = 0; k < S_COUNT; k++) boxTitles[k].setText(boxNames[k] + (openSetup == k ? "     click here when done" : ""));
     sourceText.setText(sourceDone ? faceName + "     " + photo.width + " x " + photo.height + " pixels" : "click to choose a picture");
@@ -1171,7 +1212,13 @@ public class Panel extends PApplet {
     paletteText.setText(paletteOpen || paletteDone ? paletteStatus() : "click to make a palette of " + PALETTE_SIZE + " colours");
     outlineText.setText(outlineStatus());
 
+    // VIEW's layers: an empty one's box is white (grey while it's hidden)
+    for (int i = 0; i < LAYERS; i++) {
+      Toggle t = (Toggle) all.get("layerOn" + i);
+      t.setColorActive(layerEmpty[i] ? color(255) : color(110, 170, 240)).setColorBackground(layerEmpty[i] ? color(150) : color(60));
+    }
     cp5.draw();
+    frameLayer();
     // until every setup box is done, and while a map is showing, everything but them and VIEW is
     // greyed out (and locked)
     if (gated) {
@@ -1190,13 +1237,13 @@ public class Panel extends PApplet {
       textSize(12);
       for (String n : alwaysButtons) buttons.get(n).draw(this.g);
     }
-    // with every tool off, columns 3 - 4 still show the last tool's settings, under a grey cover
+    // with every tool off, column 3 still shows the last tool's settings, under a grey cover
     boolean anyOn = false;
     for (String t : TOOLS) anyOn |= value(t + "_on") > 0.5;
     if (!anyOn) {
       fill(128, 124);
       noStroke();
-      rect(16 + 2 * colW - 12, 0, 2 * colW, height - 28);
+      rect(16 + 2 * colW - 12, 0, colW, runTop());
     }
 
     // the status line along the bottom
@@ -1210,10 +1257,10 @@ public class Panel extends PApplet {
       return;
     }
     String state = isRunning ? (isPaused ? (value("showWhat") > 0 ? "paused  (showing a map)" : "paused") : "painting") : runWaiting ? "waiting for the masses" : "stopped";
-    if (isRunning && !isPaused && value("copy_on") > 0.5) state += " nothing - COPY is on";
-    else if (value("scrape_on") > 0.5 && isRunning && !isPaused && erasing()) state += " nothing - SCRAPE's erase has its own button";
-    else if (anyOn && isRunning && !isPaused && !applyDone()) state += " nothing - " + (!layerPicked() ? pickLayer() : areaUsed() ? areaChoose() : "pick an area")
-      + (layerPicked() || hasColour() ? " in APPLY" : "");
+    if (isRunning && !isPaused && value("copy_on") > 0.5) state += " nothing - COPY, in MOVEMENT, does it";
+    else if (value("scrape_on") > 0.5 && isRunning && !isPaused && erasing()) state += " nothing - ERASE, in MOVEMENT, does it";
+    else if (anyOn && isRunning && !isPaused && !applyDone()) state += " nothing - " + (!layerPicked() ? "pick a layer" : areaUsed() ? areaChoose() : "pick an area")
+      + " in APPLY";
     text(faceName + "   " + photo.width + " x " + photo.height + "      " + state + "      " + markCount + " marks      "
       + round(outputFps) + " fps      " + massStatus, 16, height - 14);
   }
@@ -1247,6 +1294,10 @@ public class Panel extends PApplet {
       applyPressed = true;
       return;
     }
+    if (shown("hasMove&makesMarks&applyShut") && inBlock(moveSection, 30)) {
+      movePressed = true;
+      return;
+    }
     for (ControllerInterface c : all.values()) {
       if (!c.isVisible()) continue;
       if (c instanceof RadioButton) {
@@ -1254,7 +1305,7 @@ public class Panel extends PApplet {
         for (int i = 0; i < items.size(); i++) {
           if (onLabel(items.get(i), ((RadioButton) c).getPosition())) {
             ((RadioButton) c).activate(i);
-            if (c == all.get(editing + "_layer") && hasColour() || c == all.get(editing + "_inArea")) layerClicked = true;
+            if (c == all.get(editing + "_layer") || c == all.get(editing + "_inArea")) layerClicked = true;
             layoutWanted = true;
             return;
           }
@@ -1290,7 +1341,9 @@ public class Panel extends PApplet {
     if (layerWas) applyOpen = areaUsed();        // (the colours, blobs ... are chosen with it open)
     else if (applyPressed && inBlock(applySection, 30)) applyOpen = !applyOpen;
     if (applyShut() && picking == PICK_AREA) picking = PICK_NONE;      // its title ends the picking too
-    if (layerWas || applyPressed) layoutWanted = true;
+    if (movePressed && inBlock(moveSection, 30)) moveFolded[toolIndex()] = !moveFolded[toolIndex()];
+    if (layerWas || applyPressed || movePressed) layoutWanted = true;
+    movePressed = false;
     applyPressed = false;
     int k = pressedIn;
     pressedIn = -1;
@@ -1329,8 +1382,7 @@ public class Panel extends PApplet {
     return editing.equals("scrape") && value("scrape_kind") == SCRAPE_ERASE;
   }
 
-  // whether the chosen tool puts paint on (so has COLOUR, and ON LAYER). SCRAPE and COPY have their
-  // layer in their own box, and only IN AREA in APPLY
+  // whether the chosen tool puts paint on (so has COLOUR, and all of ON LAYER)
   boolean hasColour() {
     return !editing.equals("copy") && !editing.equals("scrape");
   }
@@ -1374,19 +1426,39 @@ public class Panel extends PApplet {
     return layerPicked() && areaPicked();
   }
 
-  // what's been chosen, for the closed box's line
-  String applyLine() {
-    int a = constrain((int) value(editing + "_inArea"), 0, inAreaNames.length - 1);
-    String area = (areaUsed() && value(editing + "_areaSide") == 1 ? "not " : "") + inAreaNames[a];
-    return hasColour() ? "layer " + LAYER_NAMES[constrain((int) value(editing + "_layer"), 0, LAYERS - 1)] + ",  " + area : area;
+  // the PICK button's "HERE: DONE": as a click on APPLY's title
+  void areaDone() {
+    if (picking == PICK_AREA) picking = PICK_NONE;
+    if (applyDone()) applyOpen = false;
+    layoutWanted = true;
   }
 
-  String pickLayer() {
-    return hasColour() ? "pick a layer" : "pick a layer in SCRAPE";
+  // what's been chosen, for the closed box's line: the layer and the area
+  String applyLine() {
+    int a = constrain((int) value(editing + "_inArea"), 0, inAreaNames.length - 1);
+    return "layer " + LAYER_NAMES[constrain((int) value(editing + "_layer"), 0, LAYERS - 1)] + ",  "
+      + (areaUsed() && value(editing + "_areaSide") == 1 ? "not " : "") + inAreaNames[a];
+  }
+
+  // MOVEMENT folded: which way its marks go, and where they start
+  String moveLine() {
+    ControllerInterface around = all.get(editing + "_around");
+    ControllerInterface start = all.get(editing + "_startAt");
+    if (start == null) return "";
+    String[] ways = { "around the form", "across the form", "along the outline" };
+    String way = around == null ? "" : ways[constrain((int) around.getValue(), 0, 2)] + ",   ";
+    int s = max(0, (int) start.getValue());
+    String at = ((RadioButton) start).getItem(s).getCaptionLabel().getText();
+    if (at.startsWith("weighted")) at = "weighted by " + mapNames[constrain((int) value(editing + "_startMap"), 0, mapNames.length - 1)];
+    return way + "start at:  " + at.replace("at ", "").replace("  (SETUP 3)", "").replace(" (2D, hold button)", "");
+  }
+
+  int toolIndex() {
+    return max(0, java.util.Arrays.asList(TOOLS).indexOf(editing));
   }
 
   boolean layerPicked() {
-    return value(editing.equals("scrape") ? "scrape_only" : editing + "_layer") >= 0;     // (SCRAPE's is in its box)
+    return value(editing + "_layer") >= 0;
   }
 
   boolean applyShut() {
@@ -1546,10 +1618,9 @@ public class Panel extends PApplet {
       showRecolourMap();
     }
     else if (n.equals("recolourLayer")) {
-      // another layer: the box opens on its palette, read now if it hasn't one yet
+      // another layer: its palette shows, read now if it hasn't one yet
       chooseRecolour((int) value);
-      if (value("recolourOpen") < 0.5) all.get("recolourOpen").setValue(1);
-      else {
+      if (value("recolourOpen") > 0.5) {
         needSwatches();
         showRecolourMap();
       }
@@ -2025,11 +2096,11 @@ public class Panel extends PApplet {
     else if (n.equals("clearCanvas")) command("clear");
     else if (n.equals("saveNow")) command("save");
     else if (n.equals("printView")) command("print");
-    else if (n.equals("scrapeEraseNow")) {
-      picking = PICK_NONE;              // (back to the painting, to see it)
-      command("eraseArea");
+    else if (n.equals("scrapeEraseNow")) command("eraseArea");
+    else if (n.equals("areaPickMasses")) {
+      if (picking == PICK_AREA) areaDone();
+      else picking = PICK_AREA;
     }
-    else if (n.equals("areaPickMasses")) picking = picking == PICK_AREA ? PICK_NONE : PICK_AREA;
     // another kind of area: any picking for it stops - but Masses, Tris, Objects and Face Parts
     // are picked straight away
     else if (n.endsWith("_inArea")) {
@@ -2057,10 +2128,7 @@ public class Panel extends PApplet {
     }
     else if (n.equals("smoothing")) command("field");
     else if (n.equals("showWhat")) command("show");
-    else if (n.equals("copyMap")) {
-      picking = PICK_NONE;
-      command("copyMap");
-    }
+    else if (n.equals("copyMap")) command("copyMap");
     else if (n.equals("layMasses")) command("layMasses");
     else if (n.equals("massSeed")) command("massSeed");
     else if (n.startsWith("clearLayer")) command(n);
@@ -2096,6 +2164,8 @@ public class Panel extends PApplet {
     if (when.equals("later")) return false;
     if (when.equals("applyShut")) return applyShut();
     if (when.equals("applyOpen")) return !applyShut();
+    if (when.equals("moveOpen")) return !moveFolded[toolIndex()];
+    if (when.equals("moveFolded")) return moveFolded[toolIndex()];
     if (when.equals("hasColour")) return hasColour();
     if (when.startsWith("one ")) return value(when.substring(4) + "_one") > 0.5;
     if (when.equals("recolour")) return value("recolourOpen") > 0.5;
@@ -2112,7 +2182,7 @@ public class Panel extends PApplet {
     if (when.equals("noSetupOpen")) return openSetup < 0;
     if (when.equals("outlineFace")) return value("outline_kind") == 0;
     if (when.equals("outlineObjects")) return value("outline_kind") == 1;
-    if (when.equals("hasMove")) return !editing.equals("outline") && shown("makesMarks");
+    if (when.equals("hasMove")) return !editing.equals("outline");
     if (when.equals("flowColour")) return value("flow_src") < 2;     // the photo or the masses
     if (when.equals("pencilSteers")) return value("pencil_kind") < 2;
     if (when.equals("pencilFlow")) return value("pencil_kind") == 1;
@@ -2129,13 +2199,11 @@ public class Panel extends PApplet {
     if (when.equals("areaColours")) return areaColours();
     if (when.equals("areaPatches")) return areaPatches();
     if (when.equals("areaParts")) return areaKind() == PICK_PARTS;
-    if (when.equals("box")) return value("boxOn") > 0.5;
-    if (when.equals("impasto")) return value("impastoOn") > 0.5;
     if (when.startsWith("map ")) return value(when.substring(4) + "_by") > 0;   // a "by" row with a map chosen
     return true;
   }
 
-  // (0 for a control a tool doesn't have - COPY has no "copy_layer")
+  // (0 for a control a tool doesn't have - COPY has no "copy_opacity")
   float value(String name) {
     ControllerInterface c = all.get(name);
     return c == null ? 0 : c.getValue();
@@ -2165,23 +2233,58 @@ public class Panel extends PApplet {
     }
   }
 
+  // a green frame, in VIEW's list, round the box of the layer the tool that's on paints on (or scrapes, or
+  // copies to)
+  void frameLayer() {
+    int L = (int) value(editing + "_layer");
+    if (value(editing + "_on") < 0.5 || L < 0) return;
+    Toggle t = (Toggle) all.get("layerOn" + L);
+    if (!t.isVisible()) return;
+    float[] p = t.getPosition();
+    noFill();
+    stroke(doneGreen);
+    strokeWeight(3);
+    rect(p[0] - 2.5, p[1] - 2.5, t.getWidth() + 5, t.getHeight() + 5);
+    noStroke();
+  }
+
+  // where RUN's strip starts
+  float runTop() {
+    float y = height - 36;
+    for (int i = 0; i < columns.size(); i++) {
+      if (colBottom.get(i) != 1 || colAt.get(i) != 1) continue;
+      for (Row r : columns.get(i)) if (shown(r.when)) y -= r.h;
+    }
+    return y;
+  }
+
   // put every shown row in place, top to bottom in each column, and hide the rest. The columns
-  // along the bottom end just above the status line
+  // along the bottom end just above the status line, or above RUN
   void layout() {
     layoutWanted = false;
     float[][] b = new float[sections][];
     float[] top = new float[columns.size()];
+    float runY = runTop();
+    // column 2: if the tool's settings leave no room for RECOLOUR, only its title shows. Column 3: the same
+    // for AUTOMATION
+    float[] used = new float[topColumns];
+    for (int i = 0; i < columns.size(); i++) {
+      if (colBottom.get(i) == 1) continue;
+      for (Row r : columns.get(i)) if (shown(r.when)) used[colAt.get(i)] += r.h;
+    }
+    toolFolded = 8 + used[1] > runY;
+    boolean autoFolded = 8 + used[2] > runY;
     for (int i = 0; i < columns.size(); i++) {
       float x = 16 + colAt.get(i) * colW, y = 8;
-      if (colBottom.get(i) == 1) {
+      if (colBottom.get(i) > 0) {
         float total = 0;
-        for (Row r : columns.get(i)) if (shown(r.when)) total += r.h;
-        y = height - 36 - total;
+        for (Row r : columns.get(i)) if (shown(r.when) && !(autoFolded && r.autoSetting)) total += r.h;
+        y = (colBottom.get(i) == 2 ? runY : height - 36) - total;
         if (colLevel.get(i) >= 0) y = min(y, top[colLevel.get(i)]);
       }
       top[i] = y;
       for (Row r : columns.get(i)) {
-        boolean rowShown = shown(r.when);
+        boolean rowShown = shown(r.when) && !(toolFolded && r.toolSetting) && !(autoFolded && r.autoSetting);
         r.y = rowShown ? y : -1;
         if (rowShown && r.section >= 0) {
           // the block runs from just inside its header row to just above the next header
@@ -2294,6 +2397,25 @@ public class Panel extends PApplet {
       }
       else c.setValue(j.getFloat(n));
     }
+    // (settings saved when these two's layer was in their own box)
+    if (j.hasKey("copyTo")) ((RadioButton) all.get("copy_layer")).activate((int) j.getFloat("copyTo"));
+    if (j.getFloat("scrape_only", -1) >= 0) ((RadioButton) all.get("scrape_layer")).activate((int) j.getFloat("scrape_only"));
+    if (j.hasKey("boxOn")) {
+      // settings saved when SHADOW BOX and IMPASTO were boxes of their own, with a light each
+      boolean box = j.getFloat("boxOn") > 0.5, thick = j.getFloat("impastoOn", 0) > 0.5;
+      for (int i = 0; i < LAYERS; i++) {
+        if (!box || !j.hasKey("layerGap" + i)) {
+          all.get("layerGap" + i).setValue(0);
+          all.get("boxRim" + i).setValue(0);
+        }
+        all.get("layerImpasto" + i).setValue(thick ? j.getFloat("layerImpasto" + i, 1) * j.getFloat("impastoRelief", 0.5) : 0);
+      }
+      if (thick && !box) {
+        all.get("lightFrom").setValue(j.getFloat("impastoFrom", 135));
+        all.get("lightHeight").setValue(j.getFloat("impastoHeight", 35));
+      }
+      all.get("lightShine").setValue(j.getFloat("impastoGloss", 0.3));
+    }
     if (j.hasKey("accent") && !j.hasKey("accentHue_lo")) {
       // settings saved when the accent was one colour: ranges just round it
       int a = j.getInt("accent");
@@ -2357,6 +2479,8 @@ public class Panel extends PApplet {
       if (!(c instanceof Slider) || n.equals("nudgeAmount") || n.equals("pace") || n.endsWith("perFrame") || n.endsWith("_rate")) continue;
       if (n.startsWith("palette") || (recolourKind > 0 && n.startsWith("recolour"))) continue;      // PALETTE GEN isn't part of the painting (yet)
       Slider s = (Slider) c;
+      // (a layer that's flat stays flat)
+      if ((n.startsWith("layerGap") || n.startsWith("boxRim") || n.startsWith("layerImpasto")) && s.getValue() == 0) continue;
       float range = s.getMax() - s.getMin();
       s.setValue(constrain(s.getValue() + random(-0.5, 0.5) * range * amount, s.getMin(), s.getMax()));
     }
@@ -2396,6 +2520,7 @@ public class Panel extends PApplet {
   // a column along the bottom of the window, under top column `at`. Its top is level with column
   // `level`'s (if that's not -1, and it fits). Returns its number, for `level`
   int bottomColumn(int at, int level) {
+    inTools = false;
     columns.add(new ArrayList<Row>());
     colAt.append(at);
     colBottom.append(1);
@@ -2409,6 +2534,7 @@ public class Panel extends PApplet {
     cur.h = h;
     cur.band = curBand;
     cur.section = sections - 1;
+    cur.toolSetting = inTools;
     columns.get(columns.size() - 1).add(cur);
   }
 
@@ -2438,6 +2564,7 @@ public class Panel extends PApplet {
   // a tool's box in column 2: its name with an on / off box - red off, green on. The rows made
   // after it with toolSlider() etc. are its shape settings, shown while it's on
   void toolBox(int i, boolean on) {
+    inTools = false;                     // (its title isn't one of its settings)
     curTool = TOOLS[i];
     sections++;
     toolSection[i] = sections - 1;
@@ -2448,6 +2575,7 @@ public class Panel extends PApplet {
     t.getCaptionLabel().align(ControlP5.RIGHT_OUTSIDE, ControlP5.CENTER).setPaddingX(8);
     register(curTool + "_on", t);
     put(t, 0, 6);
+    inTools = true;
   }
 
   // a slider on a row of its own in the current tool's box, named "tool_name"
@@ -2664,7 +2792,7 @@ public class Panel extends PApplet {
     return sections - 1;
   }
 
-  // one of a layer box's small SHADOW BOX sliders, its caption above it
+  // one of a layer box's small sliders, its caption above it
   Slider boxSlider(String name, String caption, float lo, float hi, float value, float dx) {
     Slider s = sliderAt(name, caption, lo, hi, value, dx, 14, 70);
     s.getCaptionLabel().align(ControlP5.LEFT, ControlP5.TOP_OUTSIDE).setPaddingX(0);

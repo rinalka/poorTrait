@@ -12,7 +12,7 @@
 // THE MASSES / MESH, clicking that picture in the output window. They, and the pieces picked,
 // are shared by every tool; which of these a tool goes by, and whether it stays in or out, is its own.
 // A tool doesn't paint till the step is done: one of them chosen and, but for All, at least one
-// colour or piece. (SCRAPE's erase and COPY do all of it at once, with a fade at its edge - at the end.)
+// colour or piece. (SCRAPE's erase and COPY do all of it at once, with a fade inside or outside its border - at the end.)
 //
 // Two things keep a tool where it should be:
 //   - its marks only start there (startPoint() tries again until a mark's start is in the right
@@ -208,15 +208,39 @@ void areaClipMask(PGraphics m) {
 
 // ---------------------------------------------------------------- all of it at once (ERASE, COPY)
 
+// the widest the fade at the border can be, either side of it (photo pixels)
+final int FADE_MOST = 50;
+
 // where the tool now in use goes, as a mask at the photo's size: the area, or everywhere else. Solid in
-// it, fading over the `fade` pixels inside its edge
-PImage areaMask(float fade) {
+// it, with a fade `edge` pixels wide along the area's border - inside the area (less than 0), or outside
+// it (more). So with "outside it", a fade inside the area runs on past where the tool goes
+PImage areaMask(float edge) {
   boolean[] where = areaIn;
   if (areaWay() == 2) {
     where = new boolean[areaIn.length];
     for (int i = 0; i < where.length; i++) where[i] = !areaIn[i];
   }
-  return fadedMask(where, areaW, areaH, fade);
+  boolean inward = edge < 0 == (areaWay() == 1);
+  float wide = round(abs(edge));
+  return inward ? fadedMask(where, areaW, areaH, wide) : spreadMask(where, areaW, areaH, wide);
+}
+
+// a mask at the photo's size, solid in all of the area, and fading to nothing over the `fade` pixels
+// outside its edge
+PImage spreadMask(boolean[] in, int w, int h, float fade) {
+  boolean[] off = new boolean[in.length];
+  for (int i = 0; i < in.length; i++) off[i] = !in[i];
+  float[] d = distanceIn(off, w, h);           // (0 in the area)
+  float over = max(0.5, fade * w / photo.width);
+  PImage mask = createImage(w, h, ARGB);
+  mask.loadPixels();
+  for (int i = 0; i < in.length; i++) {
+    float u = in[i] ? 1 : fade <= 0 ? 0 : constrain(1 - (d[i] - 0.5) / over, 0, 1);
+    mask.pixels[i] = round(255 * u * u * (3 - 2 * u)) << 24 | 0xFFFFFF;
+  }
+  mask.updatePixels();
+  if (w != photo.width || h != photo.height) mask.resize(photo.width, photo.height);
+  return mask;
 }
 
 // how much of the picture that is (0 .. 1)

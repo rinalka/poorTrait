@@ -34,6 +34,7 @@ float spongeX, spongeY;            // where the last stamp was
 float spongeSize = 0;              // how big it is now (pixels across), from the size range
 String spongeRangeFor = "";        // the size range it was picked from
 ArrayList<PImage> spongePrints = new ArrayList<PImage>();   // a picture for each stamp in a frame
+ArrayList<PImage> spongeDepths = new ArrayList<PImage>();   // ... and how thick its paint is (the Impasto tab)
 
 void paintSponges(PGraphics g) {
   int n = countFor(t("rate"));
@@ -81,6 +82,10 @@ void spongeStamp(PGraphics g, int k) {
   g.image(p, -spongeN / 2.0, -spongeN / 2.0);
   g.noTint();
   g.popMatrix();
+  if (shaping) {
+    spongeDepth(shapePrints.size(), p);
+    shapePrints.add(new float[] { spongeX, spongeY, turn, alpha });
+  }
   markCount++;
 }
 
@@ -215,4 +220,28 @@ PImage spongePrint(int k, float paint) {
   }
   p.updatePixels();
   return p;
+}
+
+// how thick the paint of print p is, as the k-th depth picture of the frame: nearly random, in peaks
+// and pits a few pixels across, as a sponge pulls the paint up when it's lifted
+void spongeDepth(int k, PImage p) {
+  if (spongeDepths.size() <= k) spongeDepths.add(null);
+  PImage d = spongeDepths.get(k);
+  if (d == null || d.width != p.width || d.height != p.height) {
+    d = createImage(p.width, p.height, ARGB);
+    spongeDepths.set(k, d);
+  }
+  float seed = random(1000);
+  d.loadPixels();
+  for (int i = 0; i < d.pixels.length; i++) {
+    int a = p.pixels[i] >>> 24;
+    if (a == 0) {
+      d.pixels[i] = 0;
+      continue;
+    }
+    float peaks = constrain((noise(seed + (i % d.width) * 0.3, seed + (i / d.width) * 0.3) - 0.5) * 2.6 + 0.5, 0, 1);
+    int h = (int) (255 * constrain(0.75 * peaks + random(0.25), 0, 1));
+    d.pixels[i] = a << 24 | h << 16 | h << 8 | h;
+  }
+  d.updatePixels();
 }

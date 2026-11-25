@@ -41,6 +41,7 @@ void paintKnife(PGraphics g, float cx, float cy, float len, float wid, float fol
   // the body, stopping short of the end where it breaks up
   float bodyEnd = random(0.72, 0.88);
   b.band(g, 0, bodyEnd, -1, 1, p, alpha, alpha);
+  b.shapeBody(bodyEnd, alpha);
 
   // the torn end: thin slices across the mark, each reaching a different distance past the
   // body. The reach changes smoothly from slice to slice, and now and then a slice is missing
@@ -52,6 +53,7 @@ void paintKnife(PGraphics g, float cx, float cy, float len, float wid, float fol
     if (random(1) < 0.08 * rough) continue;      // a gap where the knife skipped
     float reach = bodyEnd + tear * noise(tearSeed, k * 0.3);
     b.band(g, bodyEnd - 0.01, reach, map(k, 0, slices, -1, 1), map(k + 1, 0, slices, -1, 1), p, alpha, alpha * 0.6);
+    b.shapeSlice(bodyEnd, reach, map(k, 0, slices, -1, 1), map(k + 1, 0, slices, -1, 1), alpha);
   }
 
   // streaks of a second colour from just beside the mark, as if the knife dragged it in -
@@ -149,6 +151,46 @@ class Blade {
   // the direction the +1 / -1 edge faces, outwards
   float[] sideNormal(float sideSign) {
     return new float[] { nx * sideSign, ny * sideSign };
+  }
+
+  // the paint's thickness over the body, up to u = end (the Impasto tab): like a stroke's, with the lip
+  // highest along the knife's edge
+  void shapeBody(float end, float alpha) {
+    if (!shaping) return;
+    float[] across = { -1, -0.9, -0.7, -0.35, 0, 0.35, 0.7, 0.9, 1 };
+    int steps = max(6, samples);
+    float[] row = null;
+    for (int s = 0; s <= steps; s++) {
+      float u = end * s / steps;
+      float plus = edge(u, 1), minus = -edge(u, -1);
+      float[] next = new float[across.length * 3];
+      for (int k = 0; k < across.length; k++) {
+        float[] q = at(u, lerp(minus, plus, (across[k] + 1) / 2));
+        next[k * 3] = q[0];
+        next[k * 3 + 1] = q[1];
+        next[k * 3 + 2] = thicknessAt(u, across[k]);
+      }
+      if (row != null) shapeRows(row, next, alpha, alpha);
+      row = next;
+    }
+  }
+
+  // ... and over one slice of the torn end
+  void shapeSlice(float end, float reach, float v0, float v1, float alpha) {
+    if (!shaping) return;
+    float[] row = null;
+    for (int s = 0; s <= 1; s++) {
+      float u = s == 0 ? end : reach;
+      float plus = edge(u, 1), minus = -edge(u, -1);
+      float[] a = at(u, lerp(minus, plus, (v0 + 1) / 2)), b = at(u, lerp(minus, plus, (v1 + 1) / 2));
+      float[] next = { a[0], a[1], thicknessAt(u, v0), b[0], b[1], thicknessAt(u, v1) };
+      if (row != null) shapeRows(row, next, alpha, alpha * 0.6);
+      row = next;
+    }
+  }
+
+  float thicknessAt(float u, float v) {
+    return strokeThickness(u, v) * (v * ridgeSide > 0 ? 1 : 0.75);
   }
 
   // Fill the part of the mark from u0 to u1 and from v0 to v1 across it, where v -1 is one edge

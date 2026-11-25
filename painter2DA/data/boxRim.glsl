@@ -1,4 +1,4 @@
-// boxRim.glsl - a layer with its edges that face the light lit up (SHADOW BOX, the Layers tab).
+// boxRim.glsl - a layer with its edges that face the light lit up (the Layers tab).
 //
 // Used in place of the plain drawing of a layer onto the canvas. A pixel is on a lit edge when the
 // layer is solid there but not a little way towards the light - the edge of a sheet of cut paper

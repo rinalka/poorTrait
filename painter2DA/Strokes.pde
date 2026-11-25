@@ -56,6 +56,11 @@ void paintStroke(PGraphics g, float x, float y, float len, float wid, float foll
   // draw the ribbon. For chunk, each edge's paint comes from the same distance either side of
   // where the stroke started, so the start gets smeared along the whole stroke
   float seed = random(1000), taper = t("taper"), rough = t("ragged");
+  // its thickness (the Impasto tab): points across it at each step, with grooves the bristles leave
+  float[] across = { -1, -0.82, -0.6, -0.35, -0.1, 0.15, 0.4, 0.62, 0.82, 1 }, groove = new float[across.length];
+  for (int k = 1; k < groove.length - 1; k++) groove[k] = random(0.75, 1.15);
+  groove[0] = groove[groove.length - 1] = 1;
+  float[] row = null;
   p.begin(g);
   for (int s = 0; s <= steps; s++) {
     float t = s / (float) steps;
@@ -64,6 +69,16 @@ void paintStroke(PGraphics g, float x, float y, float len, float wid, float foll
     float wr = wid * 0.5 * shape * (1 + rough * (noise(seed + 50, s * 0.35) - 0.5));
     p.vertex(g, px[s] + sx[s] * wl, py[s] + sy[s] * wl, px[0] + sx[0] * wl, py[0] + sy[0] * wl, t, 0, p.alpha);
     p.vertex(g, px[s] - sx[s] * wr, py[s] - sy[s] * wr, px[0] - sx[0] * wr, py[0] - sy[0] * wr, t, 1, p.alpha);
+    if (!shaping) continue;
+    float[] next = new float[across.length * 3];
+    for (int k = 0; k < across.length; k++) {
+      float v = across[k], w = v < 0 ? -v * wl : -v * wr;
+      next[k * 3] = px[s] + sx[s] * w;
+      next[k * 3 + 1] = py[s] + sy[s] * w;
+      next[k * 3 + 2] = min(1, strokeThickness(t, v) * groove[k]);
+    }
+    if (row != null) shapeRows(row, next, p.alpha, p.alpha);
+    row = next;
   }
   p.end(g);
 }

@@ -19,7 +19,7 @@
 // The painting is seven see-through layers on white (the Layers tab), combined into one picture
 // every frame.
 //
-// SAVE writes the painting, each layer, the paint's height (IMPASTO),
+// SAVE writes the painting, each layer, the paint's height (impasto),
 // SETUP 5's palette (and the masses in its colours, if they're on), and a .json of every setting
 // on the panel, into a folder of its own in the saved folder: the picture's name and the next
 // free letter (PXL_1234-A, PXL_1234-B, ... after Z, AA, AB ...), each file named the same way.
@@ -124,6 +124,7 @@ void draw() {
   stepWanted = false;
 
   if (panel.setupComplete()) layersReady();     // from then on the window shows them, white to start with
+  lookForPaint();            // (for VIEW's list)
   composite();               // the layers into one picture, every frame - layer settings can change any time
   draw2D();
 
@@ -309,7 +310,9 @@ void paintFrame() {
       painted = true;
       PGraphics g = layers[L];
       float thick = t("thickness");
-      if (thick > 0) snapLayer(g);
+      boolean shapes = thick > 0 && shaped(i);      // (the Impasto tab)
+      if (shapes) startShapes();
+      else if (thick > 0) snapLayer(g);
       boolean clip = areaClipping();          // IN AREA (the Area tab)
       if (clip) areaSnapLayer(g);
       g.beginDraw();
@@ -327,7 +330,9 @@ void paintFrame() {
       g.blendMode(BLEND);
       g.endDraw();
       if (clip) areaClip(g);
-      if (thick > 0) addHeight(L, thick);
+      if (shapes) addShapes(L, thick);
+      else if (thick > 0) addHeight(L, thick);
+      if (layerEmpty[L]) layerChanged[L] = true;
     }
   }
   useTool(T_SCRAPE);

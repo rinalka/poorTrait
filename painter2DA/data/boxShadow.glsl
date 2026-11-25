@@ -1,4 +1,4 @@
-// boxShadow.glsl - the shadow one layer casts on the layers under it (SHADOW BOX, the Layers tab).
+// boxShadow.glsl - the shadow one layer casts on the layers under it (the Layers tab).
 //
 // It's drawn by putting the layer on the canvas through this shader, just before the layer itself.
 // Each pixel looks back towards the light, by `offset`, to see whether the layer is there, and

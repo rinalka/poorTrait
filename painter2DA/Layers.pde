@@ -10,13 +10,13 @@
 // layer can be made see-through and combined with the ones under it in a different way (multiply,
 // screen ...). SCRAPE takes paint off one layer, showing what's underneath.
 //
-// SHADOW BOX fakes the layers floating apart: each has a gap above the stack under it, and a
-// light from one side makes it cast a soft shadow on what's under it (further and softer with a
+// The layers can float apart, as in a shadow box: each has a gap above the stack under it, and a
+// light (the panel's LIGHT) from one side makes it cast a soft shadow on what's under it (further and softer with a
 // bigger gap) and lights up its edges that face the light, like cut paper in a shadow box. Each
-// layer has its own gap, shadow darkness, softness and lit edges, in its box. It's done here, as the layers
-// are combined.
+// layer has its own gap, shadow darkness, softness and lit edges, in its box; they start with no gap and
+// no lit edges. It's done here, as the layers are combined.
 //
-// Each layer also has a height - how thick its paint is - for IMPASTO (the Impasto tab).
+// Each layer also has a height - how thick its paint is - for its impasto (the Impasto tab).
 //
 // One technical point: on a see-through layer, the colours are stored already multiplied by how
 // solid they are ("premultiplied") - that's what OpenGL's ordinary blending produces when painting
@@ -31,7 +31,7 @@ String[] layerBlendNames = { "normal", "multiply", "screen", "add", "lightest" }
 // the stack, bottom first: which layer is in each place. VIEW's LAYERS list moves them up and
 // down; a layer keeps its paint, its settings and the tools that paint on it wherever it goes
 volatile int[] layerOrder = { LAYER_B, LAYER_A, 0, 1, 2, 3, 4 };
-// SHADOW BOX: the shaders for a layer's shadow and its lit edges (in data), and which way up the
+// the shaders for a layer's shadow and its lit edges (in data), and which way up the
 // layers' textures are when they're drawn through them
 PShader boxShadow, boxRim;
 float boxFlipY = -1;
@@ -56,7 +56,10 @@ void moveLayer(int pos, int dir) {
 
 // the layers and the combined picture, at the photo's size
 void makeLayers() {
-  for (int i = 0; i < LAYERS; i++) layers[i] = photoSized(layers[i]);
+  for (int i = 0; i < LAYERS; i++) {
+    layers[i] = photoSized(layers[i]);
+    layerChanged[i] = true;
+  }
   canvas = photoSized(canvas);
   makeHeights();
 }
@@ -73,17 +76,43 @@ void clearLayer(int i) {
   layers[i].clear();
   layers[i].endDraw();
   clearHeight(i);
+  layerEmpty[i] = true;
+  layerChanged[i] = false;
 }
 
-// combine the layers into `canvas`, bottom to top, on white. With SHADOW BOX on, each layer first
-// casts its shadow on what's under it, and is drawn with its lit edges
+// which layers have no paint on them, for VIEW's list (its boxes are white then). A layer is only
+// looked at when it might have changed - an empty one's been painted on, or paint's come off one - a
+// few times a second, one a frame, as it has to be fetched from the graphics card
+volatile boolean[] layerEmpty = { true, true, true, true, true, true, true };
+boolean[] layerChanged = new boolean[LAYERS];
+int[] layerLookedAt = new int[LAYERS];
+
+void lookForPaint() {
+  for (int i = 0; i < LAYERS; i++) {
+    if (!layerChanged[i] || layers[i] == null || frameCount - layerLookedAt[i] < 15) continue;
+    layerLookedAt[i] = frameCount;
+    layerChanged[i] = false;
+    layers[i].loadPixels();
+    boolean none = true;
+    for (int c : layers[i].pixels) {
+      if (c >>> 24 > 3) {              // (a trace of what's been scraped off doesn't count)
+        none = false;
+        break;
+      }
+    }
+    layerEmpty[i] = none;
+    return;
+  }
+}
+
+// combine the layers into `canvas`, bottom to top, on white. A layer with a gap first casts
+// its shadow on what's under it, and one with lit edges is drawn with them
 void composite() {
   if (canvas == null) return;
   if (boxShadow == null) {
     boxShadow = loadShader("boxShadow.glsl");
     boxRim = loadShader("boxRim.glsl");
   }
-  boolean box = v("boxOn") > 0.5;
   // which way the light is, in pixels with y down the picture, and how long a shadow is for each
   // pixel of gap: the lower the light, the longer
   float from = radians(v("lightFrom")), lx = cos(from), ly = -sin(from);
@@ -106,7 +135,7 @@ void composite() {
     PGraphics layer = shown[i];
     float solid = 1 - v("layerSeeThrough" + i);
     float op = 255 * solid;
-    float gap = box ? v("layerGap" + i) : 0;
+    float gap = v("layerGap" + i);
     if (gap > 0 && v("boxShadow" + i) > 0) {
       float len = gap * reach;
       boxShadow.set("offset", -lx * len, -ly * len);
@@ -121,7 +150,7 @@ void composite() {
       canvas.resetShader();
       canvas.endPGL();
     }
-    boolean rim = box && v("boxRim" + i) > 0;
+    boolean rim = v("boxRim" + i) > 0;
     if (rim) {
       boxRim.set("toLight", lx, ly);
       boxRim.set("width", 2 + gap * 0.15);
@@ -139,7 +168,7 @@ void composite() {
     if (rim) canvas.resetShader();
   }
   canvas.endDraw();
-  if (fin) finish(canvas);        // IMPASTO's light (the Impasto tab)
+  if (fin) finish(canvas);        // the light on the thick paint (the Impasto tab)
 }
 
 // OpenGL blending for drawing a premultiplied layer onto what's under it
@@ -157,6 +186,7 @@ void blendLayer(PGL pgl, int mode) {
 
 // take paint off layer g wherever `mask` is solid (as much as it's solid) - SCRAPE
 void eraseWith(PGraphics g, PImage mask) {
+  for (int i = 0; i < LAYERS; i++) if (g == layers[i]) layerChanged[i] = true;
   g.beginDraw();
   PGL pgl = g.beginPGL();
   pgl.blendEquation(PGL.FUNC_ADD);

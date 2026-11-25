@@ -49,6 +49,7 @@ float splatX, splatY;              // where the cluster lands
 float splatPickX, splatPickY;      // where its paint was picked up
 float splatReach;                  // how far out "start to end" has got to the end
 float splatDU, splatDV;            // chunk and copy: from a corner being drawn to its paint
+float splatSolid = 255;            // how solid what's being drawn is
 float splatSmearY = Float.NaN;     // a drip's paint all comes from this height: it runs down
 
 void splatter(PGraphics g) {
@@ -153,6 +154,7 @@ color splatMix(float x, float y, boolean second) {
 
 // the paint for what's drawn next, and a corner of it
 void splatInk(PGraphics g, color c, float a) {
+  splatSolid = a;
   if (splatPaint.textured()) g.tint(255, a);
   else g.fill(c, a);
 }
@@ -195,6 +197,7 @@ void drop(PGraphics g, float x, float y, float r, color c, float a) {
     splatVertex(g, rx[i], ry[i]);
     splatVertex(g, rx[j], ry[j]);
   }
+  if (shaping) shapeBlob(rx, ry, 0.3, 1, a);      // thickest round its edge (the Impasto tab)
   // a drip, more likely from a bigger drop, hanging off its lowest point
   int low = 0;
   for (int i = 1; i < pts; i++) if (ry[i] > ry[low]) low = i;
@@ -232,14 +235,19 @@ void fragment(PGraphics g, float x, float y, float r, int kind, color c, float a
     float[] py = { y - ay - by, y + ay - by, y + ay + by, y - ay + by };
     splatVertex(g, px[0], py[0]); splatVertex(g, px[1], py[1]); splatVertex(g, px[2], py[2]);
     splatVertex(g, px[0], py[0]); splatVertex(g, px[2], py[2]); splatVertex(g, px[3], py[3]);
+    if (shaping) shapeBlob(px, py, 0.3, 1, a);
     for (int k = 0; k < 4; k++) if (py[k] > lowY) { lowX = px[k]; lowY = py[k]; }
   } else {
+    float[] tx = new float[3], ty = new float[3];
     for (int k = 0; k < 3; k++) {
       float a3 = ang + TWO_PI * k / 3 + random(-0.4, 0.4), rr = max(0.8, r * random(1, 1.75));
       float px = x + cos(a3) * rr, py = y + sin(a3) * rr;
       splatVertex(g, px, py);
+      tx[k] = px;
+      ty[k] = py;
       if (py > lowY) { lowX = px; lowY = py; }
     }
+    if (shaping) shapeBlob(tx, ty, 0.3, 1, a);
   }
   maybeDrip(g, lerp(lowX, x, 0.25), lowY, r);
 }
@@ -258,6 +266,7 @@ void drip(PGraphics g, float x, float y, float r) {
   float seed = random(1000), drift = random(-0.03, 0.03);
   y -= w * 0.6;                                   // starts inside the drop, so they're joined
   float pl = 0, pr = 0, py = 0;
+  float[] row = null;
   splatSmearY = y;
   for (int s = 0; s <= steps; s++) {
     float u = s / (float) steps, yy = y + len * u;
@@ -268,12 +277,20 @@ void drip(PGraphics g, float x, float y, float r) {
       splatVertex(g, pl, py); splatVertex(g, pr, py); splatVertex(g, xx - half, yy);
       splatVertex(g, pr, py); splatVertex(g, xx + half, yy); splatVertex(g, xx - half, yy);
     }
+    // the run's thickest along its sides, and thicker all the way down
+    if (shaping) {
+      float lip = lerp(0.45, 0.9, u), mid = lerp(0.25, 0.7, u);
+      float[] next = { xx - half, yy, lip * 0.6, xx - half * 0.7, yy, lip, xx, yy, mid, xx + half * 0.7, yy, lip, xx + half, yy, lip * 0.6 };
+      if (s > 0) shapeRows(row, next, splatSolid, splatSolid);
+      row = next;
+    }
     pl = xx - half; pr = xx + half; py = yy;
     if (s == steps) {
       // the blob: a fat drop, a little longer than it's wide, hanging just below the run's end
       float br = w * random(0.65, 0.95);
       int pts = 14;
       float cy = yy + br * 0.35;
+      if (shaping) shapeDisc(xx, cy, br, pts, 1, 0.95, splatSolid);      // (the thickest of it)
       for (int i = 0; i < pts; i++) {
         float a0 = TWO_PI * i / pts, a1 = TWO_PI * (i + 1) / pts;
         splatVertex(g, xx, cy);
@@ -287,6 +304,7 @@ void drip(PGraphics g, float x, float y, float r) {
 
 // a small round dot, as triangles
 void disc(PGraphics g, float x, float y, float r, int pts) {
+  if (shaping) shapeDisc(x, y, r, pts, r < 6 ? 0.8 : 0.3, 0.9, splatSolid);   // (specks are just beads)
   for (int i = 0; i < pts; i++) {
     float a0 = TWO_PI * i / pts, a1 = TWO_PI * (i + 1) / pts;
     splatVertex(g, x, y);
@@ -317,6 +335,8 @@ void trail(PGraphics g, float x, float y, float ang, float len, float w, color c
     if (s > 0) {
       splatVertex(g, pax, pay); splatVertex(g, pbx, pby); splatVertex(g, ax, ay);
       splatVertex(g, pbx, pby); splatVertex(g, bx, by); splatVertex(g, ax, ay);
+      if (shaping) shapeRows(new float[] { pax, pay, 0.7, (pax + pbx) / 2, (pay + pby) / 2, 0.35, pbx, pby, 0.7 },
+        new float[] { ax, ay, 0.7, (ax + bx) / 2, (ay + by) / 2, 0.35, bx, by, 0.7 }, a, a);
     }
     pax = ax; pay = ay; pbx = bx; pby = by;
   }

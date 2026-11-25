@@ -1,5 +1,5 @@
 // heightAdd.glsl - the paint a tool has just put on a layer, added to that layer's height
-// (IMPASTO, the Impasto tab).
+// (the Impasto tab).
 //
 // Drawn over the layer's height with the layer as it is now as `texture` and as it was before the
 // tool painted as `prev`. Wherever they differ, paint went on: the height there is squashed a
