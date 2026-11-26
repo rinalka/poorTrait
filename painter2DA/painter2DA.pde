@@ -206,7 +206,6 @@ void handle(String c) {
   else if (c.equals("load")) selectInput("Choose a settings file (.json)", "settingsChosen", new java.io.File(sketchPath("saved") + "/x.json"));
   else if (c.startsWith("clearPicks")) clearPicks(int(c.substring(11)));
   else if (c.equals("copyMap")) copyNow();
-  else if (c.equals("test1Draw")) test1Now();
   else if (c.equals("field")) buildField(normalImg, (int) v("smoothing"));
   else if (c.equals("eraseArea")) eraseArea();
   else if (c.equals("layMasses")) layMasses(v("layOpacity"));
@@ -403,6 +402,7 @@ PImage currentView() {
 void draw2D() {
   background(255);              // (under "mesh (lines)", which is only lines)
   image(currentView(), 0, 0, width, height);
+  if (zoneShowing()) drawZone();      // APPLY open with the zone in it: the zone instead (the Zone tab)
   drawPatchPicks();
   if (v("fieldOverlay") > 0.5) {
     // the field of the tool chosen in column 2 (around, across or along the outline)

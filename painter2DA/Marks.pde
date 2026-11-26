@@ -17,11 +17,10 @@ void restartGrid() {
 // The tools (the panel's column 2), in the order they paint. Each has its own settings - its
 // shape in its box, and its MOVEMENT, COLOUR and APPLY - named with the tool's name in front:
 // "knife_size", "splat_drops" ... `tool` is the one painting now, and t("size") reads its setting.
-String[] TOOLS = { "brush", "knife", "splat", "line", "pencil", "flow", "outline", "sponge", "scrape", "copy", "test1" };
-String[] toolTitles = { "BRUSH", "PALETTE KNIFE", "SPLATTER", "LINES", "PENCIL", "FLOW", "OUTLINE", "SPONGE", "SCRAPE", "COPY", "TEST1" };
+String[] TOOLS = { "brush", "knife", "splat", "line", "pencil", "flow", "outline", "sponge", "scrape", "copy" };
+String[] toolTitles = { "BRUSH", "PALETTE KNIFE", "SPLATTER", "LINES", "PENCIL", "FLOW", "OUTLINE", "SPONGE", "SCRAPE", "COPY" };
 // the first PAINT_TOOLS of them put paint on. SCRAPE takes it off, and COPY (first on the panel) isn't
-// a mark maker at all: it lays a map on a layer when its button's pressed (the Copy tab). TEST1, the
-// last, draws hatching and a line all at once when its button's pressed too (the Test1 tab)
+// a mark maker at all: it lays a map on a layer when its button's pressed (the Copy tab)
 final int PAINT_TOOLS = 8, T_SCRAPE = 8, T_COPY = 9;
 String tool = "brush";
 
@@ -113,6 +112,7 @@ float[] startPointAnywhere() {
     int i = (int) random(outlineX.length);
     return new float[] { constrain(outlineX[i], 0, photo.width - 1), constrain(outlineY[i], 0, photo.height - 1) };
   }
+  if (mode == 8) return zoneStart();      // in the zone (the Zone tab)
   if (mode >= 5 && mode <= 7) {
     // a mesh corner, the middle of a mesh triangle, or the middle of a mass: any one of them as
     // likely as any other, so marks crowd where the shapes are small (where there's detail)

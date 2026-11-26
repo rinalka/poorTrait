@@ -8,6 +8,7 @@
 //   Tris           the same, with the mesh's triangles (SETUP 4)
 //   Objects        ... with what the map maker's object finder found
 //   Face Parts     ... with the parts of the face (and the hair, the clothes ...) - the Picks tab
+//   Zone           the zone: where two maps' levels are in the ranges set in APPLY (the Zone tab), or everywhere else
 //   Tri Centers    (SPLATTER only) anywhere, but every drop in the middle of one of the mesh's triangles
 //   Vertices       (SPLATTER only) ... or on one of its corners. Nothing to choose, as All (Splatter tab)
 // The colours are SETUP 5's, chosen in the strip - click to turn each on or off - or with PICK ON
@@ -25,9 +26,9 @@
 //     same way.
 
 // IN AREA's choices, and what each is. -1: not chosen yet
-String[] inAreaNames = { "All", "Masses Color", "Mesh Color", "Masses", "Tris", "Objects", "Face Parts", "Tri Centers", "Vertices" };
-final int AREA_ALL = 0, AREA_MASS_COLOUR = 1, AREA_MESH_COLOUR = 2, AREA_MASSES = 3, AREA_TRIS = 4, AREA_OBJECTS = 5, AREA_PARTS = 6;
-final int AREA_TRI_CENTERS = 7, AREA_VERTICES = 8;       // (SPLATTER's own: where each drop goes, not a part of the picture)
+String[] inAreaNames = { "All", "Masses Color", "Mesh Color", "Masses", "Tris", "Objects", "Face Parts", "Zone", "Tri Centers", "Vertices" };
+final int AREA_ALL = 0, AREA_MASS_COLOUR = 1, AREA_MESH_COLOUR = 2, AREA_MASSES = 3, AREA_TRIS = 4, AREA_OBJECTS = 5, AREA_PARTS = 6, AREA_ZONE = 7;
+final int AREA_TRI_CENTERS = 8, AREA_VERTICES = 9;       // (SPLATTER's own: where each drop goes, not a part of the picture)
 
 // whether IN AREA's choice a is a part of the picture
 boolean areaIsPart(int a) {
@@ -42,7 +43,7 @@ boolean areaChosen(String n) {
     for (boolean b : panel.areaPick) if (b) return true;
     return false;
   }
-  return a == AREA_ALL || a >= AREA_TRI_CENTERS;
+  return a == AREA_ALL || a == AREA_ZONE || a >= AREA_TRI_CENTERS;
 }
 
 // where the tool now in use may paint: 0 anywhere, 1 only in the area, 2 only outside it
@@ -83,7 +84,17 @@ boolean makeArea() {
   boolean[] picks;
   int w = 0, h = 0;
   int k = patchKind(kind);
-  if (k >= 0) {
+  if (kind == AREA_ZONE) {
+    picks = new boolean[] { false, true };
+    if (!zoneReady()) why = "the zone isn't ready";
+    else {
+      of = new int[zoneOn.length];
+      for (int i = 0; i < of.length; i++) of[i] = zoneOn[i] ? 1 : 0;
+      w = photo.width;
+      h = photo.height;
+      key = zoneFor;
+    }
+  } else if (k >= 0) {
     Patches p = patches[k];
     picks = patchPicked[k];
     if (p == null) why = patchLine(k);
