@@ -78,7 +78,7 @@ public class Panel extends PApplet {
   final int VIEW_TOP = 28;                        // how far down that row its lists start
   // the tools' boxes, in the order of TOOLS: the brushes, sponge and splatter purples, the lines blues, and
   // SCRAPE and COPY alike
-  int[] TOOL_COLOURS = { 0xFFD8C8EE, 0xFFCCB9E7, 0xFFB29AD6, 0xFFC3D8F0, 0xFFB3CDEA, 0xFFA5C2E2, 0xFF91B3D8, 0xFFC1ABE0, 0xFFCFABA2, 0xFFCFABA2 };
+  int[] TOOL_COLOURS = { 0xFFD8C8EE, 0xFFCCB9E7, 0xFFB29AD6, 0xFFC3D8F0, 0xFFB3CDEA, 0xFFA5C2E2, 0xFF91B3D8, 0xFFC1ABE0, 0xFFCFABA2, 0xFFCFABA2, 0xFFBAC6D2 };
   int viewBase = 0xFFDCE6F2, mapsBlue = 0xFF9FC1E8, layersBlue = 0xFFC3DAF3;   // VIEW, and its two columns
   int[] layerSection = new int[LAYERS];         // each layer's box
   // their colours: reds, LAYER 1 the lightest to LAYER B the darkest
@@ -107,6 +107,7 @@ public class Panel extends PApplet {
   int boxRed = 0xFFD9B8B4, boxGreen = 0xFFBBD3B6;   // a setup box's block: not done, done
   Textlabel boxTitle, massTitle, sourceText, massText, meshText;
   Textlabel copyText;                 // COPY: what it did last
+  Textlabel test1Text;                // TEST1: what it did last
   volatile boolean sourceDone, massesDone;
   volatile boolean massesOpen = false;
   float showBefore;                   // put back when the masses box closes
@@ -654,6 +655,31 @@ public class Panel extends PApplet {
     toolSlider("blendOver", "blend  (0: at once)", 0, 1, 1);
     onlyWhen("on outline&along outline");
 
+    // TEST1 (the Test1 tab): cross hatching matching the depth map's shading, then the light map's
+    // darkest parts as one black line on top. (Its DRAW button is in MOVEMENT)
+    toolBox(T_TEST1, false);
+    toolSlider("sets", "sets of hatching  (crossing)", 1, 6, 4).setDecimalPrecision(0);
+    toolSlider("spacing", "spacing  (pixels)", 3, 30, 7);
+    toolSlider("length", "longest hatch  (pixels)", 10, TEST1_LONGEST, 50).setDecimalPrecision(0);
+    toolSlider("tone", "tone  (higher: darker)", 0.3, 3, 1);
+    toolSlider("turn", "direction changes", 0, 1, 0.4);
+    toolSlider("thin", "thinnest", 0.2, 4, 0.5);
+    toolSlider("thick", "thickest", 0.3, 8, 2.2);
+    row(24);
+    toggle("test1_invert", "hatch the near parts  (depth inverted)", false, 0);
+    onlyWhen("on test1");
+    colourPicker("test1_ink", "hatching colour", color(30, 26, 24));
+    onlyWhen("on test1");
+    row(24);
+    toggle("test1_lineOn", "the black line", true, 0);
+    toggle("test1_lift", "lift it between parts", false, 150);
+    onlyWhen("on test1");
+    toolSlider("darkest", "darkest  (% of light map)", 0.5, 15, 4);
+    toolSlider("lineWidth", "line width", 0.5, 8, 2.5);
+    row(24);
+    toggle("test1_clear", "clear the layer first  (in the area)", true, 0);
+    onlyWhen("on test1");
+
     // AUTOMATION (the Automation tab), along the bottom of column 3, above RUN (if MOVEMENT and COLOUR don't
     // leave room for its sliders, they're folded away: see layout()): the chosen tool's size (or length) moved
     // up and down by a sine wave while it paints, between its shortest and longest. Each tool has
@@ -865,6 +891,11 @@ public class Panel extends PApplet {
     eraseText = cp5.addTextlabel("eraseText").setText("").setColorValue(dark);
     put(eraseText, 82, 6);
     onlyWhen("on scrape&erase");
+    row(34);
+    button("test1Draw", "DRAW", 0, 76);
+    test1Text = cp5.addTextlabel("test1Text").setText("").setColorValue(dark);
+    put(test1Text, 82, 6);
+    onlyWhen("on test1");
     // ... and, with an area, how wide the fade at its border is, and which side of it
     for (String n : new String[] { "copy", "scrape" }) {
       String when = n.equals("copy") ? "on copy&areaUsed" : "on scrape&erase&areaUsed";
@@ -1181,6 +1212,7 @@ public class Panel extends PApplet {
     buttonColour(stepButton, color(60), color(70, 130, 200), !(isRunning && isPaused) || mapShown);
     paceSlider.getValueLabel().setText(paceText(paceRate(value("pace"))));
     copyText.setText(copyStatus);
+    test1Text.setText(test1Status);
     eraseText.setText(eraseStatus);
     for (String n : new String[] { "copy", "scrape" }) {
       int p = round(value(n + "_edgeFade"));
@@ -1267,6 +1299,7 @@ public class Panel extends PApplet {
     }
     String state = isRunning ? (isPaused ? (value("showWhat") > 0 ? "paused  (showing a map)" : "paused") : "painting") : runWaiting ? "waiting for the masses" : "stopped";
     if (isRunning && !isPaused && value("copy_on") > 0.5) state += " nothing - COPY, in MOVEMENT, does it";
+    else if (isRunning && !isPaused && value("test1_on") > 0.5) state += " nothing - DRAW, in MOVEMENT, does it";
     else if (value("scrape_on") > 0.5 && isRunning && !isPaused && erasing()) state += " nothing - ERASE, in MOVEMENT, does it";
     else if (anyOn && isRunning && !isPaused && !applyDone()) state += " nothing - " + (!layerPicked() ? "pick a layer" : areaUsed() ? areaChoose() : "pick an area")
       + " in APPLY";
@@ -1393,7 +1426,7 @@ public class Panel extends PApplet {
 
   // whether the chosen tool puts paint on (so has COLOUR, and all of ON LAYER)
   boolean hasColour() {
-    return !editing.equals("copy") && !editing.equals("scrape");
+    return !editing.equals("copy") && !editing.equals("scrape") && !editing.equals("test1");
   }
 
   boolean areaPicked() {
@@ -2138,6 +2171,7 @@ public class Panel extends PApplet {
     else if (n.equals("smoothing")) command("field");
     else if (n.equals("showWhat")) command("show");
     else if (n.equals("copyMap")) command("copyMap");
+    else if (n.equals("test1Draw")) command("test1Draw");
     else if (n.equals("layMasses")) command("layMasses");
     else if (n.equals("massSeed")) command("massSeed");
     else if (n.startsWith("clearLayer")) command(n);
@@ -2183,7 +2217,7 @@ public class Panel extends PApplet {
     if (when.equals("autoOn")) return value(editing + "_autoOn") > 0.5 && !erasing();
     if (when.equals("erase")) return erasing();
     if (when.equals("notErase")) return !erasing();
-    if (when.equals("makesMarks")) return !erasing() && !editing.equals("copy");
+    if (when.equals("makesMarks")) return !erasing() && !editing.equals("copy") && !editing.equals("test1");
     if (when.equals("copyGrey")) return greyMap((int) value("copyWhat") + VIEW_PHOTO);
     if (when.equals("copyTint")) return value("copyTint") > 0.5;
     if (when.startsWith("boxShown ")) return openSetup < 0 || Integer.parseInt(when.substring(9)) <= openSetup;
