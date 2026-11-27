@@ -11,18 +11,18 @@
 //                                 takes paint off one, then what does the drawing: brush, palette
 //                                 knife, sponge, splatter (purples), lines, pencil, flow, outline
 //                                 (blues) - one at a time, with its shape settings. At the bottom,
-//                                 above RUN and coloured like VIEW: RECOLOUR, changing the painting's
-//                                 colours a few at a time (a layer's, or the palette's on the masses
-//                                 or the mesh)
+//                                 above RUN and coloured like VIEW: LIGHT, each layer's light (its
+//                                 shadow and lit edges) and the thick paint's; and RECOLOUR, changing
+//                                 the painting's colours a few at a time (a layer's, or the palette's
+//                                 on the masses or the mesh)
 //   APPLY, MOVEMENT, COLOUR       two steps to be done first - ON LAYER, which layer the chosen tool
 //                                 paints on and how solid it is, and IN AREA, where on it - then
-//                                 how it moves, and where its colour comes from. At the bottom:
-//                                 AUTOMATION, its size or length moved up and down by a wave (the
-//                                 Automation tab)
-//   LAYER 1 - 5, A, B,            a box for each layer, the layers floating apart, lit from one
-//   LIGHT                         side, and thick paint catching the same light (at the bottom)
-// and along the bottom, VIEW (MAPS, and LAYERS with the outline and the direction field under it)
-// under column 1, and RUN, one strip under columns 2 - 4, at the very bottom.
+//                                 how it moves, and where its colour comes from
+//   LAYER 1 - 5, A, B             a box for each layer, the layers floating apart, each lit from
+//                                 one side by its own light (in LIGHT)
+// and along the bottom, AUTOMATION (the painting speed, the chosen tool's size or length moved up and
+// down by a wave - the Automation tab - and NUDGE) and under it VIEW (MAPS, and LAYERS with the outline
+// and the direction field under it) under column 1, and RUN at the very bottom of column 2.
 //
 // VIEW's MAPS starts with PAINTING, with a box like the tools': green while the painting shows, red
 // while a map does. While it's red nothing runs, and the rest of the panel is greyed out and locked
@@ -100,7 +100,7 @@ public class Panel extends PApplet {
   boolean gated = false;              // the rest of the panel is greyed out (not every box done yet, or a map showing)
   HashMap<String, Button> buttons = new HashMap<String, Button>();
   // ... but for these, which work (and show) all the same
-  String[] alwaysButtons = { "saveNow", "loadSettings", "printView" };
+  String[] alwaysButtons = { "saveNow", "loadSettings" };
   java.util.HashSet<String> setupGroup = new java.util.HashSet<String>();
   int viewSection, autoSection, recolourSection, lightSection;      // (all coloured like VIEW)
   float shownFor = -1;                // the view an open box switched to
@@ -182,7 +182,7 @@ public class Panel extends PApplet {
   volatile float[] meshPaletteUse = new float[0];   // ... and of the mesh in palette colours
   final int STRIP_COLS = 12, STRIP_H = 22;
   int colW = 340;            // width of a column
-  int runSection = -1;       // RUN's strip, three columns wide
+  int runSection = -1;       // RUN's box, at the bottom of column 2
   int sections = 0;          // SETUP, RUN, VIEW ... each gets a block of colour behind it
   int[] blockColour = new int[0];
   float[][] block = new float[0][];   // each section's x, top, bottom as laid out, or null if hidden
@@ -203,6 +203,7 @@ public class Panel extends PApplet {
   boolean applyPressed = false;       // its title has been pressed (it opens or closes on letting go)
   volatile boolean layerClicked = false;   // a layer or an area's been clicked: APPLY may close on letting go
   Row autoWave;              // the row AUTOMATION's wave is drawn in
+  int viewColumn;            // the column along the bottom of column 1: AUTOMATION, then VIEW
 
   // one row of controls, and when it's shown (see shown())
   class Row {
@@ -387,7 +388,51 @@ public class Panel extends PApplet {
     // VIEW, under column 1 at the very bottom (hidden while a SETUP box is open over it): two
     // columns, each its own blue (drawn in draw()) - MAPS (the painting, or a map in place of it)
     // and LAYERS (which parts of the painting show, and the outline and the direction field)
-    bottomColumn(0, -1);
+    viewColumn = bottomColumn(0, -1);
+    inView = true;                       // (AUTOMATION isn't greyed out either)
+    // AUTOMATION (the Automation tab), above VIEW in column 1 (if the setup boxes don't leave room for
+    // its sliders, they're folded away: see layout()). At the top the painting speed (how fast it
+    // paints - the window and the panel keep going at full speed). Then the chosen tool's size (or
+    // length) moved up and down by a sine wave while it paints, between its shortest and longest -
+    // each tool has its own; only the chosen one's shows, with an on / off box like the tools' (red
+    // off, green on). Last NUDGE, which moves every slider that can change while running a random bit
+    header("AUTOMATION");
+    autoSection = sections - 1;
+    paceSlider = slider("pace", "painting speed", 0, 1, 1);
+    for (int i = 0; i <= T_SCRAPE; i++) {
+      String n = TOOLS[i];
+      String what = AUTO_TARGET[i].equals("length") ? "length" : AUTO_TARGET[i].equals("width") ? "width" : "size";
+      String lo = what.equals("length") ? "shortest" : what.equals("width") ? "thinnest" : "smallest";
+      String hi = what.equals("length") ? "longest" : what.equals("width") ? "thickest" : "largest";
+      row(31);
+      Toggle on = cp5.addToggle(n + "_autoOn").setSize(20, 20).setValue(false);
+      on.setColorBackground(toolOff).setColorForeground(toolOffHover).setColorActive(toolOn);
+      on.setCaptionLabel(toolTitles[i].toLowerCase() + "  (" + what + " follows a wave)");
+      on.getCaptionLabel().align(ControlP5.RIGHT_OUTSIDE, ControlP5.CENTER).setPaddingX(8);
+      register(n + "_autoOn", on);
+      put(on, 0, 6);
+      onlyWhen("edit " + n + "&notErase");
+      Slider a = slider(n + "_autoMin", lo, AUTO_LIMITS[i][0], AUTO_LIMITS[i][1], AUTO_DEFAULT[i][0]);
+      onlyWhen("edit " + n + "&autoOn");
+      Slider b = slider(n + "_autoMax", hi, AUTO_LIMITS[i][0], AUTO_LIMITS[i][1], AUTO_DEFAULT[i][1]);
+      onlyWhen("edit " + n + "&autoOn");
+      if (!what.equals("width")) {
+        a.setDecimalPrecision(0);
+        b.setDecimalPrecision(0);
+      }
+      slider(n + "_autoSpeed", "speed  (waves a second)", 0.01, 3, 0.25);
+      onlyWhen("edit " + n + "&autoOn");
+    }
+    // the wave, with where it is now (drawn in drawAutoWave())
+    row(30);
+    autoWave = cur;
+    for (Row ar : columns.get(columns.size() - 1)) ar.autoSetting = ar.when.endsWith("autoOn");
+    onlyWhen("autoOn");
+    row(32);
+    button("nudge", "NUDGE", 0, 66);
+    sliderAt("nudgeAmount", "how far", 0, 1, 0.2, 76, 5, 100);
+    row(6);
+
     header("VIEW");
     viewSection = sections - 1;
     inView = true;
@@ -441,28 +486,23 @@ public class Panel extends PApplet {
     inView = false;
     for (Row vr : columns.get(columns.size() - 1)) vr.when = vr.when.equals("") ? "noSetupOpen" : vr.when + "&noSetupOpen";
 
-    // RUN: one strip along the very bottom, under columns 2 - 4, so no box above can grow over it.
-    // The painting speed slider is how fast it paints (the window and the panel keep going at
-    // full speed), and while paused, STEP paints one step at a time. PRINT saves what the output
-    // window shows now, at the photo's size
+    // RUN: at the very bottom of column 2, so no box above can grow over it. Two rows: RUN (STOP while
+    // it runs) and PAUSE (CARRY ON while paused); then STEP, which paints one step at a time while
+    // paused, SAVE and LOAD SETTINGS. (The painting speed is at the top of AUTOMATION.)
     bottomColumn(1, -1);
     sections++;
     runSection = sections - 1;
-    row(44);
+    row(34);
     Textlabel runTitle = cp5.addTextlabel("header RUN").setText("RUN").setColorValue(color(20));
-    put(runTitle, -4, 17);
+    put(runTitle, -4, 14);
     runButton = button("runStop", "RUN", 40, 76);
     pauseButton = button("pauseRun", "PAUSE", 122, 90);
-    button("clearCanvas", "CLEAR", 218, 66);
-    stepButton = button("stepRun", "STEP", 290, 60);
-    paceSlider = sliderAt("pace", "speed", 0, 1, 1, 358, 0, 100);
-    button("saveNow", "SAVE", 506, 66);
-    button("loadSettings", "LOAD SETTINGS", 578, 124);
-    button("nudge", "NUDGE", 708, 66);
-    sliderAt("nudgeAmount", "how far", 0, 1, 0.2, 780, 0, 70);
-    button("printView", "PRINT", 906, 66);
-    // all in the middle of the strip, top to bottom
-    for (int k = 1; k < cur.items.size(); k++) cur.dy.set(k, cur.items.get(k) instanceof Slider ? 14 : 9);
+    for (int k = 1; k < cur.items.size(); k++) cur.dy.set(k, 6);
+    row(34);
+    stepButton = button("stepRun", "STEP", 40, 60);
+    button("saveNow", "SAVE", 106, 66);
+    button("loadSettings", "LOAD SETTINGS", 178, 124);
+    for (int k = 0; k < cur.items.size(); k++) cur.dy.set(k, 2);
 
     // ---------------------------------------------------- column 2: the tools
     // Each tool's box: switched on or off (only one at a time), and - while it's on - its shape
@@ -664,53 +704,50 @@ public class Panel extends PApplet {
     toolSlider("blendOver", "blend  (0: at once)", 0, 1, 1);
     onlyWhen("on outline&along outline");
 
-    // AUTOMATION (the Automation tab), along the bottom of column 3, above RUN (if MOVEMENT and COLOUR don't
-    // leave room for its sliders, they're folded away: see layout()): the chosen tool's size (or length) moved
-    // up and down by a sine wave while it paints, between its shortest and longest. Each tool has
-    // its own; only the chosen one's shows. Its title line has an on / off box like the tools'
-    // (red off, green on); while it's off the box is just that line
-    bottomColumn(2, -1);
-    colBottom.set(colBottom.size() - 1, 2);
-    sections++;
-    autoSection = sections - 1;
-    for (int i = 0; i <= T_SCRAPE; i++) {
-      String n = TOOLS[i];
-      String what = AUTO_TARGET[i].equals("length") ? "length" : AUTO_TARGET[i].equals("width") ? "width" : "size";
-      String lo = what.equals("length") ? "shortest" : what.equals("width") ? "thinnest" : "smallest";
-      String hi = what.equals("length") ? "longest" : what.equals("width") ? "thickest" : "largest";
-      row(31);
-      Toggle on = cp5.addToggle(n + "_autoOn").setSize(20, 20).setValue(false);
-      on.setColorBackground(toolOff).setColorForeground(toolOffHover).setColorActive(toolOn);
-      on.setCaptionLabel("AUTOMATION  -  " + toolTitles[i].toLowerCase() + "  (" + what + " follows a wave)");
-      on.getCaptionLabel().align(ControlP5.RIGHT_OUTSIDE, ControlP5.CENTER).setPaddingX(8);
-      register(n + "_autoOn", on);
-      put(on, 0, 6);
-      onlyWhen("edit " + n + "&notErase");
-      Slider a = slider(n + "_autoMin", lo, AUTO_LIMITS[i][0], AUTO_LIMITS[i][1], AUTO_DEFAULT[i][0]);
-      onlyWhen("edit " + n + "&autoOn");
-      Slider b = slider(n + "_autoMax", hi, AUTO_LIMITS[i][0], AUTO_LIMITS[i][1], AUTO_DEFAULT[i][1]);
-      onlyWhen("edit " + n + "&autoOn");
-      if (!what.equals("width")) {
-        a.setDecimalPrecision(0);
-        b.setDecimalPrecision(0);
-      }
-      slider(n + "_autoSpeed", "speed  (waves a second)", 0.01, 3, 0.25);
-      onlyWhen("edit " + n + "&autoOn");
-    }
-    // the wave, with where it is now (drawn in drawAutoWave())
-    row(30);
-    autoWave = cur;
-    for (Row ar : columns.get(columns.size() - 1)) ar.autoSetting = ar.when.endsWith("autoOn");
-    onlyWhen("autoOn");
-    row(4);
-    onlyWhen("makesMarks");
-
     // RECOLOUR (the Recolour tab), along the bottom of column 2, above RUN (if a tool's settings don't leave
     // room for it, they're folded away meanwhile: see layout()): one layer at a time - READ COLOURS divides its
     // paint into 40 colours; click swatches to choose them, and the sliders change those. Its title
     // line has a box like the tools' (red shut, green open)
     bottomColumn(1, -1);
     colBottom.set(colBottom.size() - 1, 2);
+    // LIGHT, above RECOLOUR (in the same column along the bottom of column 2). Each layer has a light of
+    // its own: where it's from and how high, which casts that layer's shadow and lights its edges (the
+    // Layers tab's composite), and the shadow's colour - the layer buttons choose whose show. The thick
+    // paint has one light for all of it, as its heights are combined first (the Impasto tab - how thick
+    // each tool's paint is is in its APPLY). Its title line has a box like RECOLOUR's (red shut, green open)
+    sections++;
+    lightSection = sections - 1;
+    row(31);
+    Toggle lo = cp5.addToggle("lightOpen").setSize(20, 20).setValue(false);
+    lo.setColorBackground(toolOff).setColorForeground(toolOffHover).setColorActive(toolOn);
+    lo.setCaptionLabel("LIGHT");
+    lo.getCaptionLabel().align(ControlP5.RIGHT_OUTSIDE, ControlP5.CENTER).setPaddingX(8);
+    register("lightOpen", lo);
+    put(lo, 0, 6);
+    row(26);
+    label("layer", 0);
+    radioAt("lightLayer", LAYER_NAMES, 0, 60, 36);
+    onlyWhen("light");
+    for (int i = 0; i < LAYERS; i++) {
+      slider("lightFrom" + i, "from  (90 = above)", 0, 360, 135).setDecimalPrecision(0);
+      onlyWhen("light&lightLayer " + i);
+      slider("lightHeight" + i, "height", 10, 80, 35).setDecimalPrecision(0);
+      onlyWhen("light&lightLayer " + i);
+      colourPicker("shadowColour" + i, "its shadow's colour", color(0));
+      onlyWhen("light&lightLayer " + i);
+    }
+    row(20);
+    label("THICK PAINT  (all the layers)", 0);
+    onlyWhen("light");
+    slider("lightFrom", "from  (90 = above)", 0, 360, 135).setDecimalPrecision(0);
+    onlyWhen("light");
+    slider("lightHeight", "height", 10, 80, 35).setDecimalPrecision(0);
+    onlyWhen("light");
+    slider("lightShine", "shine", 0, 1, 0.3);
+    onlyWhen("light");
+    row(6);
+    onlyWhen("light");
+
     sections++;
     recolourSection = sections - 1;
     row(31);
@@ -845,6 +882,10 @@ public class Panel extends PApplet {
       slider(z + "Clear", "transparency", 0, 1, k == 0 ? 0 : 0.4);
       onlyWhen("applyOpen&zoneShown");
     }
+    // expand: the levels left in the zone spread over 1 .. 24, gaps and all (COLOUR's carry "expand" uses them)
+    row(24);
+    toggle("zoneExpand", "expand  (the levels left, spread over 1 .. 24)", false, 0);
+    onlyWhen("applyOpen&zoneShown");
     row(22);
     zoneText = cp5.addTextlabel("zoneText").setText("").setColorValue(dark);
     put(zoneText, -4, 2);
@@ -979,7 +1020,7 @@ public class Panel extends PApplet {
         row(20);
         label("carry", 0);
         onlyWhen("edit " + n);
-        radio(n + "_carry", new String[] { "one colour", "start to end", "two colours", "chunk", "copy" }, 3, n.equals("splat") ? 0 : 1);
+        radio(n + "_carry", new String[] { "one colour", "start to end", "two colours", "chunk", "copy", "expChunk  (zone)", "expTwo  (zone)" }, 3, n.equals("splat") ? 0 : 1);
         onlyWhen("edit " + n);
       }
       if (n.equals("splat")) {
@@ -1032,7 +1073,7 @@ public class Panel extends PApplet {
     // it floats above them (its gap - 0 is not at all), its shadow, softness and lit edges; and how
     // much its thick paint catches the light (impasto). (Whether each shows is in VIEW's LAYERS list;
     // which layer each tool paints on is in its APPLY)
-    // (the boxes are kept tight so the column ends above RUN's strip)
+    // (the boxes are kept tight so the column fits the window)
     for (int i = 0; i < LAYERS; i++) {
       layerSection[i] = layerHeader("LAYER " + LAYER_NAMES[i]);
       button("clearLayer" + i, "CLEAR", 240, 64).setHeight(18);
@@ -1048,18 +1089,6 @@ public class Panel extends PApplet {
       slider("layerImpasto" + i, "impasto", 0, 1, 0.5);
       row(2);
     }
-
-    // the one light: it casts the layers' shadows and lights their edges (the Layers tab's composite),
-    // and rakes across the thick paint (the Impasto tab - how thick each tool's paint is is in its APPLY)
-    // at the bottom of the column, above RUN
-    bottomColumn(3, -1);
-    colBottom.set(colBottom.size() - 1, 2);
-    header("LIGHT");
-    lightSection = sections - 1;
-    slider("lightFrom", "from  (90 = above)", 0, 360, 135).setDecimalPrecision(0);
-    slider("lightHeight", "height", 10, 80, 35).setDecimalPrecision(0);
-    slider("lightShine", "shine on thick paint", 0, 1, 0.3);
-    row(4);
 
     // the lists open downwards over the controls under them, so draw them last - the higher
     // ones last of all, so an open list is never hidden behind the one below it
@@ -1130,7 +1159,7 @@ public class Panel extends PApplet {
       if (block[i] == null) continue;
       int k = java.util.Arrays.asList(boxSecsList(boxSecs)).indexOf(i);
       fill(k >= 0 ? (setupDone[k] ? boxGreen : boxRed) : blockColour[i]);
-      rect(block[i][0] - 8, block[i][1], (i == runSection ? 3 * colW : colW) - 12, block[i][2] - block[i][1], 8);
+      rect(block[i][0] - 8, block[i][1], colW - 12, block[i][2] - block[i][1], 8);
     }
     drawBands();
     // what's in AUTOMATION, RECOLOUR and LIGHT, on one of VIEW's blues
@@ -1292,7 +1321,7 @@ public class Panel extends PApplet {
     if (!anyOn) {
       fill(128, 124);
       noStroke();
-      rect(16 + 2 * colW - 12, 0, colW, runTop());
+      rect(16 + 2 * colW - 12, 0, colW, height - 28);
     }
 
     // the status line along the bottom
@@ -2148,9 +2177,7 @@ public class Panel extends PApplet {
     if (n.equals("runStop")) command(isRunning || runWaiting ? "stop" : "run");
     else if (n.equals("pauseRun")) command("pause");
     else if (n.equals("stepRun")) command("step");
-    else if (n.equals("clearCanvas")) command("clear");
     else if (n.equals("saveNow")) command("save");
-    else if (n.equals("printView")) command("print");
     else if (n.equals("scrapeEraseNow")) command("eraseArea");
     else if (n.equals("areaPickMasses")) {
       if (picking == PICK_AREA) areaDone();
@@ -2224,6 +2251,8 @@ public class Panel extends PApplet {
     if (when.equals("hasColour")) return hasColour();
     if (when.startsWith("one ")) return value(when.substring(4) + "_one") > 0.5;
     if (when.equals("recolour")) return value("recolourOpen") > 0.5;
+    if (when.equals("light")) return value("lightOpen") > 0.5;
+    if (when.startsWith("lightLayer ")) return round(value("lightLayer")) == Integer.parseInt(when.substring(11));
     if (when.equals("recolourLayers")) return recolourKind == 0;
     if (when.equals("recolourPal")) return recolourKind > 0 && value("recolourOpen") > 0.5;
     if (when.equals("autoOn")) return value(editing + "_autoOn") > 0.5 && !erasing();
@@ -2246,10 +2275,10 @@ public class Panel extends PApplet {
     if (when.equals("pencilSteers")) return value("pencil_kind") < 2;
     if (when.equals("pencilFlow")) return value("pencil_kind") == 1;
     if (when.equals("pencilHatch")) return value("pencil_hatch") > 0;
-    if (when.equals("knifeFlat")) return value("knife_carry") < CHUNK;   // chunk and copy have no streaks
+    if (when.equals("knifeFlat")) return !carryTextured((int) value("knife_carry"));   // chunk and copy have no streaks
     if (when.equals("splatSites")) return value("splat_inArea") >= AREA_TRI_CENTERS;
     if (when.equals("splatFree")) return value("splat_inArea") < AREA_TRI_CENTERS;
-    if (when.equals("splatFlat")) return value("splat_carry") < CHUNK;   // (nor colours to vary)
+    if (when.equals("splatFlat")) return !carryTextured((int) value("splat_carry"));   // (nor colours to vary)
     if (when.startsWith("along ")) return value(when.substring(6) + "_along") > 0.5;
     if (when.startsWith("mix ")) return value(when.substring(4) + "_pickup") == 2;
     if (when.startsWith("palette ")) return value(when.substring(8) + "_pickup") == PICK_PALETTE;
@@ -2309,7 +2338,7 @@ public class Panel extends PApplet {
     noStroke();
   }
 
-  // where RUN's strip starts
+  // where RUN's box starts
   float runTop() {
     float y = height - 36;
     for (int i = 0; i < columns.size(); i++) {
@@ -2326,15 +2355,17 @@ public class Panel extends PApplet {
     float[][] b = new float[sections][];
     float[] top = new float[columns.size()];
     float runY = runTop();
-    // column 2: if the tool's settings leave no room for RECOLOUR, only its title shows. Column 3: the same
-    // for AUTOMATION
+    // column 2: if the tool's settings leave no room for RECOLOUR, only its title shows. Column 1: if the
+    // setup boxes leave no room for AUTOMATION's sliders (above VIEW), they're folded away
     float[] used = new float[topColumns];
     for (int i = 0; i < columns.size(); i++) {
       if (colBottom.get(i) == 1) continue;
       for (Row r : columns.get(i)) if (shown(r.when)) used[colAt.get(i)] += r.h;
     }
     toolFolded = 8 + used[1] > runY;
-    boolean autoFolded = 8 + used[2] > runY;
+    float under = 0;
+    for (Row r : columns.get(viewColumn)) if (shown(r.when)) under += r.h;
+    boolean autoFolded = 8 + used[0] + under > height - 36;
     for (int i = 0; i < columns.size(); i++) {
       float x = 16 + colAt.get(i) * colW, y = 8;
       if (colBottom.get(i) > 0) {
@@ -2481,6 +2512,14 @@ public class Panel extends PApplet {
         all.get("lightHeight").setValue(j.getFloat("impastoHeight", 35));
       }
       all.get("lightShine").setValue(j.getFloat("impastoGloss", 0.3));
+    }
+    if (j.hasKey("lightFrom") && !j.hasKey("lightFrom0")) {
+      // settings saved when there was one light for every layer: each layer's is that one
+      for (int i = 0; i < LAYERS; i++) {
+        all.get("lightFrom" + i).setValue(j.getFloat("lightFrom", 135));
+        all.get("lightHeight" + i).setValue(j.getFloat("lightHeight", 35));
+        ((ColorPicker) all.get("shadowColour" + i)).setColorValue(j.getInt("shadowColour", 0xFF000000) | 0xFF000000);
+      }
     }
     if (j.hasKey("accent") && !j.hasKey("accentHue_lo")) {
       // settings saved when the accent was one colour: ranges just round it
@@ -2701,9 +2740,11 @@ public class Panel extends PApplet {
     });
   }
 
-  // (the painting's window has to bring itself forward, on its own thread)
+  // (the painting's window has to bring itself forward, on its own thread). The space bar pauses
+  // and carries on, as PAUSE does - here as in the painting's window
   public void keyPressed() {
     if (key == TAB) command("front");
+    else if (key == ' ') command("pause");
   }
 
   // the line under a setup box's title, set in draw(). It's hidden while the box's list is open -

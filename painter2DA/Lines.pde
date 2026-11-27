@@ -93,11 +93,17 @@ color systemColour(float x, float y) {
 }
 
 color pickedColour(float x, float y) {
+  return pickedColour(x, y, false);
+}
+
+// (exp: in the expanded zone's brightness there - carry expTwo, the Zone tab)
+color pickedColour(float x, float y, boolean exp) {
   if ((int) t("pickup") == PICK_RANDOM || random(1) < t("accentChance")) return randomAccent();
   Paint p = new Paint();
   p.pickup = (int) t("pickup");
   p.mix = t("mix");
-  return jitter(p.pickRaw(x, y));
+  color c = p.pickRaw(x, y);
+  return jitter(exp ? zoneBright(c, x, y) : c);
 }
 
 color withContrast(color c, float x, float y) {

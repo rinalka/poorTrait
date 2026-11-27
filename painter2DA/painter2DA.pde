@@ -282,7 +282,7 @@ void paintFrame() {
     int pickup = (int) v(TOOLS[i] + "_pickup");
     if (pickup == 1 || pickup == 2) {
       wet = true;
-      textured |= v(TOOLS[i] + "_carry") >= CHUNK;
+      textured |= carryTextured((int) v(TOOLS[i] + "_carry"));
     }
   }
   if (wet) {

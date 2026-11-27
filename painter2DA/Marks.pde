@@ -4,7 +4,7 @@
 // Most amounts can be "modulated": the slider sets the amount, and a map chosen in the "by" list
 // under it (importance, curvature, depth ...) turns it down from place to place - see modulated().
 
-final int ONE = 0, START_END = 1, TWO = 2, CHUNK = 3, COPY = 4;   // the panel's "carry" choices
+final int ONE = 0, START_END = 1, TWO = 2, CHUNK = 3, COPY = 4, EXP_CHUNK = 5, EXP_TWO = 6;   // the panel's "carry" choices
 final int PICK_MESH = 6;     // "pick up from: mesh" (the Mesh tab)
 final int PICK_RANDOM = 4;   // "pick up from: random" - each mark an accent colour (COLOUR's accent ranges)
 HashMap<String, Integer> gridAt = new HashMap<String, Integer>();   // how far each tool's grid start has got
@@ -135,6 +135,10 @@ Paint newPaint(float alpha) {
   Paint p = new Paint();
   p.alpha = alpha;
   p.carry = (int) t("carry");
+  if (p.carry == EXP_TWO) {          // two colours, in the expanded zone's brightness (the Zone tab)
+    p.carry = TWO;
+    p.expBright = true;
+  }
   p.pickup = (int) t("pickup");
   p.mix = t("mix");
   if (p.pickup == PICK_RANDOM || random(1) < t("accentChance")) {
@@ -154,6 +158,7 @@ Paint newPaint(float alpha) {
       PImage m = paletteMatchedMesh();
       p.tex = m != null ? m : meshImg != null ? meshImg : photo;
     }
+    if (p.carry == EXP_CHUNK) p.tex = expandedTex(p.tex, fromCanvas);     // (the Zone tab)
   }
   return p;
 }
@@ -164,6 +169,8 @@ Paint newPaint(float alpha) {
 //   two colours    two colours side by side, as if the brush was loaded twice
 //   chunk          a strip of the picture where the brush landed, smeared along the mark
 //   copy           the picture right under the mark, as if seen through a hole in the shape of it
+//   expChunk       chunk, from the picture with its brightness moved to the expanded zone's (the Zone tab)
+//   expTwo         two colours, each with the expanded zone's brightness where it's picked up (the Zone tab)
 // The paint is picked up from the photo, from what's already on the canvas (wet paint), a mix of
 // the two, from the masses (the Masses tab), from the masses matched to SETUP 5's palette (the
 // Palette Gen tab) - or "random": a colour from the accent ranges for
@@ -172,12 +179,13 @@ class Paint {
   int carry, pickup;
   float mix, alpha;
   boolean accent;
+  boolean expBright;         // expTwo: its colours in the expanded zone's brightness
   color accentColour;
   PImage tex;                // chunk and copy: the picture the paint comes from
   color c0, c1;              // the colours the brush loaded (the brush sets these)
 
   boolean textured() {
-    return carry == CHUNK || carry == COPY;
+    return carryTextured(carry);
   }
 
   // the colour at (x, y) where this paint is picked up from
@@ -193,7 +201,8 @@ class Paint {
   }
 
   color pick(float x, float y) {
-    return vary(pickRaw(x, y));
+    color c = pickRaw(x, y);
+    return vary(expBright && !accent ? zoneBright(c, x, y) : c);
   }
 
   color vary(color c) {
@@ -223,7 +232,7 @@ class Paint {
   void vertex(PGraphics g, float x, float y, float pickX, float pickY, float t, float side, float a) {
     if (textured()) {
       g.tint(255, a);
-      if (carry == CHUNK) g.vertex(x, y, pickX, pickY);
+      if (carry == CHUNK || carry == EXP_CHUNK) g.vertex(x, y, pickX, pickY);
       else g.vertex(x, y, x, y);
       return;
     }
@@ -236,6 +245,11 @@ class Paint {
     g.endShape();
     if (textured()) g.noTint();
   }
+}
+
+// whether a carry (the panel's number) puts down a picture - chunk, copy, expChunk - rather than colours
+boolean carryTextured(int carry) {
+  return carry == CHUNK || carry == COPY || carry == EXP_CHUNK;
 }
 
 // a little lighter or darker, a little off in hue and saturation, as much as the jitter sliders say

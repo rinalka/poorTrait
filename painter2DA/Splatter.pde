@@ -30,6 +30,8 @@
 //   two colours    two colours from either side of the spot - each drop is one or the other
 //   chunk          the bit of the picture round the spot - every drop is a dab of the same bit
 //   copy           the picture round the spot, seen through the cluster: each drop has its own part
+//   expChunk       chunk, in the expanded zone's brightness (the Zone tab)
+//   expTwo         two colours, each in the expanded zone's brightness where it's picked up
 //
 // A cluster can be hundreds of drops, so the whole cluster is drawn as one shape made of
 // triangles - drawing each drop as a shape of its own is several times slower.
@@ -164,7 +166,7 @@ void loadSplat(float spread) {
   splatReach = max(1, spread * 2);
   Paint p = splatPaint = newPaint(255);
   if (p.textured()) return;
-  if ((int) t("carry") >= CHUNK) {                // an accent instead of a picture
+  if (carryTextured((int) t("carry"))) {          // an accent instead of a picture
     p.c0 = p.c1 = withContrast(p.accentColour, splatX, splatY);
     return;
   }
@@ -182,7 +184,7 @@ void loadSplat(float spread) {
 color splatPick(float x, float y) {
   x = constrain(x, 0, photo.width - 1);
   y = constrain(y, 0, photo.height - 1);
-  return withContrast(pickedColour(x, y), splatX, splatY);       // (in the Lines tab)
+  return withContrast(pickedColour(x, y, splatPaint.expBright), splatX, splatY);       // (in the Lines tab)
 }
 
 // the colour of a drop at (x, y)
@@ -214,7 +216,7 @@ void splatVertex(PGraphics g, float x, float y) {
 // chunk and copy: where the paint of something at (x, y) comes from. Chunk: all of them from
 // round the spot it was picked up; copy: each from as far from the spot as it is from the middle
 void splatFrom(float x, float y) {
-  boolean chunk = splatPaint.carry == CHUNK;
+  boolean chunk = splatPaint.carry == CHUNK || splatPaint.carry == EXP_CHUNK;
   splatDU = splatPickX - (chunk ? x : splatX);
   splatDV = splatPickY - (chunk ? y : splatY);
 }

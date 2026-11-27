@@ -10,9 +10,10 @@
 // layer can be made see-through and combined with the ones under it in a different way (multiply,
 // screen ...). SCRAPE takes paint off one layer, showing what's underneath.
 //
-// The layers can float apart, as in a shadow box: each has a gap above the stack under it, and a
-// light (the panel's LIGHT) from one side makes it cast a soft shadow on what's under it (further and softer with a
-// bigger gap) and lights up its edges that face the light, like cut paper in a shadow box. Each
+// The layers can float apart, as in a shadow box: each has a gap above the stack under it, and its
+// own light (in the panel's LIGHT) from one side makes it cast a soft shadow, in a colour of its own, on
+// what's under it (further and softer with a bigger gap) and lights up its edges that face the light,
+// like cut paper in a shadow box. Each
 // layer has its own gap, shadow darkness, softness and lit edges, in its box; they start with no gap and
 // no lit edges. It's done here, as the layers are combined.
 //
@@ -113,10 +114,6 @@ void composite() {
     boxShadow = loadShader("boxShadow.glsl");
     boxRim = loadShader("boxRim.glsl");
   }
-  // which way the light is, in pixels with y down the picture, and how long a shadow is for each
-  // pixel of gap: the lower the light, the longer
-  float from = radians(v("lightFrom")), lx = cos(from), ly = -sin(from);
-  float reach = 1 / tan(radians(v("lightHeight")));
   boolean fin = finishing();
   if (fin) combineHeights();
   // RECOLOUR (the Recolour tab): a new palette if asked for, and the layers with its changes -
@@ -136,12 +133,18 @@ void composite() {
     float solid = 1 - v("layerSeeThrough" + i);
     float op = 255 * solid;
     float gap = v("layerGap" + i);
+    // the layer's own light (LIGHT): which way it is, in pixels with y down the picture, and how long a
+    // shadow is for each pixel of gap - the lower the light, the longer
+    float from = radians(v("lightFrom" + i)), lx = cos(from), ly = -sin(from);
+    float reach = 1 / tan(radians(v("lightHeight" + i)));
     if (gap > 0 && v("boxShadow" + i) > 0) {
       float len = gap * reach;
       boxShadow.set("offset", -lx * len, -ly * len);
       boxShadow.set("radius", 1 + v("boxSoftness" + i) * len);
       boxShadow.set("strength", v("boxShadow" + i) * solid);
       boxShadow.set("flipY", boxFlipY);
+      int sc = panel.colour("shadowColour" + i);   // (in LIGHT; black to start)
+      boxShadow.set("colour", (sc >> 16 & 255) / 255.0, (sc >> 8 & 255) / 255.0, (sc & 255) / 255.0);
       PGL pgl = canvas.beginPGL();
       blendLayer(pgl, 0);
       canvas.shader(boxShadow);

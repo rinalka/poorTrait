@@ -3,8 +3,8 @@
 // It's drawn by putting the layer on the canvas through this shader, just before the layer itself.
 // Each pixel looks back towards the light, by `offset`, to see whether the layer is there, and
 // averages a disc of samples `radius` across so the shadow's edge is soft - softer the further
-// the layer floats above what's under it. The result is a see-through black, as dark as the layer
-// is solid there, times `strength`. Colours are premultiplied, like the layers' (see Layers).
+// the layer floats above what's under it. The result is a see-through `colour` (LIGHT's shadow
+// colour - black to start), as strong as the layer is solid there, times `strength`. Colours are premultiplied, like the layers' (see Layers).
 
 #ifdef GL_ES
 precision highp float;
@@ -20,6 +20,7 @@ uniform vec2 offset;            // how far the shadow falls, in pixels (y down t
 uniform float radius;           // how soft its edge is, in pixels
 uniform float strength;         // 0 - 1
 uniform float flipY;            // 1, or -1 where the texture is upside down
+uniform vec3 colour;            // the shadow's colour
 
 void main() {
   vec2 px = texOffset * vec2(1.0, flipY);
@@ -31,5 +32,6 @@ void main() {
     float t = float(k) * 2.39996;
     a += texture2D(texture, from + vec2(cos(t), sin(t)) * r * px).a;
   }
-  gl_FragColor = vec4(0.0, 0.0, 0.0, a / 24.0 * strength);
+  float s = a / 24.0 * strength;
+  gl_FragColor = vec4(colour * s, s);     // (premultiplied)
 }
