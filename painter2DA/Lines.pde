@@ -9,9 +9,15 @@
 //
 // All the lines in a frame are drawn as one shape made of triangles, which is much faster than a
 // shape for each.
+//
+// Its other kind, "darkest creases", draws along the light map's darkest creases instead (the Creases tab).
 
 void paintLines(PGraphics g) {
   if (t("on") < 0.5) return;
+  if (t("kind") == 1) {                // darkest creases (the Creases tab)
+    paintCreases(g);
+    return;
+  }
   int n = countFor(t("rate"));
   if (n == 0) return;
   g.noStroke();

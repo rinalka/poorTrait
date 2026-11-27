@@ -575,12 +575,21 @@ public class Panel extends PApplet {
     toolSlider("drip", "drips", 0, 1, 0);
     toolSlider("dripLength", "drip length", 10, 400, 120).setDecimalPrecision(0);
 
+    // lines (the Lines tab): wandering lines, or a line along the light map's darkest creases (the Creases tab)
     toolBox(3, false);
+    radio("line_kind", new String[] { "wandering", "darkest creases" }, 2, 0);
+    onlyWhen("on line");
     toolSlider("rate", "lines per frame", 0.05, 20, 1);
     toolSlider("length", "length", 10, 800, 200).setDecimalPrecision(0);
     toolSlider("width", "width", 0.3, 8, 1.2);
     toolSlider("wander", "wander", 0, 1, 0.4);
+    onlyWhen("on line&lineWander");
     toolSlider("broken", "broken", 0, 1, 0.2);
+    onlyWhen("on line&lineWander");
+    toolSlider("darkest", "darkest  (% of light map)", 0.5, 15, 4);
+    onlyWhen("on line&lineCreases");
+    toolSlider("lift", "lift it between parts", 0, 1, 0);
+    onlyWhen("on line&lineCreases");
 
     // the pencil (the Pencil tab): how it steers, on which map, and the hand
     toolBox(4, false);
@@ -907,14 +916,16 @@ public class Panel extends PApplet {
       if (n.equals("outline")) continue;       // it goes where the face is
       curBand = 1;
       if (!n.equals("splat") && !n.equals("flow") && !n.equals("sponge")) {
+        // (LINES' darkest creases go where the creases do)
+        String steers = "edit " + n + (n.equals("line") ? "&lineWander" : "");
         slider(n + "_follow", "follow the form", 0, 1, followDefault[i]);
-        onlyWhen("edit " + n);
+        onlyWhen(steers);
         if (i <= 1) {
           modRow(n + "_follow", 0, 0.5, false);
-          onlyWhen("edit " + n);
+          onlyWhen(steers);
         }
         radio(n + "_around", new String[] { "around the form", "across it", "along the outline" }, 2, 0);
-        onlyWhen("edit " + n);
+        onlyWhen(steers);
       }
       curBand = 2;
       row(20);
@@ -2230,6 +2241,8 @@ public class Panel extends PApplet {
     if (when.equals("outlineObjects")) return value("outline_kind") == 1;
     if (when.equals("hasMove")) return !editing.equals("outline");
     if (when.equals("flowColour")) return value("flow_src") < 2;     // the photo or the masses
+    if (when.equals("lineWander")) return value("line_kind") == 0;
+    if (when.equals("lineCreases")) return value("line_kind") == 1;
     if (when.equals("pencilSteers")) return value("pencil_kind") < 2;
     if (when.equals("pencilFlow")) return value("pencil_kind") == 1;
     if (when.equals("pencilHatch")) return value("pencil_hatch") > 0;

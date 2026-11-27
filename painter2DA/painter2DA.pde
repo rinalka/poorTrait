@@ -266,6 +266,7 @@ void resetTools() {
   composite();
   markCount = 0;
   restartGrid();
+  resetCreases();
 }
 
 // whether tool number i is switched on
