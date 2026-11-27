@@ -37,7 +37,7 @@ float outlineSeed, outlineAlpha, outlineOffX, outlineOffY;
 color outlineColour;
 ColourAlong outlineAlong;          // "colour changes along the line"
 boolean outlineDown = false;
-boolean outlineRestart = true;     // CLEAR and RUN start the pen again from the beginning
+boolean outlineRestart = true;     // RUN starts the pen again from the beginning
 float opax, opay, opbx, opby;
 final float OUTLINE_STEP = 2;
 

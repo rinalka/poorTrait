@@ -1,5 +1,6 @@
-// AUTOMATION (the box at the bottom of column 2): a tool's size or length moved up and down by
-// itself while it paints.
+// AUTOMATION (the box above VIEW, at the bottom of column 1): at its top the painting speed, then a
+// tool's size or length moved up and down by itself while it paints, and last NUDGE (the panel's
+// nudgeAll), which moves every slider that can change while running a random bit.
 //
 // Each tool has its own: switched on, its size (or length, or width) follows a sine wave between
 // "shortest" and "longest", at "speed" waves a second, in real time. It takes the place of the

@@ -23,7 +23,6 @@
 // SETUP 5's palette (and the masses in its colours, if they're on), and a .json of every setting
 // on the panel, into a folder of its own in the saved folder: the picture's name and the next
 // free letter (PXL_1234-A, PXL_1234-B, ... after Z, AA, AB ...), each file named the same way.
-// PRINT writes what this window shows, at the photo's size, to the saved folder.
 // LOAD SETTINGS puts a saved .json's settings back on the panel.
 
 // ---- settings ----
@@ -34,7 +33,7 @@ float ui = 1;                // size of the direction field drawing (used by the
 Panel panel;                 // the control panel window (the Gui tab)
 HashMap<String, Float> params = new HashMap<String, Float>();   // the panel's values, read once a frame
 java.util.concurrent.ConcurrentLinkedQueue<String> commands = new java.util.concurrent.ConcurrentLinkedQueue<String>();
-boolean saveWanted = false, printWanted = false;
+boolean saveWanted = false;
 boolean runWaiting = false;  // RUN was pressed, but the masses aren't made yet
 boolean stepWanted = false;  // STEP was pressed: paint one step while paused
 float paceOwed = 0;          // painting speed: how many steps are due (see paceDue)
@@ -132,10 +131,6 @@ void draw() {
     saveAll();
     saveWanted = false;
   }
-  if (printWanted) {
-    printView();
-    printWanted = false;
-  }
   outputFps = frameRate;
 }
 
@@ -200,9 +195,7 @@ void handle(String c) {
     }
   }
   else if (c.equals("step")) stepWanted = true;
-  else if (c.equals("clear")) clearCanvas();
   else if (c.equals("save")) saveWanted = true;
-  else if (c.equals("print")) printWanted = true;
   else if (c.equals("load")) selectInput("Choose a settings file (.json)", "settingsChosen", new java.io.File(sketchPath("saved") + "/x.json"));
   else if (c.startsWith("clearPicks")) clearPicks(int(c.substring(11)));
   else if (c.equals("copyMap")) copyNow();
@@ -464,23 +457,6 @@ String saveLetters(int n) {
   return s;
 }
 
-// PRINT: what this window shows now - the painting or a map, with the
-// direction field over it if it's on - at the photo's size
-void printView() {
-  PImage v = get();
-  v.resize(photo.width, photo.height);
-  String f = saveName() + "-print.png";
-  v.save(f);
-  println("printed " + f);
-}
-
-// the saved folder, and the picture's name and the time to start a file name with
-String saveName() {
-  String dir = sketchPath("saved");
-  new java.io.File(dir).mkdirs();
-  return dir + "/" + faceName + "-" + nf(year(), 4) + nf(month(), 2) + nf(day(), 2) + "-" + nf(hour(), 2) + nf(minute(), 2) + nf(second(), 2);
-}
-
 void settingsChosen(java.io.File f) {
   if (f == null) return;
   JSONObject j = loadJSONObject(f.getAbsolutePath());
@@ -542,6 +518,5 @@ void keyPressed() {
   if (key == TAB) panel.toFront();
   else if (key == ' ') command("pause");
   else if (key == 'n') command("step");
-  else if (key == 'c') command("clear");
   else if (key == 's') command("save");
 }

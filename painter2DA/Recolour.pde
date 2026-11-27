@@ -9,7 +9,7 @@
 //
 // The changes are made to each layer as the layers are combined (composite() draws each through
 // recolouredLayer()), so nothing is changed for good: the painting can carry on, "on" switches it
-// off to compare, and SAVE and PRINT show it. Every pixel moves by its nearest swatches'
+// off to compare, and SAVE shows it. Every pixel moves by its nearest swatches'
 // changes, the nearer ones counting more ("reach" is how near counts - small, and only colours
 // very like a swatch move; bigger, and the changes blend smoothly into each other)
 // (data/recolour.glsl). Tools that pick up wet paint pick up the recoloured colours.

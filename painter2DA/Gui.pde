@@ -105,7 +105,7 @@ public class Panel extends PApplet {
   int viewSection, autoSection, recolourSection, lightSection;      // (all coloured like VIEW)
   float shownFor = -1;                // the view an open box switched to
   int boxRed = 0xFFD9B8B4, boxGreen = 0xFFBBD3B6;   // a setup box's block: not done, done
-  Textlabel boxTitle, massTitle, sourceText, massText, meshText;
+  Textlabel boxTitle, sourceText, massText, meshText;
   Textlabel copyText;                 // COPY: what it did last
   Textlabel zoneText;                 // the zone: how much of the picture it is
   volatile boolean sourceDone, massesDone;
@@ -150,14 +150,14 @@ public class Panel extends PApplet {
   // SETUP 3, OUTLINE: done once it's been looked at
   int outlineBox;
   volatile boolean outlineOpen = false, outlineDone = false;
-  Textlabel outlineTitle, outlineText;
+  Textlabel outlineText;
   volatile int[] paletteBase = new int[0];
   volatile float[][] paletteAdj = new float[0][];
   boolean[] palettePicked = new boolean[0];
   int paletteSchemeMade = 0, paletteHueMade = 0;
   java.util.Random paletteRnd = new java.util.Random();
   Row paletteGrid;                    // the row the palette's swatches are drawn in
-  Textlabel paletteTitle, paletteText;
+  Textlabel paletteText;
   boolean paletteSyncing = false;     // the chosen-colour sliders are being set to show a swatch
   final int PAL_COLS = 6, PAL_H = 34;
   // IN AREA's colours can be picked by clicking the masses in the output window: PICK ON THE MASSES
@@ -1065,7 +1065,7 @@ public class Panel extends PApplet {
       cr.when = cr.when.equals("") ? "applyShut" : cr.when + "&applyShut";
     }
 
-    // ---------------------------------------------------- column 4: LAYER 1 - 5, A, B, LIGHT
+    // ---------------------------------------------------- column 4: LAYER 1 - 5, A, B
     column();
 
     // a box for each of the layers (the Layers tab), each its own red (LAYER_COLOURS):
@@ -2489,46 +2489,6 @@ public class Panel extends PApplet {
       }
       else c.setValue(j.getFloat(n));
     }
-    // (settings saved before IN AREA had Zone: SPLATTER's Tri Centers and Vertices were one lower - a whole
-    // file has every tool's IN AREA)
-    if (!j.hasKey("zoneMapA") && j.hasKey("brush_inArea") && j.hasKey("copy_inArea") && j.getFloat("splat_inArea", -1) >= AREA_ZONE) {
-      ((RadioButton) all.get("splat_inArea")).activate((int) j.getFloat("splat_inArea") + 1);
-    }
-    // (settings saved when these two's layer was in their own box)
-    if (j.hasKey("copyTo")) ((RadioButton) all.get("copy_layer")).activate((int) j.getFloat("copyTo"));
-    if (j.getFloat("scrape_only", -1) >= 0) ((RadioButton) all.get("scrape_layer")).activate((int) j.getFloat("scrape_only"));
-    if (j.hasKey("boxOn")) {
-      // settings saved when SHADOW BOX and IMPASTO were boxes of their own, with a light each
-      boolean box = j.getFloat("boxOn") > 0.5, thick = j.getFloat("impastoOn", 0) > 0.5;
-      for (int i = 0; i < LAYERS; i++) {
-        if (!box || !j.hasKey("layerGap" + i)) {
-          all.get("layerGap" + i).setValue(0);
-          all.get("boxRim" + i).setValue(0);
-        }
-        all.get("layerImpasto" + i).setValue(thick ? j.getFloat("layerImpasto" + i, 1) * j.getFloat("impastoRelief", 0.5) : 0);
-      }
-      if (thick && !box) {
-        all.get("lightFrom").setValue(j.getFloat("impastoFrom", 135));
-        all.get("lightHeight").setValue(j.getFloat("impastoHeight", 35));
-      }
-      all.get("lightShine").setValue(j.getFloat("impastoGloss", 0.3));
-    }
-    if (j.hasKey("lightFrom") && !j.hasKey("lightFrom0")) {
-      // settings saved when there was one light for every layer: each layer's is that one
-      for (int i = 0; i < LAYERS; i++) {
-        all.get("lightFrom" + i).setValue(j.getFloat("lightFrom", 135));
-        all.get("lightHeight" + i).setValue(j.getFloat("lightHeight", 35));
-        ((ColorPicker) all.get("shadowColour" + i)).setColorValue(j.getInt("shadowColour", 0xFF000000) | 0xFF000000);
-      }
-    }
-    if (j.hasKey("accent") && !j.hasKey("accentHue_lo")) {
-      // settings saved when the accent was one colour: ranges just round it
-      int a = j.getInt("accent");
-      float[] hsb = java.awt.Color.RGBtoHSB(a >> 16 & 255, a >> 8 & 255, a & 255, null);
-      ((Range) all.get("accentHue")).setRangeValues(max(0, hsb[0] * 360 - 5), min(360, hsb[0] * 360 + 5));
-      ((Range) all.get("accentSat")).setRangeValues(max(0, hsb[1] * 100 - 5), min(100, hsb[1] * 100 + 5));
-      ((Range) all.get("accentBri")).setRangeValues(max(0, hsb[2] * 100 - 5), min(100, hsb[2] * 100 + 5));
-    }
     if (j.hasKey("areaColours")) {
       boolean[] ap = new boolean[PALETTE_SIZE];
       JSONArray a = j.getJSONArray("areaColours");
@@ -2542,9 +2502,6 @@ public class Panel extends PApplet {
         JSONObject o = layersJ.getJSONObject(L);
         loadRecolour(L, o.getJSONArray("palette"), o.getJSONArray("changes"));
       }
-    } else if (j.hasKey("recolourPalette") && j.hasKey("recolourChanges")) {
-      // settings saved before each layer had its own: the one palette on every layer
-      for (int L = 0; L < LAYERS; L++) loadRecolour(L, j.getJSONArray("recolourPalette"), j.getJSONArray("recolourChanges"));
     }
     // (after the controls: choosing the scheme above made a new palette, and this replaces it)
     if (j.hasKey("paletteGen")) {
@@ -2673,7 +2630,7 @@ public class Panel extends PApplet {
     curTool = TOOLS[i];
     sections++;
     toolSection[i] = sections - 1;
-    row(31);                             // (kept tight so the column ends above RUN's strip)
+    row(31);                             // (kept tight so the column ends above RUN)
     Toggle t = cp5.addToggle(curTool + "_on").setSize(20, 20).setValue(on);
     t.setColorBackground(toolOff).setColorForeground(toolOffHover).setColorActive(toolOn);
     t.setCaptionLabel(toolTitles[i]);
